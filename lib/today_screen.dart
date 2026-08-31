@@ -8,6 +8,7 @@ class TodayScreen extends StatelessWidget {
     super.key,
     required this.visibleTasks,
     required this.laterTasks,
+    required this.successNotice,
     required this.searchQuery,
     required this.onSearchChanged,
     required this.selectedFilter,
@@ -21,6 +22,7 @@ class TodayScreen extends StatelessWidget {
 
   final List<TaskItem> visibleTasks;
   final List<TaskItem> laterTasks;
+  final String? successNotice;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
   final String selectedFilter;
@@ -38,6 +40,7 @@ class TodayScreen extends StatelessWidget {
           final content = _DailyPlan(
             visibleTasks: visibleTasks,
             laterTasks: laterTasks,
+            successNotice: successNotice,
             searchQuery: searchQuery,
             onSearchChanged: onSearchChanged,
             selectedFilter: selectedFilter,
@@ -58,6 +61,14 @@ class TodayScreen extends StatelessWidget {
                     ],
                   )
                 : SafeArea(child: content),
+            floatingActionButton: desktop
+                ? FloatingActionButton.extended(
+                    key: const ValueKey('quick-add-task'),
+                    onPressed: onQuickAdd,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Szybko zapisz'),
+                  )
+                : null,
           );
         },
       );
@@ -139,6 +150,7 @@ class _DailyPlan extends StatelessWidget {
   const _DailyPlan({
     required this.visibleTasks,
     required this.laterTasks,
+    required this.successNotice,
     required this.searchQuery,
     required this.onSearchChanged,
     required this.selectedFilter,
@@ -153,6 +165,7 @@ class _DailyPlan extends StatelessWidget {
 
   final List<TaskItem> visibleTasks;
   final List<TaskItem> laterTasks;
+  final String? successNotice;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
   final String selectedFilter;
@@ -175,6 +188,12 @@ class _DailyPlan extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(compact ? 18 : 30, 24, compact ? 18 : 30, 24),
           children: [
             _Header(compact: compact),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: successNotice == null
+                  ? const SizedBox.shrink()
+                  : _SuccessNotice(key: ValueKey(successNotice), message: successNotice!),
+            ),
             const SizedBox(height: 16),
             TextFormField(
               key: const ValueKey('task-search'),
@@ -213,13 +232,39 @@ class _DailyPlan extends StatelessWidget {
             ],
             const SizedBox(height: 18),
             FilledButton.icon(
-              key: const ValueKey('quick-add-task'),
+              key: ValueKey(compact ? 'quick-add-task' : 'quick-add-task-list'),
               onPressed: onQuickAdd,
               icon: const Icon(Icons.add),
               label: const Text('Szybko zapisz zadanie'),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SuccessNotice extends StatelessWidget {
+  const _SuccessNotice({super.key, required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          Icon(Icons.check_circle, color: scheme.primary, size: 19),
+          const SizedBox(width: 8),
+          Text(message, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+        ]),
       ),
     );
   }

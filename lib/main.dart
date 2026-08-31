@@ -33,7 +33,9 @@ class _MyAppState extends State<MyApp> {
   bool cloudMode = false;
   String _searchQuery = '';
   String _statusFilter = 'all';
+  String? _successNotice;
   final _navigatorKey = GlobalKey<NavigatorState>();
+  Timer? _noticeTimer;
   StreamSubscription<List<Map<String, dynamic>>>? _taskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
   var _nextLocalTaskId = 4;
@@ -106,6 +108,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _showTaskForm(BuildContext context, {TaskItem? task}) async {
     final modalContext = _navigatorKey.currentContext;
     if (modalContext == null) return;
+    var saved = false;
     await showTaskEditor(
       modalContext,
       task: task,
@@ -185,19 +188,25 @@ class _MyAppState extends State<MyApp> {
             when: draft.dueAt!,
           );
         }
-        if (mounted && _navigatorKey.currentContext != null) {
-          ScaffoldMessenger.of(_navigatorKey.currentContext!).showSnackBar(
-            const SnackBar(content: Text('Zapisano zadanie')),
-          );
-        }
+        saved = true;
       },
     );
+    if (saved) _showSuccessNotice();
+  }
+
+  void _showSuccessNotice() {
+    _noticeTimer?.cancel();
+    setState(() => _successNotice = 'Zapisano zadanie');
+    _noticeTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _successNotice = null);
+    });
   }
 
   @override
   void dispose() {
     _taskSubscription?.cancel();
     _subtaskSubscription?.cancel();
+    _noticeTimer?.cancel();
     super.dispose();
   }
 
@@ -270,6 +279,7 @@ class _MyAppState extends State<MyApp> {
         ? TodayScreen(
             visibleTasks: _todayTasks,
             laterTasks: _laterTasks,
+            successNotice: _successNotice,
             searchQuery: _searchQuery,
             onSearchChanged: (value) => setState(() => _searchQuery = value),
             selectedFilter: _statusFilter,

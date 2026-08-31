@@ -54,6 +54,7 @@ void main() {
       home: TodayScreen(
         visibleTasks: [important],
         laterTasks: [later],
+        successNotice: null,
         searchQuery: '',
         onSearchChanged: (_) {},
         selectedFilter: 'all',
@@ -156,6 +157,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Edytuj zadanie'), findsOneWidget);
+  });
+
+  testWidgets('adds a task from the quick daily action', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('quick-add-task')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('task-title-input')), 'Nowe zadanie');
+    await tester.tap(find.text('Dodaj zadanie'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+
+    expect(find.text('Dodaj zadanie'), findsNothing);
+    expect(find.text('Nowe zadanie'), findsWidgets);
+    expect(find.text('Zapisano zadanie'), findsOneWidget);
   });
 
   testWidgets('expands additional task editor options', (WidgetTester tester) async {

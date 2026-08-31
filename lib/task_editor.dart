@@ -111,6 +111,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
               ]),
               const SizedBox(height: 14),
               TextField(
+                key: const ValueKey('task-title-input'),
                 controller: _title,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
@@ -161,7 +162,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _category,
+                    initialValue: _category,
                     decoration: const InputDecoration(labelText: 'Kategoria'),
                     items: const [
                       DropdownMenuItem(value: 'Skrzynka', child: Text('Skrzynka')),
@@ -172,7 +173,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _priority,
+                    initialValue: _priority,
                     decoration: const InputDecoration(labelText: 'Priorytet'),
                     items: const [
                       DropdownMenuItem(value: 'low', child: Text('Niski')),
@@ -278,7 +279,9 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
         dueAt: _dueAt,
         subtasks: _subtasks,
       ));
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
