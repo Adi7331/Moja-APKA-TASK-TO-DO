@@ -54,6 +54,8 @@ void main() {
       home: TodayScreen(
         visibleTasks: [important],
         laterTasks: [later],
+        searchQuery: '',
+        onSearchChanged: (_) {},
         selectedFilter: 'all',
         onFilterChanged: (_) {},
         onOpenTask: (_) {},
@@ -88,9 +90,9 @@ void main() {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.check_box_outline_blank).first);
+    await tester.tap(find.byIcon(Icons.circle_outlined).first);
     await tester.pump();
-    expect(find.textContaining('Ukończone'), findsWidgets);
+    expect(find.byIcon(Icons.check_circle), findsWidgets);
   });
 
   testWidgets('can mark a local task as in progress', (WidgetTester tester) async {
@@ -98,12 +100,14 @@ void main() {
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
 
-    await tester.tap(find.byIcon(Icons.more_horiz).first);
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(PopupMenuItem<String>).at(1));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'W trakcie'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('W trakcie'), findsWidgets);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'W trakcie'));
+    await tester.pumpAndSettle();
+    expect(find.text('Wykosić trawnik'), findsWidgets);
   });
 
   testWidgets('shows a delete action in the task menu', (WidgetTester tester) async {
@@ -111,7 +115,7 @@ void main() {
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
 
-    await tester.tap(find.byIcon(Icons.more_horiz).first);
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
     await tester.pumpAndSettle();
 
     expect(find.text('Usuń zadanie'), findsOneWidget);
@@ -122,10 +126,10 @@ void main() {
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
 
-    await tester.enterText(find.byType(TextField).first, 'grafikę');
+    await tester.enterText(find.byKey(const ValueKey('task-search')), 'grafikę');
     await tester.pump();
 
-    expect(find.text('Poprawić grafikę'), findsOneWidget);
+    expect(find.text('Poprawić grafikę'), findsWidgets);
     expect(find.text('Wykosić trawnik'), findsNothing);
   });
 
@@ -133,10 +137,10 @@ void main() {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.check_box_outline_blank).first);
+    await tester.tap(find.byIcon(Icons.circle_outlined).first);
     await tester.pump();
 
-    await tester.tap(find.byType(ChoiceChip).at(3));
+    await tester.tap(find.text('Gotowe'));
     await tester.pump();
 
     expect(find.text('Wykosić trawnik'), findsOneWidget);
@@ -152,6 +156,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Edytuj zadanie'), findsOneWidget);
+  });
+
+  testWidgets('expands additional task editor options', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pump();
+    await tester.tap(find.text('Poprawić grafikę'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edytuj zadanie'), findsOneWidget);
+    expect(find.text('Termin'), findsOneWidget);
+    expect(find.text('Więcej opcji'), findsOneWidget);
+    expect(find.text('Opis (opcjonalnie)'), findsNothing);
+
+    await tester.tap(find.text('Więcej opcji'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Opis (opcjonalnie)'), findsOneWidget);
+    expect(find.text('Kategoria'), findsOneWidget);
+    expect(find.text('Priorytet'), findsOneWidget);
   });
 
   testWidgets('adds a local checklist step and shows its progress', (WidgetTester tester) async {
@@ -170,8 +194,8 @@ void main() {
     await tester.tap(find.text('Zapisz zmiany'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Poprawić grafikę'), findsOneWidget);
-    expect(find.text('0/1 kroków'), findsOneWidget);
+    expect(find.text('Poprawić grafikę'), findsWidgets);
+    expect(find.text('0 z 1 kroków'), findsOneWidget);
   });
 
   testWidgets('marks a checklist step as completed', (WidgetTester tester) async {
@@ -189,6 +213,6 @@ void main() {
     await tester.tap(find.text('Zapisz zmiany'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1/1 kroków'), findsOneWidget);
+    expect(find.text('1 z 1 kroków'), findsOneWidget);
   });
 }

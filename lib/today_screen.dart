@@ -8,6 +8,8 @@ class TodayScreen extends StatelessWidget {
     super.key,
     required this.visibleTasks,
     required this.laterTasks,
+    required this.searchQuery,
+    required this.onSearchChanged,
     required this.selectedFilter,
     required this.onFilterChanged,
     required this.onOpenTask,
@@ -19,6 +21,8 @@ class TodayScreen extends StatelessWidget {
 
   final List<TaskItem> visibleTasks;
   final List<TaskItem> laterTasks;
+  final String searchQuery;
+  final ValueChanged<String> onSearchChanged;
   final String selectedFilter;
   final ValueChanged<String> onFilterChanged;
   final ValueChanged<TaskItem> onOpenTask;
@@ -34,6 +38,8 @@ class TodayScreen extends StatelessWidget {
           final content = _DailyPlan(
             visibleTasks: visibleTasks,
             laterTasks: laterTasks,
+            searchQuery: searchQuery,
+            onSearchChanged: onSearchChanged,
             selectedFilter: selectedFilter,
             onFilterChanged: onFilterChanged,
             onOpenTask: onOpenTask,
@@ -133,6 +139,8 @@ class _DailyPlan extends StatelessWidget {
   const _DailyPlan({
     required this.visibleTasks,
     required this.laterTasks,
+    required this.searchQuery,
+    required this.onSearchChanged,
     required this.selectedFilter,
     required this.onFilterChanged,
     required this.onOpenTask,
@@ -145,6 +153,8 @@ class _DailyPlan extends StatelessWidget {
 
   final List<TaskItem> visibleTasks;
   final List<TaskItem> laterTasks;
+  final String searchQuery;
+  final ValueChanged<String> onSearchChanged;
   final String selectedFilter;
   final ValueChanged<String> onFilterChanged;
   final ValueChanged<TaskItem> onOpenTask;
@@ -166,6 +176,16 @@ class _DailyPlan extends StatelessWidget {
           children: [
             _Header(compact: compact),
             const SizedBox(height: 16),
+            TextFormField(
+              key: const ValueKey('task-search'),
+              initialValue: searchQuery,
+              onChanged: onSearchChanged,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Szukaj zadań',
+              ),
+            ),
+            const SizedBox(height: 12),
             _FocusCard(task: focusTask, onOpen: focusTask == null ? null : () => onOpenTask(focusTask)),
             const SizedBox(height: 14),
             _FilterStrip(selected: selectedFilter, onChanged: onFilterChanged),
