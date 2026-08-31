@@ -10,7 +10,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:dzien_po_dniu/main.dart';
+import 'package:dzien_po_dniu/subtask_item.dart';
 import 'package:dzien_po_dniu/task_category_icon.dart';
+import 'package:dzien_po_dniu/task_item.dart';
+import 'package:dzien_po_dniu/today_screen.dart';
 
 void main() {
   setUp(() {
@@ -21,6 +24,55 @@ void main() {
     expect(categoryEmoji('Praca'), '💼');
     expect(categoryEmoji('Dom'), '🏠');
     expect(categoryEmoji('Skrzynka'), isNull);
+  });
+
+  testWidgets('shows the sectioned daily plan', (WidgetTester tester) async {
+    var quickAddTapped = false;
+    final important = TaskItem(
+      id: 'important',
+      title: 'Poprawić grafikę',
+      status: 'todo',
+      category: 'Praca',
+      dueAt: DateTime(2026, 8, 31, 14),
+      subtasks: const [
+        SubtaskItem(id: '1', title: 'Pierwszy', isDone: true, position: 0),
+        SubtaskItem(id: '2', title: 'Drugi', isDone: true, position: 1),
+        SubtaskItem(id: '3', title: 'Trzeci', isDone: false, position: 2),
+        SubtaskItem(id: '4', title: 'Czwarty', isDone: false, position: 3),
+        SubtaskItem(id: '5', title: 'Piąty', isDone: false, position: 4),
+      ],
+    );
+    final later = TaskItem(
+      id: 'later',
+      title: 'Wykosić trawnik',
+      status: 'todo',
+      category: 'Dom',
+      dueAt: DateTime(2026, 9, 1, 18),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: TodayScreen(
+        visibleTasks: [important],
+        laterTasks: [later],
+        selectedFilter: 'all',
+        onFilterChanged: (_) {},
+        onOpenTask: (_) {},
+        onCompleteTask: (_) {},
+        onStatusSelected: (_, _) {},
+        onDeleteTask: (_) {},
+        onQuickAdd: () => quickAddTapped = true,
+      ),
+    ));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Najważniejsze'), findsOneWidget);
+    expect(find.text('Później'), findsOneWidget);
+    expect(find.text('Szybko zapisz zadanie'), findsOneWidget);
+    expect(find.text('Poprawić grafikę'), findsWidgets);
+    expect(find.text('2 z 5 kroków'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('quick-add-task')));
+    expect(quickAddTapped, isTrue);
   });
 
   testWidgets('shows the compact Today task list instead of a counter',
