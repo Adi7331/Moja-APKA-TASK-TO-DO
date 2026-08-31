@@ -1,0 +1,9 @@
+.tooling/
+.superpowers/
+.worktrees/
+.dart_tool/
+.idea/
+.vscode/
+.packages
+.pub-cache/
+build/
