@@ -37,6 +37,7 @@ class _MyAppState extends State<MyApp> {
   String _searchQuery = '';
   String _statusFilter = 'all';
   TaskView _selectedView = TaskView.today;
+  ThemeMode _themeMode = ThemeMode.system;
   String? _successNotice;
   final _navigatorKey = GlobalKey<NavigatorState>();
   Timer? _noticeTimer;
@@ -73,11 +74,13 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _restoreLocalTasks() async {
-    final store = LocalTaskStore(await SharedPreferences.getInstance());
+    final preferences = await SharedPreferences.getInstance();
+    final store = LocalTaskStore(preferences);
     final storedTasks = await store.load();
     if (!mounted) return;
     setState(() {
       _localStore = store;
+      _themeMode = _themeModeFromStorage(preferences.getString('theme_mode'));
       if (storedTasks.isNotEmpty) {
         tasks
           ..clear()
@@ -89,6 +92,12 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _saveLocalTasks() async {
     if (!cloudMode) await _localStore?.save(tasks);
+  }
+
+  Future<void> _changeThemeMode(ThemeMode mode) async {
+    setState(() => _themeMode = mode);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString('theme_mode', mode.name);
   }
 
   Future<void> _loadCloudTasks() async {
@@ -327,6 +336,7 @@ class _MyAppState extends State<MyApp> {
     navigatorKey: _navigatorKey,
     theme: buildLightTheme(),
     darkTheme: buildDarkTheme(),
+    themeMode: _themeMode,
     home: localMode
         ? TodayScreen(
             visibleTasks: _todayTasks,
@@ -336,6 +346,8 @@ class _MyAppState extends State<MyApp> {
               _selectedView = view;
               if (view != TaskView.today) _statusFilter = 'all';
             }),
+            themeMode: _themeMode,
+            onThemeModeChanged: _changeThemeMode,
             successNotice: _successNotice,
             searchQuery: _searchQuery,
             onSearchChanged: (value) => setState(() => _searchQuery = value),
@@ -353,6 +365,12 @@ class _MyAppState extends State<MyApp> {
           ),
   );
 }
+
+ThemeMode _themeModeFromStorage(String? value) => switch (value) {
+  'light' => ThemeMode.light,
+  'dark' => ThemeMode.dark,
+  _ => ThemeMode.system,
+};
 
 class _LoginPage extends StatelessWidget {
   const _LoginPage({required this.onLocalMode, required this.onSignedIn});

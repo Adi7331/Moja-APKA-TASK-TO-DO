@@ -58,6 +58,8 @@ void main() {
           laterTasks: [later],
           selectedView: TaskView.today,
           onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
           successNotice: null,
           searchQuery: '',
           onSearchChanged: (_) {},
@@ -94,6 +96,8 @@ void main() {
           laterTasks: const [],
           selectedView: TaskView.today,
           onViewChanged: (view) => selected = view,
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
           successNotice: null,
           searchQuery: '',
           onSearchChanged: (_) {},
@@ -112,6 +116,42 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Skrzynka').last);
     expect(selected, TaskView.inbox);
+  });
+
+  testWidgets('selects the dark appearance from settings', (
+    WidgetTester tester,
+  ) async {
+    ThemeMode? selectedTheme;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.today,
+          onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (mode) => selectedTheme = mode,
+          successNotice: null,
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('task-view-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ustawienia').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ciemny'));
+
+    expect(selectedTheme, ThemeMode.dark);
   });
 
   testWidgets('shows the compact Today task list instead of a counter', (

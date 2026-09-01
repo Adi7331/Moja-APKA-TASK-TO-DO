@@ -11,6 +11,8 @@ class TodayScreen extends StatelessWidget {
     required this.laterTasks,
     required this.selectedView,
     required this.onViewChanged,
+    required this.themeMode,
+    required this.onThemeModeChanged,
     required this.successNotice,
     required this.searchQuery,
     required this.onSearchChanged,
@@ -27,6 +29,8 @@ class TodayScreen extends StatelessWidget {
   final List<TaskItem> laterTasks;
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
   final String? successNotice;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
@@ -47,6 +51,8 @@ class TodayScreen extends StatelessWidget {
         laterTasks: laterTasks,
         selectedView: selectedView,
         onViewChanged: onViewChanged,
+        themeMode: themeMode,
+        onThemeModeChanged: onThemeModeChanged,
         successNotice: successNotice,
         searchQuery: searchQuery,
         onSearchChanged: onSearchChanged,
@@ -66,6 +72,11 @@ class TodayScreen extends StatelessWidget {
                   _DesktopNavigation(
                     selectedView: selectedView,
                     onViewChanged: onViewChanged,
+                    onOpenSettings: () => _showAppearanceSheet(
+                      context,
+                      themeMode,
+                      onThemeModeChanged,
+                    ),
                   ),
                   Expanded(child: content),
                 ],
@@ -88,10 +99,12 @@ class _DesktopNavigation extends StatelessWidget {
   const _DesktopNavigation({
     required this.selectedView,
     required this.onViewChanged,
+    required this.onOpenSettings,
   });
 
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -141,9 +154,10 @@ class _DesktopNavigation extends StatelessWidget {
             onTap: onViewChanged,
           ),
           const Spacer(),
-          const _NavigationItem(
+          _NavigationItem(
             icon: Icons.settings_outlined,
             label: 'Ustawienia',
+            onPressed: onOpenSettings,
           ),
         ],
       ),
@@ -157,6 +171,7 @@ class _NavigationItem extends StatelessWidget {
     required this.label,
     this.view,
     this.onTap,
+    this.onPressed,
     this.selected = false,
   });
 
@@ -164,6 +179,7 @@ class _NavigationItem extends StatelessWidget {
   final String label;
   final TaskView? view;
   final ValueChanged<TaskView>? onTap;
+  final VoidCallback? onPressed;
   final bool selected;
 
   @override
@@ -172,7 +188,7 @@ class _NavigationItem extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 3),
       child: InkWell(
-        onTap: view == null ? null : () => onTap!(view!),
+        onTap: onPressed ?? (view == null ? null : () => onTap!(view!)),
         borderRadius: BorderRadius.circular(10),
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -206,6 +222,8 @@ class _DailyPlan extends StatelessWidget {
     required this.laterTasks,
     required this.selectedView,
     required this.onViewChanged,
+    required this.themeMode,
+    required this.onThemeModeChanged,
     required this.successNotice,
     required this.searchQuery,
     required this.onSearchChanged,
@@ -223,6 +241,8 @@ class _DailyPlan extends StatelessWidget {
   final List<TaskItem> laterTasks;
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
   final String? successNotice;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
@@ -257,6 +277,8 @@ class _DailyPlan extends StatelessWidget {
               compact: compact,
               selectedView: selectedView,
               onViewChanged: onViewChanged,
+              themeMode: themeMode,
+              onThemeModeChanged: onThemeModeChanged,
             ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
@@ -368,10 +390,14 @@ class _Header extends StatelessWidget {
     required this.compact,
     required this.selectedView,
     required this.onViewChanged,
+    required this.themeMode,
+    required this.onThemeModeChanged,
   });
   final bool compact;
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -396,26 +422,148 @@ class _Header extends StatelessWidget {
           ],
         ),
       ),
-      PopupMenuButton<TaskView>(
+      PopupMenuButton<_HeaderMenuAction>(
         key: const ValueKey('task-view-menu'),
         tooltip: 'Zmień widok',
-        onSelected: onViewChanged,
+        onSelected: (action) {
+          if (action.view != null) {
+            onViewChanged(action.view!);
+          } else {
+            _showAppearanceSheet(context, themeMode, onThemeModeChanged);
+          }
+        },
         icon: const Icon(Icons.more_horiz),
-        itemBuilder: (context) => TaskView.values
-            .map(
-              (view) => PopupMenuItem(
-                value: view,
-                child: Row(
-                  children: [
-                    Expanded(child: Text(_viewTitle(view))),
-                    if (view == selectedView) const Icon(Icons.check, size: 18),
-                  ],
-                ),
+        itemBuilder: (context) => [
+          ...TaskView.values.map(
+            (view) => PopupMenuItem<_HeaderMenuAction>(
+              value: _HeaderMenuAction.view(view),
+              child: Row(
+                children: [
+                  Expanded(child: Text(_viewTitle(view))),
+                  if (view == selectedView) const Icon(Icons.check, size: 18),
+                ],
               ),
-            )
-            .toList(),
+            ),
+          ),
+          const PopupMenuDivider(),
+          const PopupMenuItem<_HeaderMenuAction>(
+            value: _HeaderMenuAction.settings(),
+            child: Row(
+              children: [
+                Icon(Icons.settings_outlined, size: 18),
+                SizedBox(width: 10),
+                Text('Ustawienia'),
+              ],
+            ),
+          ),
+        ],
       ),
     ],
+  );
+}
+
+class _HeaderMenuAction {
+  const _HeaderMenuAction.view(this.view);
+  const _HeaderMenuAction.settings() : view = null;
+
+  final TaskView? view;
+}
+
+void _showAppearanceSheet(
+  BuildContext context,
+  ThemeMode themeMode,
+  ValueChanged<ThemeMode> onThemeModeChanged,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => _AppearanceSheet(
+      selected: themeMode,
+      onChanged: (mode) {
+        onThemeModeChanged(mode);
+        Navigator.pop(context);
+      },
+    ),
+  );
+}
+
+class _AppearanceSheet extends StatelessWidget {
+  const _AppearanceSheet({required this.selected, required this.onChanged});
+
+  final ThemeMode selected;
+  final ValueChanged<ThemeMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Wygląd',
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Wybierz motyw aplikacji.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          _ThemeOption(
+            label: 'Systemowy',
+            detail: 'Zgodny z urządzeniem',
+            mode: ThemeMode.system,
+            selected: selected,
+            onChanged: onChanged,
+          ),
+          _ThemeOption(
+            label: 'Jasny',
+            detail: 'Zawsze jasny wygląd',
+            mode: ThemeMode.light,
+            selected: selected,
+            onChanged: onChanged,
+          ),
+          _ThemeOption(
+            label: 'Ciemny',
+            detail: 'Zawsze ciemny wygląd',
+            mode: ThemeMode.dark,
+            selected: selected,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ThemeOption extends StatelessWidget {
+  const _ThemeOption({
+    required this.label,
+    required this.detail,
+    required this.mode,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String detail;
+  final ThemeMode mode;
+  final ThemeMode selected;
+  final ValueChanged<ThemeMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(
+      selected == mode ? Icons.radio_button_checked : Icons.radio_button_off,
+    ),
+    title: Text(label),
+    subtitle: Text(detail),
+    onTap: () => onChanged(mode),
   );
 }
 
