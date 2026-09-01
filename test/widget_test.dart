@@ -154,6 +154,31 @@ void main() {
     expect(selectedTheme, ThemeMode.dark);
   });
 
+  testWidgets('shows a Google login error and keeps local mode available', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginPage(
+          onLocalMode: () {},
+          onSignedIn: () async {},
+          onGoogleSignIn: () async {
+            throw Exception('Google is unavailable');
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Kontynuuj z Google'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Nie udało się połączyć z Google. Spróbuj ponownie.'),
+      findsOneWidget,
+    );
+    expect(find.text('Tryb lokalny'), findsOneWidget);
+  });
+
   testWidgets('shows the compact Today task list instead of a counter', (
     WidgetTester tester,
   ) async {

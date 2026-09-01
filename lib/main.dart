@@ -10,6 +10,7 @@ import 'task_sync_service.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
 import 'task_view.dart';
+import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'task_editor.dart';
 import 'today_screen.dart';
@@ -43,6 +44,7 @@ class _MyAppState extends State<MyApp> {
   Timer? _noticeTimer;
   StreamSubscription<List<Map<String, dynamic>>>? _taskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
+  StreamSubscription<AuthState>? _authSubscription;
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
   final tasks = <TaskItem>[
@@ -71,6 +73,23 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _restoreLocalTasks();
+    _restoreCloudSession();
+  }
+
+  void _restoreCloudSession() {
+    try {
+      final auth = Supabase.instance.client.auth;
+      if (auth.currentSession != null) {
+        _enterCloudMode();
+      }
+      _authSubscription = auth.onAuthStateChange.listen((state) {
+        if (state.session != null && !cloudMode) {
+          _enterCloudMode();
+        }
+      });
+    } on AssertionError {
+      // Widget tests intentionally construct MyApp without Supabase.initialize.
+    }
   }
 
   Future<void> _restoreLocalTasks() async {
@@ -249,6 +268,7 @@ class _MyAppState extends State<MyApp> {
   void dispose() {
     _taskSubscription?.cancel();
     _subtaskSubscription?.cancel();
+    _authSubscription?.cancel();
     _noticeTimer?.cancel();
     super.dispose();
   }
@@ -359,9 +379,11 @@ class _MyAppState extends State<MyApp> {
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
             onQuickAdd: () => _showTaskForm(context),
           )
-        : _LoginPage(
+        : LoginPage(
             onLocalMode: () => setState(() => localMode = true),
             onSignedIn: _enterCloudMode,
+            onGoogleSignIn: () =>
+                SupabaseGoogleSignInAction(Supabase.instance.client).start(),
           ),
   );
 }
@@ -372,86 +394,144 @@ ThemeMode _themeModeFromStorage(String? value) => switch (value) {
   _ => ThemeMode.system,
 };
 
-class _LoginPage extends StatelessWidget {
-  const _LoginPage({required this.onLocalMode, required this.onSignedIn});
+class LoginPage extends StatefulWidget {
+  const LoginPage({
+    super.key,
+    required this.onLocalMode,
+    required this.onSignedIn,
+    required this.onGoogleSignIn,
+  });
+
   final VoidCallback onLocalMode;
   final Future<void> Function() onSignedIn;
+
+  final Future<void> Function() onGoogleSignIn;
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _googleLoading = false;
+  String? _googleError;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startGoogleSignIn() async {
+    setState(() {
+      _googleLoading = true;
+      _googleError = null;
+    });
+    try {
+      await widget.onGoogleSignIn();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _googleError =
+              'Nie udało się połączyć z Google. Spróbuj ponownie.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final email = TextEditingController();
-    final password = TextEditingController();
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.check_circle_outline, size: 56),
-                const SizedBox(height: 18),
-                Text(
-                  'Zaloguj się',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Synchronizuj zadania między telefonem i komputerem.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Adres e-mail',
-                    border: OutlineInputBorder(),
+      body: SingleChildScrollView(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.check_circle_outline, size: 56),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Zaloguj się',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: password,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Hasło',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Synchronizuj zadania między telefonem i komputerem.',
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 10),
-                FilledButton(
-                  onPressed: () async {
-                    await Supabase.instance.client.auth.signInWithPassword(
-                      email: email.text.trim(),
-                      password: password.text,
-                    );
-                    if (Supabase.instance.client.auth.currentSession != null) {
-                      await onSignedIn();
-                    }
-                  },
-                  child: const Text('Zaloguj e-mail'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    await Supabase.instance.client.auth.signUp(
-                      email: email.text.trim(),
-                      password: password.text,
-                    );
-                  },
-                  child: const Text('Załóż konto'),
-                ),
-                FilledButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.g_mobiledata),
-                  label: const Text('Kontynuuj z Google'),
-                ),
-                TextButton(
-                  onPressed: onLocalMode,
-                  child: const Text('Tryb lokalny'),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Adres e-mail',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _password,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Hasło',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton(
+                    onPressed: () async {
+                      await Supabase.instance.client.auth.signInWithPassword(
+                        email: _email.text.trim(),
+                        password: _password.text,
+                      );
+                      if (Supabase.instance.client.auth.currentSession !=
+                          null) {
+                        await widget.onSignedIn();
+                      }
+                    },
+                    child: const Text('Zaloguj e-mail'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await Supabase.instance.client.auth.signUp(
+                        email: _email.text.trim(),
+                        password: _password.text,
+                      );
+                    },
+                    child: const Text('Załóż konto'),
+                  ),
+                  if (_googleError != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _googleError!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  FilledButton.icon(
+                    onPressed: _googleLoading ? null : _startGoogleSignIn,
+                    icon: const Icon(Icons.g_mobiledata),
+                    label: Text(
+                      _googleLoading ? 'Łączę z Google…' : 'Kontynuuj z Google',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: widget.onLocalMode,
+                    child: const Text('Tryb lokalny'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
