@@ -13,4 +13,8 @@ void main() {
 
     expect(calls, ['dzienpodniu://login-callback/']);
   });
+
+  test('publishes the callback URI used by Google OAuth', () {
+    expect(googleLoginRedirectUrl, 'dzienpodniu://login-callback/');
+  });
 }
