@@ -1,12 +1,15 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'local_task_store.dart';
 import 'task_sync_service.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
+import 'task_view.dart';
 import 'app_theme.dart';
 import 'task_editor.dart';
 import 'today_screen.dart';
@@ -33,6 +36,7 @@ class _MyAppState extends State<MyApp> {
   bool cloudMode = false;
   String _searchQuery = '';
   String _statusFilter = 'all';
+  TaskView _selectedView = TaskView.today;
   String? _successNotice;
   final _navigatorKey = GlobalKey<NavigatorState>();
   Timer? _noticeTimer;
@@ -41,9 +45,24 @@ class _MyAppState extends State<MyApp> {
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
   final tasks = <TaskItem>[
-    const TaskItem(id: 'local-1', title: 'Wykosić trawnik', status: 'todo', category: 'Dom'),
-    const TaskItem(id: 'local-2', title: 'Poprawić grafikę', status: 'todo', category: 'Praca'),
-    const TaskItem(id: 'local-3', title: 'Kreacje do reklamy', status: 'todo', category: 'Praca'),
+    const TaskItem(
+      id: 'local-1',
+      title: 'Wykosić trawnik',
+      status: 'todo',
+      category: 'Dom',
+    ),
+    const TaskItem(
+      id: 'local-2',
+      title: 'Poprawić grafikę',
+      status: 'todo',
+      category: 'Praca',
+    ),
+    const TaskItem(
+      id: 'local-3',
+      title: 'Kreacje do reklamy',
+      status: 'todo',
+      category: 'Praca',
+    ),
   ];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
 
@@ -74,10 +93,12 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _loadCloudTasks() async {
     final rows = await _sync.loadTasks();
-    final cloudTasks = await Future.wait(rows.map((row) async {
-      final subtasks = await _sync.loadSubtasks(row['id'] as String);
-      return TaskItem.fromRow({...row, 'subtasks': subtasks});
-    }));
+    final cloudTasks = await Future.wait(
+      rows.map((row) async {
+        final subtasks = await _sync.loadSubtasks(row['id'] as String);
+        return TaskItem.fromRow({...row, 'subtasks': subtasks});
+      }),
+    );
     if (!mounted) return;
     setState(() {
       tasks
@@ -87,7 +108,10 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _enterCloudMode() async {
-    setState(() { localMode = true; cloudMode = true; });
+    setState(() {
+      localMode = true;
+      cloudMode = true;
+    });
     await _loadCloudTasks();
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -125,9 +149,15 @@ class _MyAppState extends State<MyApp> {
               priority: draft.priority,
               dueAt: draft.dueAt,
             );
-            final originalSteps = {for (final item in task.subtasks) item.id: item};
-            final editedSteps = {for (final item in draft.subtasks) item.id: item};
-            for (final removed in originalSteps.keys.where((id) => !editedSteps.containsKey(id))) {
+            final originalSteps = {
+              for (final item in task.subtasks) item.id: item,
+            };
+            final editedSteps = {
+              for (final item in draft.subtasks) item.id: item,
+            };
+            for (final removed in originalSteps.keys.where(
+              (id) => !editedSteps.containsKey(id),
+            )) {
               await _sync.deleteSubtask(removed);
             }
             for (final step in draft.subtasks) {
@@ -168,7 +198,9 @@ class _MyAppState extends State<MyApp> {
           await _loadCloudTasks();
         } else {
           taskId = 'local-${_nextLocalTaskId++}';
-          setState(() => tasks.add(TaskItem(
+          setState(
+            () => tasks.add(
+              TaskItem(
                 id: taskId,
                 title: draft.title,
                 status: 'todo',
@@ -177,7 +209,9 @@ class _MyAppState extends State<MyApp> {
                 priority: draft.priority,
                 dueAt: draft.dueAt,
                 subtasks: draft.subtasks,
-              )));
+              ),
+            ),
+          );
           await _saveLocalTasks();
         }
         await NotificationService.instance.cancel(taskId);
@@ -230,8 +264,14 @@ class _MyAppState extends State<MyApp> {
         title: const Text('Usunąć zadanie?'),
         content: Text('„${task.title}” zniknie z Twojej listy.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Anuluj')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Usuń')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Usuń'),
+          ),
         ],
       ),
     );
@@ -246,28 +286,40 @@ class _MyAppState extends State<MyApp> {
     await NotificationService.instance.cancel(task.id);
   }
 
-  List<TaskItem> get _visibleTasks {
+  List<TaskItem> _matchingTasks(
+    Iterable<TaskItem> source, {
+    bool applyStatusFilter = false,
+  }) {
     final query = _searchQuery.trim().toLowerCase();
-    return tasks
-        .where((task) => _statusFilter == 'all' || task.status == _statusFilter)
-        .where((task) => query.isEmpty ||
-            task.title.toLowerCase().contains(query) ||
-            task.note.toLowerCase().contains(query))
+    return source
+        .where(
+          (task) =>
+              !applyStatusFilter ||
+              _statusFilter == 'all' ||
+              task.status == _statusFilter,
+        )
+        .where(
+          (task) =>
+              query.isEmpty ||
+              task.title.toLowerCase().contains(query) ||
+              task.note.toLowerCase().contains(query),
+        )
         .toList();
   }
+
+  List<TaskItem> get _visibleTasks => _matchingTasks(
+    tasksForView(tasks, _selectedView, DateTime.now()),
+    applyStatusFilter: _selectedView == TaskView.today,
+  );
 
   List<TaskItem> get _laterTasks {
-    final now = DateTime.now();
-    final endOfToday = DateTime(now.year, now.month, now.day + 1);
-    return _visibleTasks
-        .where((task) => task.dueAt != null && task.dueAt!.isAfter(endOfToday))
-        .toList();
+    if (_selectedView != TaskView.today) return const [];
+    return _matchingTasks(
+      tasksForView(tasks, TaskView.upcoming, DateTime.now()),
+    );
   }
 
-  List<TaskItem> get _todayTasks {
-    final laterIds = _laterTasks.map((task) => task.id).toSet();
-    return _visibleTasks.where((task) => !laterIds.contains(task.id)).toList();
-  }
+  List<TaskItem> get _todayTasks => _visibleTasks;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -279,6 +331,11 @@ class _MyAppState extends State<MyApp> {
         ? TodayScreen(
             visibleTasks: _todayTasks,
             laterTasks: _laterTasks,
+            selectedView: _selectedView,
+            onViewChanged: (view) => setState(() {
+              _selectedView = view;
+              if (view != TaskView.today) _statusFilter = 'all';
+            }),
             successNotice: _successNotice,
             searchQuery: _searchQuery,
             onSearchChanged: (value) => setState(() => _searchQuery = value),
@@ -290,7 +347,10 @@ class _MyAppState extends State<MyApp> {
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
             onQuickAdd: () => _showTaskForm(context),
           )
-        : _LoginPage(onLocalMode: () => setState(() => localMode = true), onSignedIn: _enterCloudMode),
+        : _LoginPage(
+            onLocalMode: () => setState(() => localMode = true),
+            onSignedIn: _enterCloudMode,
+          ),
   );
 }
 
@@ -303,23 +363,81 @@ class _LoginPage extends StatelessWidget {
     final email = TextEditingController();
     final password = TextEditingController();
     return Scaffold(
-    body: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
-      child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Icon(Icons.check_circle_outline, size: 56), const SizedBox(height: 18),
-        Text('Zaloguj się', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 8), const Text('Synchronizuj zadania między telefonem i komputerem.', textAlign: TextAlign.center),
-        const SizedBox(height: 24),
-        TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Adres e-mail', border: OutlineInputBorder())),
-        const SizedBox(height: 10),
-        TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Hasło', border: OutlineInputBorder())),
-        const SizedBox(height: 10),
-        FilledButton(onPressed: () async { await Supabase.instance.client.auth.signInWithPassword(email: email.text.trim(), password: password.text); if (Supabase.instance.client.auth.currentSession != null) await onSignedIn(); }, child: const Text('Zaloguj e-mail')),
-        TextButton(onPressed: () async { await Supabase.instance.client.auth.signUp(email: email.text.trim(), password: password.text); }, child: const Text('Załóż konto')),
-        FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.g_mobiledata), label: const Text('Kontynuuj z Google')),
-        TextButton(onPressed: onLocalMode, child: const Text('Tryb lokalny')),
-      ])),
-    )),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.check_circle_outline, size: 56),
+                const SizedBox(height: 18),
+                Text(
+                  'Zaloguj się',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Synchronizuj zadania między telefonem i komputerem.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Adres e-mail',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: password,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Hasło',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                FilledButton(
+                  onPressed: () async {
+                    await Supabase.instance.client.auth.signInWithPassword(
+                      email: email.text.trim(),
+                      password: password.text,
+                    );
+                    if (Supabase.instance.client.auth.currentSession != null) {
+                      await onSignedIn();
+                    }
+                  },
+                  child: const Text('Zaloguj e-mail'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await Supabase.instance.client.auth.signUp(
+                      email: email.text.trim(),
+                      password: password.text,
+                    );
+                  },
+                  child: const Text('Załóż konto'),
+                ),
+                FilledButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.g_mobiledata),
+                  label: const Text('Kontynuuj z Google'),
+                ),
+                TextButton(
+                  onPressed: onLocalMode,
+                  child: const Text('Tryb lokalny'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -7,15 +7,30 @@ void main() {
   test('places undated inbox tasks only in the inbox', () {
     const inbox = TaskItem(id: '1', title: 'Pomysł', status: 'todo');
 
-    expect(
-      tasksForView([inbox], TaskView.inbox, DateTime(2026, 9, 1)),
-      [inbox],
-    );
+    expect(tasksForView([inbox], TaskView.inbox, DateTime(2026, 9, 1)), [
+      inbox,
+    ]);
     expect(
       tasksForView([inbox], TaskView.upcoming, DateTime(2026, 9, 1)),
       isEmpty,
     );
   });
+
+  test(
+    'keeps completed tasks due today available to the today status filter',
+    () {
+      final doneToday = TaskItem(
+        id: 'done-today',
+        title: 'Wysłane',
+        status: 'done',
+        dueAt: DateTime(2026, 9, 1, 16),
+      );
+
+      expect(tasksForView([doneToday], TaskView.today, DateTime(2026, 9, 1)), [
+        doneToday,
+      ]);
+    },
+  );
 
   test('sorts upcoming active tasks from the nearest date', () {
     final later = TaskItem(

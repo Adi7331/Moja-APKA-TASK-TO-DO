@@ -2,33 +2,37 @@ import 'task_item.dart';
 
 enum TaskView { today, inbox, upcoming, completed }
 
-List<TaskItem> tasksForView(
-  List<TaskItem> tasks,
-  TaskView view,
-  DateTime now,
-) {
+List<TaskItem> tasksForView(List<TaskItem> tasks, TaskView view, DateTime now) {
   final endOfToday = DateTime(now.year, now.month, now.day + 1);
   final selected = switch (view) {
-    TaskView.today => tasks
-        .where((task) => !task.isDone)
-        .where((task) => task.dueAt == null || task.dueAt!.isBefore(endOfToday))
-        .toList(),
-    TaskView.inbox => tasks
-        .where((task) => !task.isDone)
-        .where((task) => task.category == 'Skrzynka' && task.dueAt == null)
-        .toList(),
-    TaskView.upcoming => tasks
-        .where((task) => !task.isDone)
-        .where((task) => task.dueAt != null && !task.dueAt!.isBefore(endOfToday))
-        .toList(),
+    TaskView.today =>
+      tasks
+          .where(
+            (task) => task.dueAt == null || task.dueAt!.isBefore(endOfToday),
+          )
+          .toList(),
+    TaskView.inbox =>
+      tasks
+          .where((task) => !task.isDone)
+          .where((task) => task.category == 'Skrzynka' && task.dueAt == null)
+          .toList(),
+    TaskView.upcoming =>
+      tasks
+          .where((task) => !task.isDone)
+          .where(
+            (task) => task.dueAt != null && !task.dueAt!.isBefore(endOfToday),
+          )
+          .toList(),
     TaskView.completed => tasks.where((task) => task.isDone).toList(),
   };
 
-  selected.sort((a, b) => switch (view) {
-        TaskView.upcoming => a.dueAt!.compareTo(b.dueAt!),
-        TaskView.completed => _completedOrder(a, b),
-        _ => 0,
-      });
+  selected.sort(
+    (a, b) => switch (view) {
+      TaskView.upcoming => a.dueAt!.compareTo(b.dueAt!),
+      TaskView.completed => _completedOrder(a, b),
+      _ => 0,
+    },
+  );
   return selected;
 }
 

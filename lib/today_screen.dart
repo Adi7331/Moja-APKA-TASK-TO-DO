@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'task_item.dart';
 import 'task_row.dart';
+import 'task_view.dart';
 
 class TodayScreen extends StatelessWidget {
   const TodayScreen({
     super.key,
     required this.visibleTasks,
     required this.laterTasks,
+    required this.selectedView,
+    required this.onViewChanged,
     required this.successNotice,
     required this.searchQuery,
     required this.onSearchChanged,
@@ -22,6 +25,8 @@ class TodayScreen extends StatelessWidget {
 
   final List<TaskItem> visibleTasks;
   final List<TaskItem> laterTasks;
+  final TaskView selectedView;
+  final ValueChanged<TaskView> onViewChanged;
   final String? successNotice;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
@@ -35,47 +40,58 @@ class TodayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) {
-          final desktop = constraints.maxWidth >= 720;
-          final content = _DailyPlan(
-            visibleTasks: visibleTasks,
-            laterTasks: laterTasks,
-            successNotice: successNotice,
-            searchQuery: searchQuery,
-            onSearchChanged: onSearchChanged,
-            selectedFilter: selectedFilter,
-            onFilterChanged: onFilterChanged,
-            onOpenTask: onOpenTask,
-            onCompleteTask: onCompleteTask,
-            onStatusSelected: onStatusSelected,
-            onDeleteTask: onDeleteTask,
-            onQuickAdd: onQuickAdd,
-            compact: !desktop,
-          );
-          return Scaffold(
-            body: desktop
-                ? Row(
-                    children: [
-                      const _DesktopNavigation(),
-                      Expanded(child: content),
-                    ],
-                  )
-                : SafeArea(child: content),
-            floatingActionButton: desktop
-                ? FloatingActionButton.extended(
-                    key: const ValueKey('quick-add-task'),
-                    onPressed: onQuickAdd,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Szybko zapisz'),
-                  )
-                : null,
-          );
-        },
+    builder: (context, constraints) {
+      final desktop = constraints.maxWidth >= 720;
+      final content = _DailyPlan(
+        visibleTasks: visibleTasks,
+        laterTasks: laterTasks,
+        selectedView: selectedView,
+        onViewChanged: onViewChanged,
+        successNotice: successNotice,
+        searchQuery: searchQuery,
+        onSearchChanged: onSearchChanged,
+        selectedFilter: selectedFilter,
+        onFilterChanged: onFilterChanged,
+        onOpenTask: onOpenTask,
+        onCompleteTask: onCompleteTask,
+        onStatusSelected: onStatusSelected,
+        onDeleteTask: onDeleteTask,
+        onQuickAdd: onQuickAdd,
+        compact: !desktop,
       );
+      return Scaffold(
+        body: desktop
+            ? Row(
+                children: [
+                  _DesktopNavigation(
+                    selectedView: selectedView,
+                    onViewChanged: onViewChanged,
+                  ),
+                  Expanded(child: content),
+                ],
+              )
+            : SafeArea(child: content),
+        floatingActionButton: desktop
+            ? FloatingActionButton.extended(
+                key: const ValueKey('quick-add-task'),
+                onPressed: onQuickAdd,
+                icon: const Icon(Icons.add),
+                label: const Text('Szybko zapisz'),
+              )
+            : null,
+      );
+    },
+  );
 }
 
 class _DesktopNavigation extends StatelessWidget {
-  const _DesktopNavigation();
+  const _DesktopNavigation({
+    required this.selectedView,
+    required this.onViewChanged,
+  });
+
+  final TaskView selectedView;
+  final ValueChanged<TaskView> onViewChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -89,18 +105,46 @@ class _DesktopNavigation extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text('✓ Dzień po dniu',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    )),
+            child: Text(
+              '✓ Dzień po dniu',
+              style: Theme.of(context).textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
           const SizedBox(height: 22),
-          const _NavigationItem(icon: Icons.wb_sunny_outlined, label: 'Dzisiaj', selected: true),
-          const _NavigationItem(icon: Icons.inbox_outlined, label: 'Skrzynka'),
-          const _NavigationItem(icon: Icons.calendar_month_outlined, label: 'Nadchodzące'),
-          const _NavigationItem(icon: Icons.check_circle_outline, label: 'Ukończone'),
+          _NavigationItem(
+            icon: Icons.wb_sunny_outlined,
+            label: 'Dzisiaj',
+            view: TaskView.today,
+            selected: selectedView == TaskView.today,
+            onTap: onViewChanged,
+          ),
+          _NavigationItem(
+            icon: Icons.inbox_outlined,
+            label: 'Skrzynka',
+            view: TaskView.inbox,
+            selected: selectedView == TaskView.inbox,
+            onTap: onViewChanged,
+          ),
+          _NavigationItem(
+            icon: Icons.calendar_month_outlined,
+            label: 'Nadchodzące',
+            view: TaskView.upcoming,
+            selected: selectedView == TaskView.upcoming,
+            onTap: onViewChanged,
+          ),
+          _NavigationItem(
+            icon: Icons.check_circle_outline,
+            label: 'Ukończone',
+            view: TaskView.completed,
+            selected: selectedView == TaskView.completed,
+            onTap: onViewChanged,
+          ),
           const Spacer(),
-          const _NavigationItem(icon: Icons.settings_outlined, label: 'Ustawienia'),
+          const _NavigationItem(
+            icon: Icons.settings_outlined,
+            label: 'Ustawienia',
+          ),
         ],
       ),
     );
@@ -111,11 +155,15 @@ class _NavigationItem extends StatelessWidget {
   const _NavigationItem({
     required this.icon,
     required this.label,
+    this.view,
+    this.onTap,
     this.selected = false,
   });
 
   final IconData icon;
   final String label;
+  final TaskView? view;
+  final ValueChanged<TaskView>? onTap;
   final bool selected;
 
   @override
@@ -123,24 +171,30 @@ class _NavigationItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.only(bottom: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: selected ? scheme.secondaryContainer : Colors.transparent,
+      child: InkWell(
+        onTap: view == null ? null : () => onTap!(view!),
         borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13),
-            ),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? scheme.secondaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
           ),
-        ],
+          child: Row(
+            children: [
+              Icon(icon, size: 18),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -150,6 +204,8 @@ class _DailyPlan extends StatelessWidget {
   const _DailyPlan({
     required this.visibleTasks,
     required this.laterTasks,
+    required this.selectedView,
+    required this.onViewChanged,
     required this.successNotice,
     required this.searchQuery,
     required this.onSearchChanged,
@@ -165,6 +221,8 @@ class _DailyPlan extends StatelessWidget {
 
   final List<TaskItem> visibleTasks;
   final List<TaskItem> laterTasks;
+  final TaskView selectedView;
+  final ValueChanged<TaskView> onViewChanged;
   final String? successNotice;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
@@ -180,19 +238,34 @@ class _DailyPlan extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allTasks = [...visibleTasks, ...laterTasks];
-    final focusTask = allTasks.where((task) => !task.isDone).cast<TaskItem?>().firstOrNull;
+    final focusTask = allTasks
+        .where((task) => !task.isDone)
+        .cast<TaskItem?>()
+        .firstOrNull;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(
-          padding: EdgeInsets.fromLTRB(compact ? 18 : 30, 24, compact ? 18 : 30, 24),
+          padding: EdgeInsets.fromLTRB(
+            compact ? 18 : 30,
+            24,
+            compact ? 18 : 30,
+            24,
+          ),
           children: [
-            _Header(compact: compact),
+            _Header(
+              compact: compact,
+              selectedView: selectedView,
+              onViewChanged: onViewChanged,
+            ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               child: successNotice == null
                   ? const SizedBox.shrink()
-                  : _SuccessNotice(key: ValueKey(successNotice), message: successNotice!),
+                  : _SuccessNotice(
+                      key: ValueKey(successNotice),
+                      message: successNotice!,
+                    ),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -205,11 +278,25 @@ class _DailyPlan extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _FocusCard(task: focusTask, onOpen: focusTask == null ? null : () => onOpenTask(focusTask)),
-            const SizedBox(height: 14),
-            _FilterStrip(selected: selectedFilter, onChanged: onFilterChanged),
-            const SizedBox(height: 18),
-            _SectionHeader(label: 'Najważniejsze', count: visibleTasks.length),
+            if (selectedView == TaskView.today) ...[
+              _FocusCard(
+                task: focusTask,
+                onOpen: focusTask == null ? null : () => onOpenTask(focusTask),
+              ),
+              const SizedBox(height: 14),
+              _FilterStrip(
+                selected: selectedFilter,
+                onChanged: onFilterChanged,
+              ),
+              const SizedBox(height: 18),
+            ] else
+              const SizedBox(height: 18),
+            _SectionHeader(
+              label: selectedView == TaskView.today
+                  ? 'Najważniejsze'
+                  : _viewSectionLabel(selectedView),
+              count: visibleTasks.length,
+            ),
             const SizedBox(height: 7),
             _TaskGroup(
               tasks: visibleTasks,
@@ -260,42 +347,91 @@ class _SuccessNotice extends StatelessWidget {
           color: scheme.primaryContainer,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(children: [
-          Icon(Icons.check_circle, color: scheme.primary, size: 19),
-          const SizedBox(width: 8),
-          Text(message, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
-        ]),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle, color: scheme.primary, size: 19),
+            const SizedBox(width: 8),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.compact});
+  const _Header({
+    required this.compact,
+    required this.selectedView,
+    required this.onViewChanged,
+  });
   final bool compact;
+  final TaskView selectedView;
+  final ValueChanged<TaskView> onViewChanged;
 
   @override
   Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Poniedziałek, 31 sierpnia',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      )),
-              const SizedBox(height: 3),
-              Text('Dzisiaj', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
-            ]),
-          ),
-          IconButton(
-            tooltip: 'Ustawienia',
-            onPressed: () {},
-            icon: const Icon(Icons.more_horiz),
-          ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Poniedziałek, 31 sierpnia',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              _viewTitle(selectedView),
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+      PopupMenuButton<TaskView>(
+        key: const ValueKey('task-view-menu'),
+        tooltip: 'Zmień widok',
+        onSelected: onViewChanged,
+        icon: const Icon(Icons.more_horiz),
+        itemBuilder: (context) => TaskView.values
+            .map(
+              (view) => PopupMenuItem(
+                value: view,
+                child: Row(
+                  children: [
+                    Expanded(child: Text(_viewTitle(view))),
+                    if (view == selectedView) const Icon(Icons.check, size: 18),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    ],
+  );
 }
+
+String _viewTitle(TaskView view) => switch (view) {
+  TaskView.today => 'Dzisiaj',
+  TaskView.inbox => 'Skrzynka',
+  TaskView.upcoming => 'Nadchodzące',
+  TaskView.completed => 'Ukończone',
+};
+
+String _viewSectionLabel(TaskView view) => switch (view) {
+  TaskView.inbox => 'Do uporządkowania',
+  TaskView.upcoming => 'Zaplanowane',
+  TaskView.completed => 'Zrobione',
+  TaskView.today => 'Najważniejsze',
+};
 
 class _FocusCard extends StatelessWidget {
   const _FocusCard({required this.task, required this.onOpen});
@@ -314,23 +450,40 @@ class _FocusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.all(15),
-          child: Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('✦ TERAZ', style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 7),
-              Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 3),
-              Text(
-                task?.dueAt == null ? 'Zacznij spokojnie od małego kroku.' : 'Najbliższy termin w Twoim planie.',
-                style: Theme.of(context).textTheme.bodySmall,
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '✦ TERAZ',
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      text,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      task?.dueAt == null
+                          ? 'Zacznij spokojnie od małego kroku.'
+                          : 'Najbliższy termin w Twoim planie.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
-            ])),
-            CircleAvatar(
-              backgroundColor: scheme.primary,
-              foregroundColor: scheme.onPrimary,
-              child: const Icon(Icons.arrow_forward),
-            ),
-          ]),
+              CircleAvatar(
+                backgroundColor: scheme.primary,
+                foregroundColor: scheme.onPrimary,
+                child: const Icon(Icons.arrow_forward),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -344,20 +497,45 @@ class _FilterStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _Filter(label: 'Dzisiaj', value: 'todo', selected: selected, onChanged: onChanged),
-            _Filter(label: 'W trakcie', value: 'in_progress', selected: selected, onChanged: onChanged),
-            _Filter(label: 'Gotowe', value: 'done', selected: selected, onChanged: onChanged),
-            _Filter(label: 'Wszystkie', value: 'all', selected: selected, onChanged: onChanged),
-          ],
+    scrollDirection: Axis.horizontal,
+    child: Row(
+      children: [
+        _Filter(
+          label: 'Dzisiaj',
+          value: 'todo',
+          selected: selected,
+          onChanged: onChanged,
         ),
-      );
+        _Filter(
+          label: 'W trakcie',
+          value: 'in_progress',
+          selected: selected,
+          onChanged: onChanged,
+        ),
+        _Filter(
+          label: 'Gotowe',
+          value: 'done',
+          selected: selected,
+          onChanged: onChanged,
+        ),
+        _Filter(
+          label: 'Wszystkie',
+          value: 'all',
+          selected: selected,
+          onChanged: onChanged,
+        ),
+      ],
+    ),
+  );
 }
 
 class _Filter extends StatelessWidget {
-  const _Filter({required this.label, required this.value, required this.selected, required this.onChanged});
+  const _Filter({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onChanged,
+  });
   final String label;
   final String value;
   final String selected;
@@ -365,13 +543,13 @@ class _Filter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: ChoiceChip(
-          label: Text(label),
-          selected: selected == value,
-          onSelected: (_) => onChanged(value),
-        ),
-      );
+    padding: const EdgeInsets.only(right: 6),
+    child: ChoiceChip(
+      label: Text(label),
+      selected: selected == value,
+      onSelected: (_) => onChanged(value),
+    ),
+  );
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -381,12 +559,19 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const Spacer(),
-          Text('$count ${count == 1 ? 'zadanie' : 'zadania'}', style: Theme.of(context).textTheme.bodySmall),
-        ],
-      );
+    children: [
+      Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium
+            ?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      const Spacer(),
+      Text(
+        '$count ${count == 1 ? 'zadanie' : 'zadania'}',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
 }
 
 class _TaskGroup extends StatelessWidget {
@@ -406,19 +591,24 @@ class _TaskGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (tasks.isEmpty) {
-      return Text('Brak zadań w tej sekcji.', style: Theme.of(context).textTheme.bodySmall);
+      return Text(
+        'Brak zadań w tej sekcji.',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Column(
         children: tasks
-            .map((task) => TaskRow(
-                  task: task,
-                  onOpen: () => onOpenTask(task),
-                  onComplete: () => onCompleteTask(task),
-                  onStatusSelected: (status) => onStatusSelected(task, status),
-                  onDelete: () => onDeleteTask(task),
-                ))
+            .map(
+              (task) => TaskRow(
+                task: task,
+                onOpen: () => onOpenTask(task),
+                onComplete: () => onCompleteTask(task),
+                onStatusSelected: (status) => onStatusSelected(task, status),
+                onDelete: () => onDeleteTask(task),
+              ),
+            )
             .toList(),
       ),
     );

@@ -13,6 +13,7 @@ import 'package:dzien_po_dniu/main.dart';
 import 'package:dzien_po_dniu/subtask_item.dart';
 import 'package:dzien_po_dniu/task_category_icon.dart';
 import 'package:dzien_po_dniu/task_item.dart';
+import 'package:dzien_po_dniu/task_view.dart';
 import 'package:dzien_po_dniu/today_screen.dart';
 
 void main() {
@@ -50,22 +51,26 @@ void main() {
       dueAt: DateTime(2026, 9, 1, 18),
     );
 
-    await tester.pumpWidget(MaterialApp(
-      home: TodayScreen(
-        visibleTasks: [important],
-        laterTasks: [later],
-        successNotice: null,
-        searchQuery: '',
-        onSearchChanged: (_) {},
-        selectedFilter: 'all',
-        onFilterChanged: (_) {},
-        onOpenTask: (_) {},
-        onCompleteTask: (_) {},
-        onStatusSelected: (_, _) {},
-        onDeleteTask: (_) {},
-        onQuickAdd: () => quickAddTapped = true,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: [important],
+          laterTasks: [later],
+          selectedView: TaskView.today,
+          onViewChanged: (_) {},
+          successNotice: null,
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () => quickAddTapped = true,
+        ),
       ),
-    ));
+    );
 
     expect(tester.takeException(), isNull);
     expect(find.text('Najważniejsze'), findsOneWidget);
@@ -78,8 +83,40 @@ void main() {
     expect(quickAddTapped, isTrue);
   });
 
-  testWidgets('shows the compact Today task list instead of a counter',
-      (WidgetTester tester) async {
+  testWidgets('changes the current view from the compact menu', (
+    WidgetTester tester,
+  ) async {
+    TaskView? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.today,
+          onViewChanged: (view) => selected = view,
+          successNotice: null,
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('task-view-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skrzynka').last);
+    expect(selected, TaskView.inbox);
+  });
+
+  testWidgets('shows the compact Today task list instead of a counter', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
 
     expect(find.text('Zaloguj się'), findsOneWidget);
@@ -87,7 +124,9 @@ void main() {
     expect(find.text('Adres e-mail'), findsOneWidget);
   });
 
-  testWidgets('marks a task as completed from the compact list', (WidgetTester tester) async {
+  testWidgets('marks a task as completed from the compact list', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
@@ -96,7 +135,9 @@ void main() {
     expect(find.byIcon(Icons.check_circle), findsWidgets);
   });
 
-  testWidgets('can mark a local task as in progress', (WidgetTester tester) async {
+  testWidgets('can mark a local task as in progress', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
@@ -111,7 +152,9 @@ void main() {
     expect(find.text('Wykosić trawnik'), findsWidgets);
   });
 
-  testWidgets('shows a delete action in the task menu', (WidgetTester tester) async {
+  testWidgets('shows a delete action in the task menu', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
@@ -122,19 +165,26 @@ void main() {
     expect(find.text('Usuń zadanie'), findsOneWidget);
   });
 
-  testWidgets('filters local tasks by the search phrase', (WidgetTester tester) async {
+  testWidgets('filters local tasks by the search phrase', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
 
-    await tester.enterText(find.byKey(const ValueKey('task-search')), 'grafikę');
+    await tester.enterText(
+      find.byKey(const ValueKey('task-search')),
+      'grafikę',
+    );
     await tester.pump();
 
     expect(find.text('Poprawić grafikę'), findsWidgets);
     expect(find.text('Wykosić trawnik'), findsNothing);
   });
 
-  testWidgets('shows only completed tasks after selecting that filter', (WidgetTester tester) async {
+  testWidgets('shows only completed tasks after selecting that filter', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
@@ -148,7 +198,9 @@ void main() {
     expect(find.text('Poprawić grafikę'), findsNothing);
   });
 
-  testWidgets('opens an edit sheet after tapping a task title', (WidgetTester tester) async {
+  testWidgets('opens an edit sheet after tapping a task title', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
@@ -159,14 +211,19 @@ void main() {
     expect(find.text('Edytuj zadanie'), findsOneWidget);
   });
 
-  testWidgets('adds a task from the quick daily action', (WidgetTester tester) async {
+  testWidgets('adds a task from the quick daily action', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('quick-add-task')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('task-title-input')), 'Nowe zadanie');
+    await tester.enterText(
+      find.byKey(const ValueKey('task-title-input')),
+      'Nowe zadanie',
+    );
     await tester.tap(find.text('Dodaj zadanie'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -177,7 +234,9 @@ void main() {
     expect(find.text('Zapisano zadanie'), findsOneWidget);
   });
 
-  testWidgets('expands additional task editor options', (WidgetTester tester) async {
+  testWidgets('expands additional task editor options', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
@@ -197,14 +256,19 @@ void main() {
     expect(find.text('Priorytet'), findsOneWidget);
   });
 
-  testWidgets('adds a local checklist step and shows its progress', (WidgetTester tester) async {
+  testWidgets('adds a local checklist step and shows its progress', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const ValueKey('subtask-input')), 'Przygotować baner');
+    await tester.enterText(
+      find.byKey(const ValueKey('subtask-input')),
+      'Przygotować baner',
+    );
     await tester.ensureVisible(find.byKey(const ValueKey('add-subtask')));
     await tester.tap(find.byKey(const ValueKey('add-subtask')));
     await tester.pump();
@@ -217,14 +281,19 @@ void main() {
     expect(find.text('0 z 1 kroków'), findsOneWidget);
   });
 
-  testWidgets('marks a checklist step as completed', (WidgetTester tester) async {
+  testWidgets('marks a checklist step as completed', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const ValueKey('subtask-input')), 'Przygotować baner');
+    await tester.enterText(
+      find.byKey(const ValueKey('subtask-input')),
+      'Przygotować baner',
+    );
     await tester.tap(find.byKey(const ValueKey('add-subtask')));
     await tester.pump();
     await tester.tap(find.byType(Checkbox).first);
