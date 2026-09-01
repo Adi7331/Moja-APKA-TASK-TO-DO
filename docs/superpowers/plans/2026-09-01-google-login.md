@@ -4,7 +4,7 @@
 
 **Goal:** Umożliwić bezpieczne logowanie kontem Google w aplikacji Flutter na Androidzie i Windowsie, z sesją obsługiwaną przez Supabase.
 
-**Architecture:** Przycisk logowania wywołuje `SupabaseClient.auth.signInWithOAuth(OAuthProvider.google)` z jednym stałym adresem powrotu `dzienpodniu://login-callback/`. `supabase_flutter` obsługuje callback i wymianę PKCE wewnętrznie; aplikacja reaguje na powstanie sesji, wywołując istniejące `_enterCloudMode`. Warstwa interfejsu dostaje wstrzykiwaną akcję Google, aby widok dało się testować bez rzeczywistej sieci lub przeglądarki.
+**Architecture:** Przycisk logowania wywołuje `SupabaseClient.auth.signInWithOAuth(OAuthProvider.google)` z jednym stałym adresem powrotu `dzienpodniu://login-callback/`. `supabase_flutter` obsługuje callback i wymianę PKCE wewnętrznie; aplikacja reaguje na powstanie sesji, wywołując istniejące `_enterCloudMode`. Warstwa interfejsu dostaje wstrzykiwaną akcję Google, aby widok dało się testować bez rzeczywistej sieci lub przeglądarki. Windows korzysta z obsługi callbacku SDK i jest weryfikowany na prawdziwym buildzie; nie dodajemy własnych wpisów rejestru bez potwierdzonego problemu.
 
 **Tech Stack:** Flutter, `supabase_flutter ^2.17.2`, Supabase Auth OAuth/PKCE, Android intent-filter, Windows URI scheme registration.
 
@@ -26,7 +26,6 @@
 - `lib/google_sign_in_action.dart` — mała, testowalna granica wywołania OAuth.
 - `lib/main.dart` — przekazuje akcję do ekranu logowania, reaguje na stan sesji i pokazuje błędy.
 - `android/app/src/main/AndroidManifest.xml` — rejestruje schemat `dzienpodniu` dla callbacku.
-- `windows/runner/Runner.rc` oraz nowy `windows/runner/uri_scheme.reg` — opis rejestracji schematu URI dla instalatora Windows; plik `.reg` służy tylko testom lokalnym, nie zawiera sekretów.
 - `test/google_sign_in_action_test.dart` — test kontraktu OAuth bez przeglądarki.
 - `test/widget_test.dart` — test widoku logowania: stan oczekiwania, sukces i błąd.
 - `docs/google-oauth-setup.md` — instrukcja dla właściciela projektu Google Cloud i Supabase.
@@ -165,12 +164,11 @@ git commit -m "feat: handle Google authentication state"
 
 **Files:**
 - Modify: `android/app/src/main/AndroidManifest.xml`
-- Create: `windows/runner/uri_scheme.reg`
 - Create: `docs/google-oauth-setup.md`
 
 **Interfaces:**
 - Consumes: `googleLoginRedirectUrl == 'dzienpodniu://login-callback/'` z Task 1.
-- Produces: Android otwiera aplikację dla callbacku; Windows ma jednoznaczny plik rejestracji URI dla lokalnego testu.
+- Produces: Android otwiera aplikację dla callbacku; Windows korzysta z automatycznej obsługi callbacku `supabase_flutter` i jest ręcznie testowany na buildzie.
 
 - [ ] **Step 1: Write the failing configuration check**
 
@@ -190,11 +188,7 @@ Inside the existing `MainActivity` intent-filter add:
 
 Keep existing launcher filters unchanged.
 
-- [ ] **Step 3: Add Windows local URI registration file**
-
-Create `windows/runner/uri_scheme.reg` using the application executable path placeholder `%LOCALAPPDATA%\\DzienPoDniu\\dzien_po_dniu.exe` and the command argument `"%1"`. The documentation must state that the final installer replaces this local-test registration; do not ask users to run registry changes for a release build.
-
-- [ ] **Step 4: Add owner checklist**
+- [ ] **Step 3: Add owner checklist**
 
 Document exact dashboard sequence:
 
@@ -204,7 +198,7 @@ Document exact dashboard sequence:
 4. Supabase → URL Configuration → add `dzienpodniu://login-callback/` to Redirect URLs.
 5. Do not commit the Google secret.
 
-- [ ] **Step 5: Run tests and inspect Android manifest**
+- [ ] **Step 4: Run tests and inspect Android manifest**
 
 Run: `flutter test test/google_sign_in_action_test.dart`
 
@@ -217,7 +211,7 @@ Expected: `No issues found!`.
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add android/app/src/main/AndroidManifest.xml windows/runner/uri_scheme.reg docs/google-oauth-setup.md test/google_sign_in_action_test.dart
+git add android/app/src/main/AndroidManifest.xml docs/google-oauth-setup.md test/google_sign_in_action_test.dart
 git commit -m "feat: configure Google OAuth callbacks"
 ```
 
