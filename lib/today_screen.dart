@@ -121,21 +121,38 @@ class _DesktopNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: 184,
-      color: scheme.surfaceContainerLow,
-      padding: const EdgeInsets.fromLTRB(12, 26, 12, 12),
+      width: 224,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        border: Border(right: BorderSide(color: scheme.outlineVariant.withValues(alpha: .55))),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 22, 14, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              '✓ Dzień po dniu',
-              style: Theme.of(context).textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [scheme.primaryContainer, scheme.secondaryContainer],
+              ),
+              borderRadius: BorderRadius.circular(18),
             ),
+            child: Row(children: [
+              Icon(Icons.check_circle_rounded, color: scheme.primary, size: 21),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Dzień po dniu',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ]),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           _NavigationItem(
             icon: Icons.wb_sunny_outlined,
             label: 'Dzisiaj',
@@ -202,27 +219,31 @@ class _NavigationItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 3),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
       child: InkWell(
         onTap: onPressed ?? (view == null ? null : () => onTap!(view!)),
-        borderRadius: BorderRadius.circular(10),
+        mouseCursor: SystemMouseCursors.click,
+        hoverColor: scheme.primary.withValues(alpha: .10),
+        focusColor: scheme.primary.withValues(alpha: .16),
+        borderRadius: BorderRadius.circular(14),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: selected ? scheme.secondaryContainer : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            color: selected ? scheme.primaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 18),
-              const SizedBox(width: 9),
+              Icon(icon, size: 19, color: selected ? scheme.primary : scheme.onSurfaceVariant),
+              const SizedBox(width: 11),
               Expanded(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(fontSize: 14, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
                 ),
               ),
             ],

@@ -15,7 +15,11 @@ ThemeData _buildTheme(Brightness brightness) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor:
-        brightness == Brightness.light ? const Color(0xfff5f5f7) : const Color(0xff17171a),
+        brightness == Brightness.light ? const Color(0xfff7f8fc) : const Color(0xff15161a),
+    splashFactory: InkSparkle.splashFactory,
+    hoverColor: scheme.primary.withValues(alpha: brightness == Brightness.light ? .08 : .16),
+    focusColor: scheme.primary.withValues(alpha: .16),
+    highlightColor: scheme.primary.withValues(alpha: .12),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: brightness == Brightness.light
@@ -26,6 +30,11 @@ ThemeData _buildTheme(Brightness brightness) {
         borderSide: BorderSide.none,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(

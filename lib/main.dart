@@ -413,12 +413,12 @@ class _MyAppState extends State<MyApp> {
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
             pinnedTasks: pinnedTodayTasks(tasks),
             onTogglePin: _togglePinnedToday,
-            onOpenWeeklyReview: () => Navigator.of(context).push(
+            onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
               MaterialPageRoute(
                 builder: (_) => WeeklyReviewScreen(
                   review: buildWeeklyReview(tasks, DateTime.now()),
                   onOpenDailyPlan: () {
-                    Navigator.of(context).pop();
+                    _navigatorKey.currentState?.pop();
                     setState(() => _selectedView = TaskView.today);
                   },
                 ),

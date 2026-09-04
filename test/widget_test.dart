@@ -490,4 +490,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('empty-add-task')));
     expect(quickAddTapped, isTrue);
   });
+
+  testWidgets('opens weekly review from desktop navigation', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Przegląd tygodnia'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ukończone w poprzednim tygodniu'), findsOneWidget);
+  });
 }
