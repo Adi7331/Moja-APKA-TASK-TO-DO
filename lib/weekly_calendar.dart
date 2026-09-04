@@ -12,7 +12,7 @@ List<DateTime> weekDays(DateTime weekStart) {
   final monday = _mondayOf(weekStart);
   return List<DateTime>.generate(
     7,
-    (index) => monday.add(Duration(days: index)),
+    (index) => DateTime(monday.year, monday.month, monday.day + index),
   );
 }
 
@@ -25,7 +25,7 @@ Map<DateTime, List<TaskItem>> tasksByDay(
     for (final day in days) day: <TaskItem>[],
   };
   final monday = days.first;
-  final followingMonday = monday.add(const Duration(days: 7));
+  final followingMonday = DateTime(monday.year, monday.month, monday.day + 7);
 
   for (final task in tasks) {
     final dueAt = task.dueAt;

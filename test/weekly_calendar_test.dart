@@ -17,6 +17,15 @@ void main() {
     expect(days.every((day) => day.hour == 0 && day.minute == 0), isTrue);
   });
 
+  test('keeps every day at local midnight across a DST transition', () {
+    final days = weekDays(DateTime(2026, 10, 19));
+
+    expect(days, [
+      for (var day = 19; day <= 25; day++) DateTime(2026, 10, day),
+    ]);
+    expect(days.every((day) => day.hour == 0 && day.minute == 0), isTrue);
+  });
+
   test('groups a task by its due date and leaves the next day empty', () {
     final grouped = tasksByDay([
       task('monday', DateTime(2026, 9, 7, 14, 30)),
