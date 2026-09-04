@@ -29,61 +29,57 @@ class TaskStatusControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 720) {
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final value in _statuses)
-                _DesktopStatusButton(
-                  key: ValueKey('status-$value'),
-                  value: value,
-                  label: _labels[value]!,
-                  icon: _icons[value]!,
-                  selected: status == value,
-                  onTap: () => onStatusSelected(value),
-                ),
-            ],
-          );
-        }
+    if (MediaQuery.sizeOf(context).width >= 720) {
+      return Wrap(
+        spacing: 4,
+        children: [
+          for (final value in _statuses)
+            _DesktopStatusButton(
+              key: ValueKey('status-$value'),
+              value: value,
+              label: _labels[value]!,
+              icon: _icons[value]!,
+              selected: status == value,
+              onTap: () => onStatusSelected(value),
+            ),
+        ],
+      );
+    }
 
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FilledButton.tonalIcon(
-              key: const ValueKey('mobile-status-cycle'),
-              onPressed: () => onStatusSelected(_nextStatus()),
-              icon: Icon(_icons[_nextStatus()]),
-              label: Text(_labels[_nextStatus()]!),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(48, 48),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FilledButton.tonalIcon(
+          key: const ValueKey('mobile-status-cycle'),
+          onPressed: () => onStatusSelected(_nextStatus()),
+          icon: Icon(_icons[_nextStatus()]),
+          label: Text(_labels[_nextStatus()]!),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(48, 48),
+          ),
+        ),
+        const SizedBox(width: 8),
+        PopupMenuButton<String>(
+          key: const ValueKey('mobile-status-options'),
+          tooltip: 'Wybierz status',
+          onSelected: onStatusSelected,
+          icon: const Icon(Icons.more_vert),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          itemBuilder: (context) => [
+            for (final value in _statuses)
+              PopupMenuItem<String>(
+                value: value,
+                child: Row(
+                  children: [
+                    Icon(_icons[value]),
+                    const SizedBox(width: 12),
+                    Text(_labels[value]!),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            PopupMenuButton<String>(
-              key: const ValueKey('mobile-status-options'),
-              tooltip: 'Wybierz status',
-              onSelected: onStatusSelected,
-              icon: const Icon(Icons.more_vert),
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              itemBuilder: (context) => [
-                for (final value in _statuses)
-                  PopupMenuItem<String>(
-                    value: value,
-                    child: Row(
-                      children: [
-                        Icon(_icons[value]),
-                        const SizedBox(width: 12),
-                        Text(_labels[value]!),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
           ],
-        );
-      },
+        ),
+      ],
     );
   }
 }
