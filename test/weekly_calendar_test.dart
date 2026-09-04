@@ -26,6 +26,18 @@ void main() {
     expect(days.every((day) => day.hour == 0 && day.minute == 0), isTrue);
   });
 
+  test('aligns an arbitrary midweek date to Monday local midnight', () {
+    final days = weekDays(DateTime(2026, 4, 1));
+
+    expect(days, [
+      DateTime(2026, 3, 30),
+      DateTime(2026, 3, 31),
+      for (var day = 1; day <= 5; day++) DateTime(2026, 4, day),
+    ]);
+    expect(days.first, DateTime(2026, 3, 30));
+    expect(days.every((day) => day.hour == 0 && day.minute == 0), isTrue);
+  });
+
   test('groups a task by its due date and leaves the next day empty', () {
     final grouped = tasksByDay([
       task('monday', DateTime(2026, 9, 7, 14, 30)),

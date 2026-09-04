@@ -5,7 +5,11 @@ DateTime _localMidnight(DateTime date) =>
 
 DateTime _mondayOf(DateTime date) {
   final midnight = _localMidnight(date);
-  return midnight.subtract(Duration(days: midnight.weekday - DateTime.monday));
+  return DateTime(
+    midnight.year,
+    midnight.month,
+    midnight.day - (midnight.weekday - DateTime.monday),
+  );
 }
 
 List<DateTime> weekDays(DateTime weekStart) {
