@@ -400,6 +400,32 @@ void main() {
     expect(find.text('Dodaj termin i godzinę'), findsNothing);
   });
 
+  testWidgets('editor saves a due-date reminder and weekly repeat', (tester) async {
+    TaskDraft? saved;
+    await tester.pumpWidget(MaterialApp(home: Builder(
+      builder: (context) => FilledButton(
+        onPressed: () => showTaskEditor(context, onSave: (draft) async => saved = draft),
+        child: const Text('Otwórz edytor organizera'),
+      ),
+    )));
+
+    await tester.tap(find.text('Otwórz edytor organizera'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('task-title-input')), 'Rytuał');
+    await tester.tap(find.text('Więcej opcji'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('repeat-weekly')));
+    await tester.tap(find.byKey(const ValueKey('repeat-weekly')));
+    await tester.ensureVisible(find.byKey(const ValueKey('reminder-due')));
+    await tester.tap(find.byKey(const ValueKey('reminder-due')));
+    await tester.ensureVisible(find.text('Dodaj zadanie'));
+    await tester.tap(find.text('Dodaj zadanie'));
+    await tester.pumpAndSettle();
+
+    expect(saved!.repeatRule?.unit.name, 'week');
+    expect(saved!.reminderAt, isNull);
+  });
+
   testWidgets('shows task status, priority, and a note preview', (
     WidgetTester tester,
   ) async {

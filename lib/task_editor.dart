@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'subtask_item.dart';
+import 'repeat_rule.dart';
 import 'task_item.dart';
 
 class TaskDraft {
@@ -10,6 +11,8 @@ class TaskDraft {
     required this.category,
     required this.priority,
     required this.dueAt,
+    required this.reminderAt,
+    required this.repeatRule,
     required this.subtasks,
   });
 
@@ -18,6 +21,8 @@ class TaskDraft {
   final String category;
   final String priority;
   final DateTime? dueAt;
+  final DateTime? reminderAt;
+  final RepeatRule? repeatRule;
   final List<SubtaskItem> subtasks;
 }
 
@@ -64,6 +69,8 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
   late String _category;
   late String _priority;
   late DateTime? _dueAt;
+  late DateTime? _reminderAt;
+  late RepeatRule? _repeatRule;
   late List<SubtaskItem> _subtasks;
   var _showMore = false;
   var _saving = false;
@@ -77,6 +84,8 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
     _category = widget.task?.category ?? 'Skrzynka';
     _priority = widget.task?.priority ?? 'medium';
     _dueAt = widget.task?.dueAt;
+    _reminderAt = widget.task?.reminderAt;
+    _repeatRule = widget.task?.repeatRule;
     _subtasks = List<SubtaskItem>.from(widget.task?.subtasks ?? const []);
   }
 
@@ -207,6 +216,22 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                     ],
                     onChanged: _saving ? null : (value) => setState(() => _priority = value!),
                   ),
+                  const SizedBox(height: 14),
+                  Text('Powtarzanie', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 8, runSpacing: 6, children: [
+                    ChoiceChip(key: const ValueKey('repeat-none'), label: const Text('Nie powtarzaj'), selected: _repeatRule == null, onSelected: _saving ? null : (_) => setState(() => _repeatRule = null)),
+                    ChoiceChip(key: const ValueKey('repeat-daily'), label: const Text('Codziennie'), selected: _repeatRule?.unit == RepeatUnit.day, onSelected: _saving ? null : (_) => setState(() => _repeatRule = const RepeatRule.daily())),
+                    ChoiceChip(key: const ValueKey('repeat-weekly'), label: const Text('Co tydzień'), selected: _repeatRule?.unit == RepeatUnit.week, onSelected: _saving ? null : (_) => setState(() => _repeatRule = const RepeatRule(unit: RepeatUnit.week))),
+                    ChoiceChip(key: const ValueKey('repeat-monthly'), label: const Text('Co miesiąc'), selected: _repeatRule?.unit == RepeatUnit.month, onSelected: _saving ? null : (_) => setState(() => _repeatRule = const RepeatRule(unit: RepeatUnit.month))),
+                  ]),
+                  const SizedBox(height: 14),
+                  Text('Przypomnienie', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 8, runSpacing: 6, children: [
+                    ChoiceChip(key: const ValueKey('reminder-none'), label: const Text('Brak'), selected: _reminderAt == null, onSelected: _saving ? null : (_) => setState(() => _reminderAt = null)),
+                    ChoiceChip(key: const ValueKey('reminder-due'), label: const Text('W terminie'), selected: _reminderAt != null && _reminderAt == _dueAt, onSelected: _saving ? null : (_) => setState(() => _reminderAt = _dueAt)),
+                  ]),
                 ]),
               ],
               if (_error != null) ...[
@@ -309,6 +334,8 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
         category: _category,
         priority: _priority,
         dueAt: _dueAt,
+        reminderAt: _reminderAt,
+        repeatRule: _repeatRule,
         subtasks: _subtasks,
       ));
       if (mounted) {

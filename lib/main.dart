@@ -205,9 +205,11 @@ class _MyAppState extends State<MyApp> {
                 title: draft.title,
                 note: draft.note,
                 category: draft.category,
-                priority: draft.priority,
-                dueAt: draft.dueAt,
-                subtasks: draft.subtasks,
+              priority: draft.priority,
+              dueAt: draft.dueAt,
+              reminderAt: draft.reminderAt,
+              repeatRule: draft.repeatRule,
+              subtasks: draft.subtasks,
               );
             });
             await _saveLocalTasks();
@@ -237,6 +239,8 @@ class _MyAppState extends State<MyApp> {
                 category: draft.category,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
+                reminderAt: draft.reminderAt,
+                repeatRule: draft.repeatRule,
                 subtasks: draft.subtasks,
               ),
             ),
