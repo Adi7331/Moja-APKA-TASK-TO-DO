@@ -78,6 +78,31 @@ void main() {
     expect(restored.toStorage(), containsPair('completedAt', '2026-09-06T18:00:00.000'));
   });
 
+  test('creates a Supabase payload using database organizer field names', () {
+    final task = TaskItem.fromStorage({
+      'id': 'cloud-organizer',
+      'title': 'Przegląd tygodnia',
+      'status': 'done',
+      'reminderAt': '2026-09-07T00:00:00.000',
+      'repeatRule': {'unit': 'week', 'interval': 1, 'weekdays': [1]},
+      'pinnedToday': false,
+      'completedAt': '2026-09-06T18:00:00.000',
+    });
+
+    expect(task.toSupabasePayload(), {
+      'title': 'Przegląd tygodnia',
+      'status': 'done',
+      'note': '',
+      'category': 'Skrzynka',
+      'priority': 'medium',
+      'due_at': null,
+      'reminder_at': '2026-09-06T22:00:00.000Z',
+      'repeat_rule': {'unit': 'week', 'interval': 1, 'weekdays': [1]},
+      'pinned_today': false,
+      'completed_at': '2026-09-06T16:00:00.000Z',
+    });
+  });
+
   test('reads a synchronized subtask row from Supabase', () {
     final step = SubtaskItem.fromRow({
       'id': 'step-cloud-1',

@@ -133,6 +133,19 @@ class TaskItem {
         'subtasks': subtasks.map((step) => step.toStorage()).toList(),
       };
 
+  Map<String, dynamic> toSupabasePayload() => {
+        'title': title,
+        'status': status,
+        'note': note,
+        'category': category,
+        'priority': priority,
+        'due_at': dueAt?.toUtc().toIso8601String(),
+        'reminder_at': reminderAt?.toUtc().toIso8601String(),
+        'repeat_rule': repeatRule?.toJson(),
+        'pinned_today': pinnedToday,
+        'completed_at': completedAt?.toUtc().toIso8601String(),
+      };
+
   static RepeatRule? _readRepeatRule(Object? raw) {
     if (raw is! Map) return null;
     return RepeatRule.fromJson(Map<String, dynamic>.from(raw));
