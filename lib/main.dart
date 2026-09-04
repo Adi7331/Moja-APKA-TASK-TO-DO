@@ -9,6 +9,7 @@ import 'local_task_store.dart';
 import 'task_sync_service.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
+import 'task_occurrence.dart';
 import 'task_view.dart';
 import 'google_sign_in_action.dart';
 import 'app_theme.dart';
@@ -256,9 +257,9 @@ class _MyAppState extends State<MyApp> {
     if (saved) _showSuccessNotice();
   }
 
-  void _showSuccessNotice() {
+  void _showSuccessNotice([String message = 'Zapisano zadanie']) {
     _noticeTimer?.cancel();
-    setState(() => _successNotice = 'Zapisano zadanie');
+    setState(() => _successNotice = message);
     _noticeTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _successNotice = null);
     });
@@ -274,16 +275,42 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _changeTaskStatus(TaskItem task, String status) async {
+    final completedAt = status == 'done' ? DateTime.now() : null;
+    final updated = task.copyWith(
+      status: status,
+      pinnedToday: status == 'done' ? false : task.pinnedToday,
+      completedAt: completedAt,
+    );
+    final next = status == 'done' && task.repeatRule != null
+        ? createNextOccurrence(task, completedAt!, 'local-${_nextLocalTaskId++}')
+        : null;
     if (cloudMode) {
-      await _sync.setStatus(task.id, status);
+      await _sync.completeAndCreateNext(updated, next);
       await _loadCloudTasks();
+    } else {
+      setState(() {
+        final index = tasks.indexOf(task);
+        tasks[index] = updated;
+        if (next != null) tasks.add(next);
+      });
+      await _saveLocalTasks();
+    }
+    if (status == 'done') await NotificationService.instance.cancel(task.id);
+  }
+
+  Future<void> _togglePinnedToday(TaskItem task) async {
+    if (!task.pinnedToday && pinnedTodayTasks(tasks).length >= 3) {
+      _showSuccessNotice('Plan dnia może mieć najwyżej 3 zadania.');
       return;
     }
-    setState(() {
-      final index = tasks.indexOf(task);
-      tasks[index] = task.copyWith(status: status);
-    });
-    await _saveLocalTasks();
+    final updated = task.copyWith(pinnedToday: !task.pinnedToday);
+    if (cloudMode) {
+      await _sync.updateOrganizerTask(updated);
+      await _loadCloudTasks();
+    } else {
+      setState(() => tasks[tasks.indexOf(task)] = updated);
+      await _saveLocalTasks();
+    }
   }
 
   Future<void> _confirmDeleteTask(BuildContext context, TaskItem task) async {
@@ -377,6 +404,8 @@ class _MyAppState extends State<MyApp> {
             onCompleteTask: (task) => _changeTaskStatus(task, 'done'),
             onStatusSelected: (task, status) => _changeTaskStatus(task, status),
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
+            pinnedTasks: pinnedTodayTasks(tasks),
+            onTogglePin: _togglePinnedToday,
             onQuickAdd: () => _showTaskForm(context),
           )
         : LoginPage(

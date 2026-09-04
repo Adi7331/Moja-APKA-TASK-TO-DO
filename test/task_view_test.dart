@@ -61,4 +61,13 @@ void main() {
       [done],
     );
   });
+
+  test('daily plan excludes completed pinned tasks and keeps three open tasks', () {
+    const first = TaskItem(id: 'first', title: 'Pierwsze', status: 'todo', pinnedToday: true);
+    const done = TaskItem(id: 'done', title: 'Gotowe', status: 'done', pinnedToday: true);
+    const second = TaskItem(id: 'second', title: 'Drugie', status: 'todo', pinnedToday: true);
+    const third = TaskItem(id: 'third', title: 'Trzecie', status: 'todo', pinnedToday: true);
+
+    expect(pinnedTodayTasks([first, done, second, third]), [first, second, third]);
+  });
 }

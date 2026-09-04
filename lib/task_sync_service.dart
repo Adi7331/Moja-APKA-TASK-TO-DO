@@ -52,7 +52,6 @@ class TaskSyncService {
       throw StateError('Zaloguj się, aby synchronizować zadania.');
     }
     await _client.from('tasks').insert({
-      'id': next.id,
       'user_id': user.id,
       ...next.toSupabasePayload(),
       'updated_at': DateTime.now().toUtc().toIso8601String(),

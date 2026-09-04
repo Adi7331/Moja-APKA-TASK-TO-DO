@@ -2,6 +2,11 @@ import 'task_item.dart';
 
 enum TaskView { today, inbox, upcoming, completed }
 
+List<TaskItem> pinnedTodayTasks(Iterable<TaskItem> tasks) => tasks
+    .where((task) => task.pinnedToday && !task.isDone)
+    .take(3)
+    .toList();
+
 List<TaskItem> tasksForView(List<TaskItem> tasks, TaskView view, DateTime now) {
   final endOfToday = DateTime(now.year, now.month, now.day + 1);
   final selected = switch (view) {

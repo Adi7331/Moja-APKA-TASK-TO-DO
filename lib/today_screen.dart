@@ -23,6 +23,8 @@ class TodayScreen extends StatelessWidget {
     required this.onStatusSelected,
     required this.onDeleteTask,
     required this.onQuickAdd,
+    this.pinnedTasks = const [],
+    this.onTogglePin,
   });
 
   final List<TaskItem> visibleTasks;
@@ -41,6 +43,8 @@ class TodayScreen extends StatelessWidget {
   final void Function(TaskItem task, String status) onStatusSelected;
   final ValueChanged<TaskItem> onDeleteTask;
   final VoidCallback onQuickAdd;
+  final List<TaskItem> pinnedTasks;
+  final ValueChanged<TaskItem>? onTogglePin;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -63,6 +67,8 @@ class TodayScreen extends StatelessWidget {
         onStatusSelected: onStatusSelected,
         onDeleteTask: onDeleteTask,
         onQuickAdd: onQuickAdd,
+        pinnedTasks: pinnedTasks,
+        onTogglePin: onTogglePin,
         compact: !desktop,
       );
       return Scaffold(
@@ -235,6 +241,8 @@ class _DailyPlan extends StatelessWidget {
     required this.onDeleteTask,
     required this.onQuickAdd,
     required this.compact,
+    required this.pinnedTasks,
+    required this.onTogglePin,
   });
 
   final List<TaskItem> visibleTasks;
@@ -254,6 +262,8 @@ class _DailyPlan extends StatelessWidget {
   final ValueChanged<TaskItem> onDeleteTask;
   final VoidCallback onQuickAdd;
   final bool compact;
+  final List<TaskItem> pinnedTasks;
+  final ValueChanged<TaskItem>? onTogglePin;
 
   @override
   Widget build(BuildContext context) {
@@ -301,6 +311,21 @@ class _DailyPlan extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (selectedView == TaskView.today) ...[
+              if (pinnedTasks.isNotEmpty) ...[
+                _SectionHeader(label: 'Plan na dziś', count: pinnedTasks.length),
+                const SizedBox(height: 7),
+                _TaskGroup(
+                  tasks: pinnedTasks,
+                  view: TaskView.today,
+                  onOpenTask: onOpenTask,
+                  onCompleteTask: onCompleteTask,
+                  onStatusSelected: onStatusSelected,
+                  onDeleteTask: onDeleteTask,
+                  onQuickAdd: onQuickAdd,
+                  onTogglePin: onTogglePin,
+                ),
+                const SizedBox(height: 18),
+              ],
               _FocusCard(
                 task: focusTask,
                 onOpen: focusTask == null ? null : () => onOpenTask(focusTask),
@@ -735,6 +760,7 @@ class _TaskGroup extends StatelessWidget {
     required this.onStatusSelected,
     required this.onDeleteTask,
     required this.onQuickAdd,
+    this.onTogglePin,
   });
   final List<TaskItem> tasks;
   final TaskView view;
@@ -743,6 +769,7 @@ class _TaskGroup extends StatelessWidget {
   final void Function(TaskItem, String) onStatusSelected;
   final ValueChanged<TaskItem> onDeleteTask;
   final VoidCallback onQuickAdd;
+  final ValueChanged<TaskItem>? onTogglePin;
 
   @override
   Widget build(BuildContext context) {
@@ -760,6 +787,7 @@ class _TaskGroup extends StatelessWidget {
                 onComplete: () => onCompleteTask(task),
                 onStatusSelected: (status) => onStatusSelected(task, status),
                 onDelete: () => onDeleteTask(task),
+                onTogglePin: onTogglePin == null ? null : () => onTogglePin!(task),
               ),
             )
             .toList(),

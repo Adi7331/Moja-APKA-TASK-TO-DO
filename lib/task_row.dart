@@ -11,6 +11,7 @@ class TaskRow extends StatelessWidget {
     required this.onComplete,
     required this.onStatusSelected,
     required this.onDelete,
+    this.onTogglePin,
   });
 
   final TaskItem task;
@@ -18,6 +19,7 @@ class TaskRow extends StatelessWidget {
   final VoidCallback onComplete;
   final ValueChanged<String> onStatusSelected;
   final VoidCallback onDelete;
+  final VoidCallback? onTogglePin;
 
   @override
   Widget build(BuildContext context) {
@@ -154,16 +156,24 @@ class TaskRow extends StatelessWidget {
                 onSelected: (value) {
                   if (value == 'delete') {
                     onDelete();
+                  } else if (value == 'pin') {
+                    onTogglePin?.call();
                   } else {
                     onStatusSelected(value);
                   }
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'todo', child: Text('Do zrobienia')),
-                  PopupMenuItem(value: 'in_progress', child: Text('W trakcie')),
-                  PopupMenuItem(value: 'done', child: Text('Oznacz jako zrobione')),
-                  PopupMenuDivider(),
-                  PopupMenuItem(value: 'delete', child: Text('Usuń zadanie')),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'todo', child: Text('Do zrobienia')),
+                  const PopupMenuItem(value: 'in_progress', child: Text('W trakcie')),
+                  const PopupMenuItem(value: 'done', child: Text('Oznacz jako zrobione')),
+                  if (!task.isDone && onTogglePin != null)
+                    PopupMenuItem(
+                      key: ValueKey(task.pinnedToday ? 'unpin-${task.id}' : 'pin-${task.id}'),
+                      value: 'pin',
+                      child: Text(task.pinnedToday ? 'Odepnij z planu' : 'Przypnij do dzisiaj'),
+                    ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'delete', child: Text('Usuń zadanie')),
                 ],
               ),
             ],
