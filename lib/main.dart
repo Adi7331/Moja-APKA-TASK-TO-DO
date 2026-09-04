@@ -250,11 +250,12 @@ class _MyAppState extends State<MyApp> {
           await _saveLocalTasks();
         }
         await NotificationService.instance.cancel(taskId);
-        if (draft.dueAt != null) {
-          await NotificationService.instance.schedule(
+        final reminderTime = draft.reminderAt ?? draft.dueAt;
+        if (reminderTime != null) {
+          await NotificationService.instance.scheduleTaskReminder(
             taskId: taskId,
             title: draft.title,
-            when: draft.dueAt!,
+            when: reminderTime,
           );
         }
         saved = true;
