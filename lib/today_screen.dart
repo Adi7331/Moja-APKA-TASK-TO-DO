@@ -25,6 +25,7 @@ class TodayScreen extends StatelessWidget {
     required this.onQuickAdd,
     this.pinnedTasks = const [],
     this.onTogglePin,
+    this.onOpenWeeklyReview,
   });
 
   final List<TaskItem> visibleTasks;
@@ -45,6 +46,7 @@ class TodayScreen extends StatelessWidget {
   final VoidCallback onQuickAdd;
   final List<TaskItem> pinnedTasks;
   final ValueChanged<TaskItem>? onTogglePin;
+  final VoidCallback? onOpenWeeklyReview;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -83,6 +85,7 @@ class TodayScreen extends StatelessWidget {
                       themeMode,
                       onThemeModeChanged,
                     ),
+                    onOpenWeeklyReview: onOpenWeeklyReview,
                   ),
                   Expanded(child: content),
                 ],
@@ -106,11 +109,13 @@ class _DesktopNavigation extends StatelessWidget {
     required this.selectedView,
     required this.onViewChanged,
     required this.onOpenSettings,
+    this.onOpenWeeklyReview,
   });
 
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenWeeklyReview;
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +143,12 @@ class _DesktopNavigation extends StatelessWidget {
             selected: selectedView == TaskView.today,
             onTap: onViewChanged,
           ),
+          if (onOpenWeeklyReview != null)
+            _NavigationItem(
+              icon: Icons.insights_outlined,
+              label: 'Przegląd tygodnia',
+              onPressed: onOpenWeeklyReview,
+            ),
           _NavigationItem(
             icon: Icons.inbox_outlined,
             label: 'Skrzynka',

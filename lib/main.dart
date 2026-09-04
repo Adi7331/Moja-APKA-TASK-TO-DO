@@ -15,6 +15,8 @@ import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'task_editor.dart';
 import 'today_screen.dart';
+import 'weekly_review.dart';
+import 'weekly_review_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -410,6 +412,17 @@ class _MyAppState extends State<MyApp> {
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
             pinnedTasks: pinnedTodayTasks(tasks),
             onTogglePin: _togglePinnedToday,
+            onOpenWeeklyReview: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => WeeklyReviewScreen(
+                  review: buildWeeklyReview(tasks, DateTime.now()),
+                  onOpenDailyPlan: () {
+                    Navigator.of(context).pop();
+                    setState(() => _selectedView = TaskView.today);
+                  },
+                ),
+              ),
+            ),
             onQuickAdd: () => _showTaskForm(context),
           )
         : LoginPage(
