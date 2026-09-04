@@ -125,6 +125,31 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                 icon: const Icon(Icons.calendar_today_outlined),
                 label: Text(_dueLabel()),
               ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    key: const ValueKey('due-today'),
+                    avatar: const Icon(Icons.today_outlined, size: 17),
+                    label: const Text('Na dziś'),
+                    onPressed: _saving ? null : () => _setQuickDueDate(0),
+                  ),
+                  ActionChip(
+                    key: const ValueKey('due-tomorrow'),
+                    avatar: const Icon(Icons.wb_sunny_outlined, size: 17),
+                    label: const Text('Jutro'),
+                    onPressed: _saving ? null : () => _setQuickDueDate(1),
+                  ),
+                  ActionChip(
+                    key: const ValueKey('due-none'),
+                    avatar: const Icon(Icons.event_busy_outlined, size: 17),
+                    label: const Text('Bez terminu'),
+                    onPressed: _saving ? null : () => setState(() => _dueAt = null),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               Text('Małe kroki', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
@@ -253,6 +278,13 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
     );
     if (time == null || !mounted) return;
     setState(() => _dueAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+  }
+
+  void _setQuickDueDate(int dayOffset) {
+    final now = DateTime.now();
+    setState(
+      () => _dueAt = DateTime(now.year, now.month, now.day + dayOffset, 9),
+    );
   }
 
   String _dueLabel() {

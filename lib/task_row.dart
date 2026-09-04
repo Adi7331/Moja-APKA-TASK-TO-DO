@@ -26,6 +26,7 @@ class TaskRow extends StatelessWidget {
     final progress = task.subtaskCount == 0
         ? null
         : task.completedSubtaskCount / task.subtaskCount;
+    final status = _statusLabel(task.status);
 
     return Material(
       color: scheme.surfaceContainerLow,
@@ -65,7 +66,44 @@ class TaskRow extends StatelessWidget {
                             color: task.isDone ? scheme.onSurfaceVariant : null,
                           ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 5,
+                      children: [
+                        _TaskTag(
+                          label: status,
+                          icon: _statusIcon(task.status),
+                          backgroundColor: _statusBackground(
+                            task.status,
+                            scheme,
+                          ),
+                          foregroundColor: _statusForeground(
+                            task.status,
+                            scheme,
+                          ),
+                        ),
+                        if (task.priority == 'high')
+                          _TaskTag(
+                            label: 'Wysoki priorytet',
+                            icon: Icons.priority_high_rounded,
+                            backgroundColor: scheme.errorContainer,
+                            foregroundColor: scheme.onErrorContainer,
+                          ),
+                      ],
+                    ),
+                    if (task.note.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        task.note,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                    const SizedBox(height: 5),
                     Text(
                       _metadata(),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -145,4 +183,70 @@ class TaskRow extends StatelessWidget {
 
   String _dueLabel(DateTime dueAt) =>
       '${dueAt.day.toString().padLeft(2, '0')}.${dueAt.month.toString().padLeft(2, '0')} · ${dueAt.hour.toString().padLeft(2, '0')}:${dueAt.minute.toString().padLeft(2, '0')}';
+
+  String _statusLabel(String status) => switch (status) {
+        'in_progress' => 'W trakcie',
+        'done' => 'Ukończone',
+        _ => 'Do zrobienia',
+      };
+
+  IconData _statusIcon(String status) => switch (status) {
+        'in_progress' => Icons.play_arrow_rounded,
+        'done' => Icons.check_rounded,
+        _ => Icons.circle_outlined,
+      };
+
+  Color _statusBackground(String status, ColorScheme scheme) => switch (status) {
+        'in_progress' => scheme.secondaryContainer,
+        'done' => scheme.primaryContainer,
+        _ => scheme.surfaceContainerHighest,
+      };
+
+  Color _statusForeground(String status, ColorScheme scheme) => switch (status) {
+        'in_progress' => scheme.onSecondaryContainer,
+        'done' => scheme.onPrimaryContainer,
+        _ => scheme.onSurfaceVariant,
+      };
+}
+
+class _TaskTag extends StatelessWidget {
+  const _TaskTag({
+    required this.label,
+    required this.icon,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: label,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 13, color: foregroundColor),
+                const SizedBox(width: 3),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foregroundColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }

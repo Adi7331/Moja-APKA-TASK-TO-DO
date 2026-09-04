@@ -12,7 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dzien_po_dniu/main.dart';
 import 'package:dzien_po_dniu/subtask_item.dart';
 import 'package:dzien_po_dniu/task_category_icon.dart';
+import 'package:dzien_po_dniu/task_editor.dart';
 import 'package:dzien_po_dniu/task_item.dart';
+import 'package:dzien_po_dniu/task_row.dart';
 import 'package:dzien_po_dniu/task_view.dart';
 import 'package:dzien_po_dniu/today_screen.dart';
 
@@ -77,10 +79,12 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Najważniejsze'), findsOneWidget);
     expect(find.text('Później'), findsOneWidget);
-    expect(find.text('Szybko zapisz zadanie'), findsOneWidget);
     expect(find.text('Poprawić grafikę'), findsWidgets);
     expect(find.text('2 z 5 kroków'), findsOneWidget);
 
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(find.text('Szybko zapisz zadanie'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quick-add-task')));
     expect(quickAddTapped, isTrue);
   });
@@ -367,5 +371,97 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('1 z 1 kroków'), findsOneWidget);
+  });
+
+  testWidgets('sets a quick deadline from the task editor', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => showTaskEditor(
+              context,
+              onSave: (_) async {},
+            ),
+            child: const Text('Otwórz edytor'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Otwórz edytor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dodaj termin i godzinę'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('due-today')));
+    await tester.pump();
+
+    expect(find.text('Dodaj termin i godzinę'), findsNothing);
+  });
+
+  testWidgets('shows task status, priority, and a note preview', (
+    WidgetTester tester,
+  ) async {
+    var completed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TaskRow(
+            task: const TaskItem(
+              id: 'in-progress',
+              title: 'Przygotować kreację',
+              status: 'in_progress',
+              priority: 'high',
+              note: 'Sprawdzić formaty na Instagram.',
+              category: 'Praca',
+            ),
+            onOpen: () {},
+            onComplete: () => completed = true,
+            onStatusSelected: (_) {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('W trakcie'), findsOneWidget);
+    expect(find.text('Wysoki priorytet'), findsOneWidget);
+    expect(find.text('Sprawdzić formaty na Instagram.'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.circle_outlined));
+    expect(completed, isTrue);
+  });
+
+  testWidgets('guides the user when the inbox is empty', (
+    WidgetTester tester,
+  ) async {
+    var quickAddTapped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.inbox,
+          onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          successNotice: null,
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () => quickAddTapped = true,
+        ),
+      ),
+    );
+
+    expect(find.text('Skrzynka jest pusta'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('empty-add-task')));
+    expect(quickAddTapped, isTrue);
   });
 }

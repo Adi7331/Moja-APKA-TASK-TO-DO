@@ -322,10 +322,12 @@ class _DailyPlan extends StatelessWidget {
             const SizedBox(height: 7),
             _TaskGroup(
               tasks: visibleTasks,
+              view: selectedView,
               onOpenTask: onOpenTask,
               onCompleteTask: onCompleteTask,
               onStatusSelected: onStatusSelected,
               onDeleteTask: onDeleteTask,
+              onQuickAdd: onQuickAdd,
             ),
             if (laterTasks.isNotEmpty) ...[
               const SizedBox(height: 19),
@@ -333,10 +335,12 @@ class _DailyPlan extends StatelessWidget {
               const SizedBox(height: 7),
               _TaskGroup(
                 tasks: laterTasks,
+                view: TaskView.upcoming,
                 onOpenTask: onOpenTask,
                 onCompleteTask: onCompleteTask,
                 onStatusSelected: onStatusSelected,
                 onDeleteTask: onDeleteTask,
+                onQuickAdd: onQuickAdd,
               ),
             ],
             const SizedBox(height: 18),
@@ -725,24 +729,25 @@ class _SectionHeader extends StatelessWidget {
 class _TaskGroup extends StatelessWidget {
   const _TaskGroup({
     required this.tasks,
+    required this.view,
     required this.onOpenTask,
     required this.onCompleteTask,
     required this.onStatusSelected,
     required this.onDeleteTask,
+    required this.onQuickAdd,
   });
   final List<TaskItem> tasks;
+  final TaskView view;
   final ValueChanged<TaskItem> onOpenTask;
   final ValueChanged<TaskItem> onCompleteTask;
   final void Function(TaskItem, String) onStatusSelected;
   final ValueChanged<TaskItem> onDeleteTask;
+  final VoidCallback onQuickAdd;
 
   @override
   Widget build(BuildContext context) {
     if (tasks.isEmpty) {
-      return Text(
-        'Brak zadań w tej sekcji.',
-        style: Theme.of(context).textTheme.bodySmall,
-      );
+      return _EmptyTaskState(view: view, onQuickAdd: onQuickAdd);
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -758,6 +763,79 @@ class _TaskGroup extends StatelessWidget {
               ),
             )
             .toList(),
+      ),
+    );
+  }
+}
+
+class _EmptyTaskState extends StatelessWidget {
+  const _EmptyTaskState({required this.view, required this.onQuickAdd});
+
+  final TaskView view;
+  final VoidCallback onQuickAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final content = switch (view) {
+      TaskView.inbox => (
+          icon: Icons.inbox_outlined,
+          title: 'Skrzynka jest pusta',
+          detail: 'Dodaj sprawę, która przyszła Ci właśnie do głowy.',
+        ),
+      TaskView.upcoming => (
+          icon: Icons.calendar_month_outlined,
+          title: 'Nic nie czeka w kolejce',
+          detail: 'Dodaj termin, żeby zaplanować następne dni.',
+        ),
+      TaskView.completed => (
+          icon: Icons.check_circle_outline,
+          title: 'Jeszcze nic nie jest ukończone',
+          detail: 'Pierwsze zrobione zadanie pojawi się tutaj.',
+        ),
+      TaskView.today => (
+          icon: Icons.wb_sunny_outlined,
+          title: 'Dzisiaj masz wolną przestrzeń',
+          detail: 'Dodaj jedno małe zadanie na dobry start.',
+        ),
+    };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          CircleAvatar(
+            backgroundColor: scheme.secondaryContainer,
+            foregroundColor: scheme.onSecondaryContainer,
+            child: Icon(content.icon),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            content.title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            content.detail,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const ValueKey('empty-add-task'),
+            onPressed: onQuickAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Dodaj zadanie'),
+          ),
+        ],
       ),
     );
   }
