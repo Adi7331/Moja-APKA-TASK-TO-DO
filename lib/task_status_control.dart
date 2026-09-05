@@ -46,8 +46,9 @@ class TaskStatusControl extends StatelessWidget {
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         FilledButton.tonalIcon(
           key: const ValueKey('mobile-status-cycle'),
@@ -58,7 +59,6 @@ class TaskStatusControl extends StatelessWidget {
             minimumSize: const Size(48, 48),
           ),
         ),
-        const SizedBox(width: 8),
         PopupMenuButton<String>(
           key: const ValueKey('mobile-status-options'),
           tooltip: 'Wybierz status',

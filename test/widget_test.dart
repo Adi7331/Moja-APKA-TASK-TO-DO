@@ -267,6 +267,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'shows both mobile status actions in a 390 pixel task row without overflow',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskRow(
+              task: const TaskItem(
+                id: 'mobile-status-integration',
+                title: 'Przygotować kreację',
+                status: 'todo',
+              ),
+              onOpen: () {},
+              onComplete: () {},
+              onStatusSelected: (_) {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('mobile-status-cycle')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('mobile-status-options')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('shows a delete action in the task menu', (
     WidgetTester tester,
   ) async {
