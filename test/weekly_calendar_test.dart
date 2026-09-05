@@ -164,6 +164,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('desktop week gives every drop target the same width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeeklyCalendarScreen(
+          tasks: const [],
+          initialWeek: weekStart,
+          onOpenTask: (_) {},
+          onMoveTask: (_, __) {},
+          onQuickAdd: () {},
+        ),
+      ),
+    );
+
+    final widths = [
+      for (var index = 0; index < 7; index++)
+        tester.getSize(find.byKey(ValueKey('week-drop-$index'))).width,
+    ];
+
+    expect(widths, everyElement(widths.first));
+  });
+
   testWidgets('empty selected day offers quick add', (tester) async {
     var quickAdds = 0;
     await tester.binding.setSurfaceSize(const Size(390, 844));

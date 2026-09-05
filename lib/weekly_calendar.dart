@@ -283,20 +283,19 @@ class _DesktopWeek extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (var index = 0; index < days.length; index++)
+      for (var index = 0; index < days.length; index++) ...[
+        if (index > 0) const SizedBox(width: 8),
         Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: index == days.length - 1 ? 0 : 8),
-            child: _DesktopDayColumn(
-              day: days[index],
-              index: index,
-              tasks: grouped[days[index]]!,
-              onOpenTask: onOpenTask,
-              onMoveTask: onMoveTask,
-              onQuickAdd: onQuickAdd,
-            ),
+          child: _DesktopDayColumn(
+            day: days[index],
+            index: index,
+            tasks: grouped[days[index]]!,
+            onOpenTask: onOpenTask,
+            onMoveTask: onMoveTask,
+            onQuickAdd: onQuickAdd,
           ),
         ),
+      ],
     ],
   );
 }
