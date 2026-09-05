@@ -275,17 +275,20 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: TaskRow(
-              task: const TaskItem(
-                id: 'mobile-status-integration',
-                title: 'Przygotować kreację',
-                status: 'todo',
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(390, 844)),
+            child: Scaffold(
+              body: TaskRow(
+                task: const TaskItem(
+                  id: 'mobile-status-integration',
+                  title: 'Przygotować kreację',
+                  status: 'todo',
+                ),
+                onOpen: () {},
+                onComplete: () {},
+                onStatusSelected: (_) {},
+                onDelete: () {},
               ),
-              onOpen: () {},
-              onComplete: () {},
-              onStatusSelected: (_) {},
-              onDelete: () {},
             ),
           ),
         ),
