@@ -204,22 +204,66 @@ void main() {
     expect(find.byIcon(Icons.check_circle), findsWidgets);
   });
 
-  testWidgets('can mark a local task as in progress', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const MyApp());
-    await tester.tap(find.text('Tryb lokalny'));
-    await tester.pump();
+  testWidgets(
+    'uses direct desktop status controls and keeps status out of more menu',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var statusSelections = 0;
+      var selectedStatus = '';
 
-    await tester.tap(find.byType(PopupMenuButton<String>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'W trakcie'));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskRow(
+              task: const TaskItem(
+                id: 'desktop-status',
+                title: 'Przygotować kreację',
+                status: 'todo',
+                note: 'Sprawdzić formaty na Instagram.',
+                category: 'Praca',
+              ),
+              onOpen: () {},
+              onComplete: () {},
+              onStatusSelected: (status) {
+                statusSelections++;
+                selectedStatus = status;
+              },
+              onDelete: () {},
+              onTogglePin: () {},
+            ),
+          ),
+        ),
+      );
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'W trakcie'));
-    await tester.pumpAndSettle();
-    expect(find.text('Wykosić trawnik'), findsWidgets);
-  });
+      expect(find.byKey(const ValueKey('status-todo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('status-in_progress')), findsOneWidget);
+      expect(find.byKey(const ValueKey('status-done')), findsOneWidget);
+      expect(find.text('Sprawdzić formaty na Instagram.'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('status-in_progress')));
+      await tester.pumpAndSettle();
+      expect(statusSelections, 1);
+      expect(selectedStatus, 'in_progress');
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(PopupMenuItem<String>, 'Do zrobienia'),
+        findsNothing,
+      );
+      expect(
+        find.widgetWithText(PopupMenuItem<String>, 'W trakcie'),
+        findsNothing,
+      );
+      expect(
+        find.widgetWithText(PopupMenuItem<String>, 'Oznacz jako zrobione'),
+        findsNothing,
+      );
+      expect(find.text('Usuń zadanie'), findsOneWidget);
+    },
+  );
 
   testWidgets('shows a delete action in the task menu', (
     WidgetTester tester,
@@ -260,7 +304,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.circle_outlined).first);
     await tester.pump();
 
-    await tester.tap(find.text('Gotowe'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Gotowe'));
     await tester.pump();
 
     expect(find.text('Wykosić trawnik'), findsOneWidget);
