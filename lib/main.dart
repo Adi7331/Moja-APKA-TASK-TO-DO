@@ -15,6 +15,7 @@ import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'task_editor.dart';
 import 'today_screen.dart';
+import 'weekly_calendar.dart';
 import 'weekly_review.dart';
 import 'weekly_review_screen.dart';
 
@@ -320,6 +321,33 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  Future<void> _moveTaskToWeekDay(TaskItem task, DateTime day) async {
+    final reminderFollowsDueAt =
+        task.reminderAt != null && task.reminderAt == task.dueAt;
+    var updated = moveTaskToDay(task, day);
+    if (reminderFollowsDueAt) {
+      updated = updated.copyWith(reminderAt: updated.dueAt);
+    }
+    if (cloudMode) {
+      await _sync.updateOrganizerTask(updated);
+      await _loadCloudTasks();
+    } else {
+      setState(() {
+        final index = tasks.indexWhere((item) => item.id == task.id);
+        tasks[index] = updated;
+      });
+      await _saveLocalTasks();
+    }
+    if (reminderFollowsDueAt) {
+      await NotificationService.instance.cancel(task.id);
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: updated.id,
+        title: updated.title,
+        when: updated.dueAt!,
+      );
+    }
+  }
+
   Future<void> _confirmDeleteTask(BuildContext context, TaskItem task) async {
     final accepted = await showDialog<bool>(
       context: context,
@@ -413,6 +441,17 @@ class _MyAppState extends State<MyApp> {
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
             pinnedTasks: pinnedTodayTasks(tasks),
             onTogglePin: _togglePinnedToday,
+            onOpenWeek: () => _navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (routeContext) => WeeklyCalendarScreen(
+                  tasks: tasks,
+                  initialWeek: DateTime.now(),
+                  onOpenTask: (task) => _showTaskForm(routeContext, task: task),
+                  onMoveTask: _moveTaskToWeekDay,
+                  onQuickAdd: () => _showTaskForm(routeContext),
+                ),
+              ),
+            ),
             onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
               MaterialPageRoute(
                 builder: (_) => WeeklyReviewScreen(

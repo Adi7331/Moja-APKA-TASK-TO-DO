@@ -25,6 +25,7 @@ class TodayScreen extends StatelessWidget {
     required this.onQuickAdd,
     this.pinnedTasks = const [],
     this.onTogglePin,
+    this.onOpenWeek,
     this.onOpenWeeklyReview,
   });
 
@@ -46,6 +47,7 @@ class TodayScreen extends StatelessWidget {
   final VoidCallback onQuickAdd;
   final List<TaskItem> pinnedTasks;
   final ValueChanged<TaskItem>? onTogglePin;
+  final VoidCallback? onOpenWeek;
   final VoidCallback? onOpenWeeklyReview;
 
   @override
@@ -71,6 +73,7 @@ class TodayScreen extends StatelessWidget {
         onQuickAdd: onQuickAdd,
         pinnedTasks: pinnedTasks,
         onTogglePin: onTogglePin,
+        onOpenWeek: onOpenWeek,
         compact: !desktop,
       );
       return Scaffold(
@@ -85,6 +88,7 @@ class TodayScreen extends StatelessWidget {
                       themeMode,
                       onThemeModeChanged,
                     ),
+                    onOpenWeek: onOpenWeek,
                     onOpenWeeklyReview: onOpenWeeklyReview,
                   ),
                   Expanded(child: content),
@@ -109,12 +113,14 @@ class _DesktopNavigation extends StatelessWidget {
     required this.selectedView,
     required this.onViewChanged,
     required this.onOpenSettings,
+    this.onOpenWeek,
     this.onOpenWeeklyReview,
   });
 
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenWeek;
   final VoidCallback? onOpenWeeklyReview;
 
   @override
@@ -160,6 +166,12 @@ class _DesktopNavigation extends StatelessWidget {
             selected: selectedView == TaskView.today,
             onTap: onViewChanged,
           ),
+          if (onOpenWeek != null)
+            _NavigationItem(
+              icon: Icons.calendar_view_week_outlined,
+              label: 'Tydzień',
+              onPressed: onOpenWeek,
+            ),
           if (onOpenWeeklyReview != null)
             _NavigationItem(
               icon: Icons.insights_outlined,
@@ -275,6 +287,7 @@ class _DailyPlan extends StatelessWidget {
     required this.compact,
     required this.pinnedTasks,
     required this.onTogglePin,
+    required this.onOpenWeek,
   });
 
   final List<TaskItem> visibleTasks;
@@ -296,6 +309,7 @@ class _DailyPlan extends StatelessWidget {
   final bool compact;
   final List<TaskItem> pinnedTasks;
   final ValueChanged<TaskItem>? onTogglePin;
+  final VoidCallback? onOpenWeek;
 
   @override
   Widget build(BuildContext context) {
@@ -321,6 +335,7 @@ class _DailyPlan extends StatelessWidget {
               onViewChanged: onViewChanged,
               themeMode: themeMode,
               onThemeModeChanged: onThemeModeChanged,
+              onOpenWeek: onOpenWeek,
             ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
@@ -453,12 +468,14 @@ class _Header extends StatelessWidget {
     required this.onViewChanged,
     required this.themeMode,
     required this.onThemeModeChanged,
+    required this.onOpenWeek,
   });
   final bool compact;
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final VoidCallback? onOpenWeek;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -489,6 +506,8 @@ class _Header extends StatelessWidget {
         onSelected: (action) {
           if (action.view != null) {
             onViewChanged(action.view!);
+          } else if (action.opensWeek) {
+            onOpenWeek?.call();
           } else {
             _showAppearanceSheet(context, themeMode, onThemeModeChanged);
           }
@@ -507,6 +526,17 @@ class _Header extends StatelessWidget {
             ),
           ),
           const PopupMenuDivider(),
+          if (onOpenWeek != null)
+            const PopupMenuItem<_HeaderMenuAction>(
+              value: _HeaderMenuAction.week(),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_view_week_outlined, size: 18),
+                  SizedBox(width: 10),
+                  Text('Tydzień'),
+                ],
+              ),
+            ),
           const PopupMenuItem<_HeaderMenuAction>(
             value: _HeaderMenuAction.settings(),
             child: Row(
@@ -524,10 +554,12 @@ class _Header extends StatelessWidget {
 }
 
 class _HeaderMenuAction {
-  const _HeaderMenuAction.view(this.view);
-  const _HeaderMenuAction.settings() : view = null;
+  const _HeaderMenuAction.view(this.view) : opensWeek = false;
+  const _HeaderMenuAction.week() : view = null, opensWeek = true;
+  const _HeaderMenuAction.settings() : view = null, opensWeek = false;
 
   final TaskView? view;
+  final bool opensWeek;
 }
 
 void _showAppearanceSheet(

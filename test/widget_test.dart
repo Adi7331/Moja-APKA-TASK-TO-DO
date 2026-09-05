@@ -5,6 +5,8 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -533,6 +535,135 @@ void main() {
     expect(find.text('Skrzynka jest pusta'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('empty-add-task')));
     expect(quickAddTapped, isTrue);
+  });
+
+  testWidgets('opens week from the compact menu at 390 pixels', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final futureDate = DateTime.now().add(const Duration(days: 30));
+    SharedPreferences.setMockInitialValues({
+      'local_tasks_v1': jsonEncode([
+        {
+          'id': 'hidden-completed',
+          'title': 'Ukończone później',
+          'status': 'done',
+          'note': '',
+          'category': 'Skrzynka',
+          'priority': 'medium',
+          'dueAt': futureDate.toIso8601String(),
+          'reminderAt': null,
+          'repeatRule': null,
+          'pinnedToday': false,
+          'completedAt': null,
+          'subtasks': <Map<String, Object?>>[],
+        },
+      ]),
+    });
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('task-view-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tydzień').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tydzień'), findsOneWidget);
+    expect(find.byKey(const ValueKey('week-next')), findsOneWidget);
+  });
+
+  testWidgets('opens week from desktop navigation', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Tydzień'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tydzień'), findsOneWidget);
+    expect(find.byKey(const ValueKey('week-next')), findsOneWidget);
+  });
+
+  testWidgets('persists a task moved to another day from the mobile week', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final now = DateTime.now();
+    final monday = DateTime(
+      now.year,
+      now.month,
+      now.day - (now.weekday - DateTime.monday),
+    );
+    final sourceDue = DateTime(
+      monday.year,
+      monday.month,
+      monday.day + 6,
+      9,
+      30,
+    );
+    final targetDue = DateTime(
+      monday.year,
+      monday.month,
+      monday.day + 1,
+      9,
+      30,
+    );
+    SharedPreferences.setMockInitialValues({
+      'local_tasks_v1': jsonEncode([
+        {
+          'id': 'seeded-week',
+          'title': 'Zadanie do przeniesienia',
+          'status': 'done',
+          'note': '',
+          'category': 'Praca',
+          'priority': 'medium',
+          'dueAt': sourceDue.toIso8601String(),
+          'reminderAt': null,
+          'repeatRule': null,
+          'pinnedToday': false,
+          'completedAt': null,
+          'subtasks': <Map<String, Object?>>[],
+        },
+      ]),
+    });
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('task-view-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tydzień').last);
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('week-day-0')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('week-day-6')));
+    await tester.pumpAndSettle();
+    expect(find.text('Zadanie do przeniesienia'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('move-task-seeded-week')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('move-target-day-1')));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.text('Tydzień'))).pop();
+    await tester.binding.setSurfaceSize(const Size(700, 844));
+    await tester.pumpAndSettle();
+
+    final expectedDate =
+        '${targetDue.day.toString().padLeft(2, '0')}.${targetDue.month.toString().padLeft(2, '0')} · 09:30';
+    expect(find.text('Zadanie do przeniesienia'), findsWidgets);
+    expect(find.textContaining(expectedDate), findsOneWidget);
   });
 
   testWidgets('opens weekly review from desktop navigation', (tester) async {
