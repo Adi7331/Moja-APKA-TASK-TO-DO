@@ -39,8 +39,8 @@ class TaskRow extends StatelessWidget {
           color: scheme.surfaceContainerLow,
           child: InkWell(
             onTap: onOpen,
-            hoverColor: scheme.primary.withOpacity(0.04),
-            focusColor: scheme.primary.withOpacity(0.08),
+            hoverColor: scheme.primary.withValues(alpha: 0.04),
+            focusColor: scheme.primary.withValues(alpha: 0.08),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
