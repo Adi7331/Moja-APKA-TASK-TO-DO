@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:dzien_po_dniu/task_item.dart';
 import 'package:dzien_po_dniu/weekly_calendar.dart';
 
@@ -82,5 +83,106 @@ void main() {
     final moved = moveTaskToDay(task('unset', null), DateTime(2026, 9, 10));
 
     expect(moved.dueAt, DateTime(2026, 9, 10, 9));
+  });
+
+  testWidgets('mobile week shows a move sheet that moves the dated task', (
+    tester,
+  ) async {
+    TaskItem? movedTask;
+    DateTime? movedDay;
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeeklyCalendarScreen(
+          tasks: [task('spotkanie', DateTime(2026, 9, 7, 14, 30))],
+          initialWeek: weekStart,
+          onOpenTask: (_) {},
+          onMoveTask: (item, day) {
+            movedTask = item;
+            movedDay = day;
+          },
+          onQuickAdd: () {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('week-day-0')), findsOneWidget);
+    expect(find.text('spotkanie'), findsOneWidget);
+    expect(find.byKey(const ValueKey('move-task-spotkanie')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey('move-task-spotkanie')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('move-target-day-1')));
+    await tester.pumpAndSettle();
+
+    expect(movedTask?.id, 'spotkanie');
+    expect(movedDay, DateTime(2026, 9, 8));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop week renders drop targets and accepts a dragged task', (
+    tester,
+  ) async {
+    TaskItem? movedTask;
+    DateTime? movedDay;
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeeklyCalendarScreen(
+          tasks: [task('biurko', DateTime(2026, 9, 7, 9))],
+          initialWeek: weekStart,
+          onOpenTask: (_) {},
+          onMoveTask: (item, day) {
+            movedTask = item;
+            movedDay = day;
+          },
+          onQuickAdd: () {},
+        ),
+      ),
+    );
+
+    for (var index = 0; index < 7; index++) {
+      expect(find.byKey(ValueKey('week-drop-$index')), findsOneWidget);
+    }
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('week-task-biurko'))),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(480, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(movedTask?.id, 'biurko');
+    expect(movedDay, DateTime(2026, 9, 10));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty selected day offers quick add', (tester) async {
+    var quickAdds = 0;
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WeeklyCalendarScreen(
+          tasks: const [],
+          initialWeek: weekStart,
+          onOpenTask: (_) {},
+          onMoveTask: (_, __) {},
+          onQuickAdd: () => quickAdds++,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('week-empty-add')));
+
+    expect(quickAdds, 1);
   });
 }
