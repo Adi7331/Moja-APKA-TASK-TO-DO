@@ -268,6 +268,53 @@ void main() {
   );
 
   testWidgets(
+    'keeps all desktop status controls visible in a sidebar-constrained task row',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(800, 844)),
+            child: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 476,
+                  child: TaskRow(
+                    task: const TaskItem(
+                      id: 'sidebar-constrained-desktop-status',
+                      title: 'Przygotować kreację',
+                      status: 'todo',
+                      category: 'Praca',
+                    ),
+                    onOpen: () {},
+                    onComplete: () {},
+                    onStatusSelected: (_) {},
+                    onDelete: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('status-todo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('status-in_progress')), findsOneWidget);
+      expect(find.byKey(const ValueKey('status-done')), findsOneWidget);
+      expect(find.text('Do zrobienia'), findsNothing);
+      expect(find.text('W trakcie'), findsNothing);
+      expect(find.text('Gotowe'), findsNothing);
+      expect(find.byTooltip('Do zrobienia'), findsOneWidget);
+      expect(find.byTooltip('W trakcie'), findsOneWidget);
+      expect(find.byTooltip('Gotowe'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'shows both mobile status actions in a 390 pixel task row without overflow',
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
