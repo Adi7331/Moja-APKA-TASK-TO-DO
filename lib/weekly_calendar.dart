@@ -194,6 +194,13 @@ class _WeekHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
+      IconButton(
+        key: const ValueKey('week-back'),
+        tooltip: 'Wróć',
+        onPressed: () => Navigator.of(context).pop(),
+        icon: const Icon(Icons.arrow_back),
+      ),
+      const SizedBox(width: 8),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

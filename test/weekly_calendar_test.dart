@@ -85,6 +85,59 @@ void main() {
     expect(moved.dueAt, DateTime(2026, 9, 10, 9));
   });
 
+  for (final viewport in <String, Size>{
+    'phone': const Size(390, 844),
+    'desktop': const Size(1100, 800),
+  }.entries) {
+    testWidgets(
+      '${viewport.key} week has a visible control that returns to the previous route',
+      (tester) async {
+        await tester.binding.setSurfaceSize(viewport.value);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Column(
+                  children: [
+                    const Text('Poprzedni ekran'),
+                    TextButton(
+                      key: const ValueKey('open-week-route'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => WeeklyCalendarScreen(
+                            tasks: const [],
+                            initialWeek: weekStart,
+                            onOpenTask: (_) {},
+                            onMoveTask: (_, _) {},
+                            onQuickAdd: () {},
+                          ),
+                        ),
+                      ),
+                      child: const Text('Otwórz tydzień'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const ValueKey('open-week-route')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('week-back')), findsOneWidget);
+        expect(find.byTooltip('Wróć'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('week-back')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Poprzedni ekran'), findsOneWidget);
+        expect(find.byKey(const ValueKey('week-next')), findsNothing);
+      },
+    );
+  }
+
   testWidgets('mobile week shows a move sheet that moves the dated task', (
     tester,
   ) async {

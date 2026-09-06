@@ -47,22 +47,64 @@ void main() {
     expect(selected, 'in_progress');
   });
 
-  testWidgets('mobile cycles status and offers direct options without layout errors', (tester) async {
+  testWidgets(
+    'mobile shows the current status while pressing selects the next',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.pump();
+      String? selected;
+      await tester.pumpWidget(
+        harness(
+          status: 'in_progress',
+          viewportWidth: 390,
+          onStatusSelected: (value) => selected = value,
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('mobile-status-cycle')), findsOneWidget);
+      expect(find.text('W trakcie'), findsOneWidget);
+      expect(find.byIcon(Icons.timelapse), findsOneWidget);
+      expect(find.text('Gotowe'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('mobile-status-cycle')));
+
+      expect(selected, 'done');
+    },
+  );
+
+  testWidgets('mobile primary action fills the available control width', (
+    tester,
+  ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.binding.setSurfaceSize(const Size(390, 844));
     await tester.pump();
-    String selected = 'todo';
-    await tester.pumpWidget(harness(
-      status: selected,
-      viewportWidth: 390,
-      onStatusSelected: (value) => selected = value,
-    ));
+    String? selected;
+    await tester.pumpWidget(
+      harness(
+        status: 'todo',
+        viewportWidth: 390,
+        controlWidth: 260,
+        onStatusSelected: (value) => selected = value,
+      ),
+    );
 
-    expect(find.byKey(const ValueKey('mobile-status-cycle')), findsOneWidget);
-    expect(find.byKey(const ValueKey('mobile-status-options')), findsOneWidget);
+    final primarySize = tester.getSize(
+      find.byKey(const ValueKey('mobile-status-cycle')),
+    );
+    final optionsSize = tester.getSize(
+      find.byKey(const ValueKey('mobile-status-options')),
+    );
+    expect(primarySize.width + 8 + optionsSize.width, 260);
+    expect(primarySize.height, greaterThanOrEqualTo(48));
+    expect(optionsSize.width, greaterThanOrEqualTo(48));
+    expect(optionsSize.height, greaterThanOrEqualTo(48));
+    expect(find.byTooltip('Wybierz status'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('mobile-status-cycle')));
     expect(selected, 'in_progress');
 
+    expect(find.byKey(const ValueKey('mobile-status-options')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('mobile-status-options')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Gotowe').last);

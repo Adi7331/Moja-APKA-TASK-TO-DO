@@ -19,6 +19,23 @@ import 'weekly_calendar.dart';
 import 'weekly_review.dart';
 import 'weekly_review_screen.dart';
 
+typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
+
+WeekDayTaskMovePlan planTaskMoveToWeekDay(TaskItem task, DateTime day) {
+  final reminderFollowsDueAt =
+      task.reminderAt == null || task.reminderAt == task.dueAt;
+  var updatedTask = moveTaskToDay(task, day);
+  if (task.reminderAt != null && reminderFollowsDueAt) {
+    updatedTask = updatedTask.copyWith(reminderAt: updatedTask.dueAt);
+  }
+  return (
+    updatedTask: updatedTask,
+    reminderTime: reminderFollowsDueAt
+        ? updatedTask.reminderAt ?? updatedTask.dueAt
+        : null,
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
@@ -322,12 +339,8 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _moveTaskToWeekDay(TaskItem task, DateTime day) async {
-    final reminderFollowsDueAt =
-        task.reminderAt != null && task.reminderAt == task.dueAt;
-    var updated = moveTaskToDay(task, day);
-    if (reminderFollowsDueAt) {
-      updated = updated.copyWith(reminderAt: updated.dueAt);
-    }
+    final plan = planTaskMoveToWeekDay(task, day);
+    final updated = plan.updatedTask;
     if (cloudMode) {
       await _sync.updateOrganizerTask(updated);
       await _loadCloudTasks();
@@ -338,12 +351,12 @@ class _MyAppState extends State<MyApp> {
       });
       await _saveLocalTasks();
     }
-    if (reminderFollowsDueAt) {
+    if (plan.reminderTime != null) {
       await NotificationService.instance.cancel(task.id);
       await NotificationService.instance.scheduleTaskReminder(
         taskId: updated.id,
         title: updated.title,
-        when: updated.dueAt!,
+        when: plan.reminderTime!,
       );
     }
   }

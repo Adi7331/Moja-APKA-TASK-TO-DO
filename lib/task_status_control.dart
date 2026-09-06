@@ -53,40 +53,46 @@ class TaskStatusControl extends StatelessWidget {
       );
     }
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        FilledButton.tonalIcon(
-          key: const ValueKey('mobile-status-cycle'),
-          onPressed: () => onStatusSelected(_nextStatus()),
-          icon: Icon(_icons[_nextStatus()]),
-          label: Text(_labels[_nextStatus()]!),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(48, 48),
+    return SizedBox(
+      width: double.infinity,
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton.tonalIcon(
+              key: const ValueKey('mobile-status-cycle'),
+              onPressed: () => onStatusSelected(_nextStatus()),
+              icon: Icon(_icons[status]),
+              label: Text(_labels[status]!),
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            ),
           ),
-        ),
-        PopupMenuButton<String>(
-          key: const ValueKey('mobile-status-options'),
-          tooltip: 'Wybierz status',
-          onSelected: onStatusSelected,
-          icon: const Icon(Icons.more_vert),
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          itemBuilder: (context) => [
-            for (final value in _statuses)
-              PopupMenuItem<String>(
-                value: value,
-                child: Row(
-                  children: [
-                    Icon(_icons[value]),
-                    const SizedBox(width: 12),
-                    Text(_labels[value]!),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ],
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: PopupMenuButton<String>(
+              key: const ValueKey('mobile-status-options'),
+              tooltip: 'Wybierz status',
+              onSelected: onStatusSelected,
+              icon: const Icon(Icons.more_vert),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              itemBuilder: (context) => [
+                for (final value in _statuses)
+                  PopupMenuItem<String>(
+                    value: value,
+                    child: Row(
+                      children: [
+                        Icon(_icons[value]),
+                        const SizedBox(width: 12),
+                        Text(_labels[value]!),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

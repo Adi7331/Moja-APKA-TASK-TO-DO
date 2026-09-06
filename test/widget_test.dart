@@ -31,6 +31,40 @@ void main() {
     expect(categoryEmoji('Skrzynka'), isNull);
   });
 
+  test('moving a task reschedules its implicit due-time reminder', () {
+    final plan = planTaskMoveToWeekDay(
+      TaskItem(
+        id: 'implicit-reminder',
+        title: 'Spotkanie',
+        status: 'todo',
+        dueAt: DateTime(2026, 9, 7, 14, 30),
+      ),
+      DateTime(2026, 9, 9),
+    );
+
+    expect(plan.updatedTask.dueAt, DateTime(2026, 9, 9, 14, 30));
+    expect(plan.updatedTask.reminderAt, isNull);
+    expect(plan.reminderTime, DateTime(2026, 9, 9, 14, 30));
+  });
+
+  test('moving a task preserves a custom reminder without rescheduling it', () {
+    final customReminder = DateTime(2026, 9, 7, 13, 45);
+    final plan = planTaskMoveToWeekDay(
+      TaskItem(
+        id: 'custom-reminder',
+        title: 'Spotkanie',
+        status: 'todo',
+        dueAt: DateTime(2026, 9, 7, 14, 30),
+        reminderAt: customReminder,
+      ),
+      DateTime(2026, 9, 9),
+    );
+
+    expect(plan.updatedTask.dueAt, DateTime(2026, 9, 9, 14, 30));
+    expect(plan.updatedTask.reminderAt, customReminder);
+    expect(plan.reminderTime, isNull);
+  });
+
   testWidgets('shows the sectioned daily plan', (WidgetTester tester) async {
     var quickAddTapped = false;
     final important = TaskItem(
