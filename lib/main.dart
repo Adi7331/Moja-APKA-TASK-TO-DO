@@ -15,6 +15,9 @@ import 'task_occurrence.dart';
 import 'task_view.dart';
 import 'google_sign_in_action.dart';
 import 'app_theme.dart';
+import 'remaster_theme.dart';
+import 'remaster_shell.dart';
+import 'note_editor_screen.dart';
 import 'task_editor.dart';
 import 'task_postpone_sheet.dart';
 import 'task_schedule.dart';
@@ -68,6 +71,7 @@ class _MyAppState extends State<MyApp> {
   bool cloudMode = false;
   bool _notesCloudAvailable = false;
   bool _notesMode = false;
+  bool _remasterPreview = false;
   String _syncStatus = 'Lokalnie';
   late Future<void> _localRestoreFuture;
   late Future<void> _localNotesRestoreFuture;
@@ -108,7 +112,9 @@ class _MyAppState extends State<MyApp> {
   ];
   final notes = <NoteItem>[];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
-  late final NoteSyncService _noteSync = NoteSyncService(Supabase.instance.client);
+  late final NoteSyncService _noteSync = NoteSyncService(
+    Supabase.instance.client,
+  );
 
   @override
   void initState() {
@@ -142,6 +148,7 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _localStore = store;
       _themeMode = _themeModeFromStorage(preferences.getString('theme_mode'));
+      _remasterPreview = preferences.getBool('ui_remaster_v2') ?? false;
       if (storedTasks.isNotEmpty) {
         tasks
           ..clear()
@@ -223,7 +230,9 @@ class _MyAppState extends State<MyApp> {
         final cloudNotes = await _noteSync.loadNotes();
         final noteMigrationCompleted =
             await _localNoteStore?.cloudMigrationCompleted ?? false;
-        if (localNotes.isNotEmpty && cloudNotes.isEmpty && !noteMigrationCompleted) {
+        if (localNotes.isNotEmpty &&
+            cloudNotes.isEmpty &&
+            !noteMigrationCompleted) {
           await _noteSync.importLocalNotes(localNotes);
           await _localNoteStore?.markCloudMigrationCompleted();
         }
@@ -402,7 +411,10 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _deleteNote(NoteItem note) async {
-    final trashed = note.copyWith(deletedAt: DateTime.now(), updatedAt: DateTime.now());
+    final trashed = note.copyWith(
+      deletedAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
     await _saveNote(trashed);
   }
 
@@ -829,91 +841,182 @@ class _MyAppState extends State<MyApp> {
 
   List<TaskItem> get _todayTasks => _visibleTasks;
 
+  Future<void> _setRemasterPreview(bool value) async {
+    setState(() => _remasterPreview = value);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool('ui_remaster_v2', value);
+  }
+
+  Future<void> _openStartNote(NoteItem note) async {
+    await _navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => NoteEditorScreen(
+          note: note,
+          onSave: _saveNote,
+          onDelete: _deleteNote,
+          onCreateTask: (note, title) =>
+              _quickAddTask(title, sourceNoteId: note.id),
+          onAttach: _attachNoteFile,
+          onDeleteAttachment: _deleteNoteAttachment,
+          onOpenAttachment: _openNoteAttachment,
+        ),
+      ),
+    );
+  }
+
+  String? _profileValue(String key) {
+    if (!cloudMode) return null;
+    return Supabase.instance.client.auth.currentUser?.userMetadata?[key]
+        as String?;
+  }
+
+  Widget _notesWorkspace(BuildContext context) => NotesScreen(
+    notes: notes,
+    embedded: _remasterPreview,
+    onOpenTasks: () => _remasterPreview
+        ? RemasterShell.select(context, AppSpace.tasks)
+        : setState(() => _notesMode = false),
+    onSave: _saveNote,
+    onDelete: _deleteNote,
+    onCreateTask: (note, title) => _quickAddTask(title, sourceNoteId: note.id),
+    onAttach: _attachNoteFile,
+    onDeleteAttachment: _deleteNoteAttachment,
+    onOpenAttachment: _openNoteAttachment,
+    onPermanentlyDelete: (note) async {
+      if (cloudMode && _notesCloudAvailable) {
+        await _noteSync.permanentlyDeleteNote(note);
+      } else {
+        setState(() => notes.removeWhere((item) => item.id == note.id));
+        await _saveLocalNotes();
+      }
+    },
+    syncStatus: _syncStatus,
+  );
+
+  Widget _tasksWorkspace(BuildContext context) => TodayScreen(
+    visibleTasks: _todayTasks,
+    embedded: _remasterPreview,
+    laterTasks: _laterTasks,
+    selectedView: _selectedView,
+    onViewChanged: (view) => setState(() {
+      _selectedView = view;
+      if (view != TaskView.today) _statusFilter = 'all';
+    }),
+    themeMode: _themeMode,
+    onThemeModeChanged: _changeThemeMode,
+    successNotice: _successNotice,
+    syncStatus: _syncStatus,
+    searchQuery: _searchQuery,
+    onSearchChanged: (value) => setState(() => _searchQuery = value),
+    selectedFilter: _statusFilter,
+    onFilterChanged: (value) => setState(() => _statusFilter = value),
+    onOpenTask: (task) => _showTaskForm(context, task: task),
+    onCompleteTask: (task) => _changeTaskStatus(task, 'done'),
+    onStatusSelected: (task, status) => _changeTaskStatus(task, status),
+    onDeleteTask: (task) => _confirmDeleteTask(context, task),
+    onPostponeTask: _postponeTask,
+    onQuickAddText: _quickAddTask,
+    onOpenFocus: _openFocusTask,
+    onSignOut: _signOut,
+    pinnedTasks: pinnedTodayTasks(tasks),
+    onTogglePin: _togglePinnedToday,
+    onOpenWeek: () => _navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (routeContext) => WeeklyCalendarScreen(
+          tasks: tasks,
+          initialWeek: DateTime.now(),
+          onOpenTask: (task) => _showTaskForm(routeContext, task: task),
+          onMoveTask: _moveTaskToWeekDay,
+          onQuickAdd: () => _showTaskForm(routeContext),
+        ),
+      ),
+    ),
+    onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => WeeklyReviewScreen(
+          review: buildWeeklyReview(tasks, DateTime.now()),
+          onOpenDailyPlan: () {
+            _navigatorKey.currentState?.pop();
+            setState(() => _selectedView = TaskView.today);
+          },
+        ),
+      ),
+    ),
+    onQuickAdd: () => _showTaskForm(context),
+    onOpenNotes: () => _remasterPreview
+        ? RemasterShell.select(context, AppSpace.notes)
+        : setState(() => _notesMode = true),
+  );
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     navigatorKey: _navigatorKey,
-    theme: buildLightTheme(),
-    darkTheme: buildDarkTheme(),
+    theme: _remasterPreview
+        ? buildRemasterTheme(Brightness.light)
+        : buildLightTheme(),
+    darkTheme: _remasterPreview
+        ? buildRemasterTheme(Brightness.dark)
+        : buildDarkTheme(),
     themeMode: _themeMode,
-    home: localMode
-        ? _notesMode
-            ? NotesScreen(
-                notes: notes,
-                onOpenTasks: () => setState(() => _notesMode = false),
-                onSave: _saveNote,
-                onDelete: _deleteNote,
-                onCreateTask: (note, title) => _quickAddTask(title, sourceNoteId: note.id),
-                onAttach: _attachNoteFile,
-                onDeleteAttachment: _deleteNoteAttachment,
-                onOpenAttachment: _openNoteAttachment,
-                onPermanentlyDelete: (note) async {
-                  if (cloudMode && _notesCloudAvailable) {
-                    await _noteSync.permanentlyDeleteNote(note);
-                  } else {
-                    setState(() => notes.removeWhere((item) => item.id == note.id));
-                    await _saveLocalNotes();
-                  }
-                },
-                syncStatus: _syncStatus,
-              )
-            : TodayScreen(
-            visibleTasks: _todayTasks,
-            laterTasks: _laterTasks,
-            selectedView: _selectedView,
-            onViewChanged: (view) => setState(() {
-              _selectedView = view;
-              if (view != TaskView.today) _statusFilter = 'all';
-            }),
-            themeMode: _themeMode,
-            onThemeModeChanged: _changeThemeMode,
-            successNotice: _successNotice,
-            syncStatus: _syncStatus,
-            searchQuery: _searchQuery,
-            onSearchChanged: (value) => setState(() => _searchQuery = value),
-            selectedFilter: _statusFilter,
-            onFilterChanged: (value) => setState(() => _statusFilter = value),
-            onOpenTask: (task) => _showTaskForm(context, task: task),
-            onCompleteTask: (task) => _changeTaskStatus(task, 'done'),
-            onStatusSelected: (task, status) => _changeTaskStatus(task, status),
-            onDeleteTask: (task) => _confirmDeleteTask(context, task),
-            onPostponeTask: _postponeTask,
-            onQuickAddText: _quickAddTask,
-            onOpenFocus: _openFocusTask,
-            onSignOut: _signOut,
-            pinnedTasks: pinnedTodayTasks(tasks),
-            onTogglePin: _togglePinnedToday,
-            onOpenWeek: () => _navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (routeContext) => WeeklyCalendarScreen(
-                  tasks: tasks,
-                  initialWeek: DateTime.now(),
-                  onOpenTask: (task) => _showTaskForm(routeContext, task: task),
-                  onMoveTask: _moveTaskToWeekDay,
-                  onQuickAdd: () => _showTaskForm(routeContext),
-                ),
-              ),
-            ),
-            onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (_) => WeeklyReviewScreen(
-                  review: buildWeeklyReview(tasks, DateTime.now()),
-                  onOpenDailyPlan: () {
-                    _navigatorKey.currentState?.pop();
-                    setState(() => _selectedView = TaskView.today);
-                  },
-                ),
-              ),
-            ),
-            onQuickAdd: () => _showTaskForm(context),
-            onOpenNotes: () => setState(() => _notesMode = true),
-          )
-        : LoginPage(
+    home: Builder(
+      builder: (context) {
+        if (!localMode) {
+          return LoginPage(
             onLocalMode: () => setState(() => localMode = true),
             onSignedIn: _enterCloudMode,
             onGoogleSignIn: () =>
                 SupabaseGoogleSignInAction(Supabase.instance.client).start(),
-          ),
+          );
+        }
+        if (_remasterPreview) {
+          return RemasterShell(
+            tasks: tasks,
+            notes: notes,
+            tasksContent: Builder(
+              builder: (context) => _tasksWorkspace(context),
+            ),
+            notesContent: Builder(
+              builder: (context) => _notesWorkspace(context),
+            ),
+            onAddTask: () => _showTaskForm(context),
+            onAddNote: () => _openStartNote(
+              NoteItem(
+                id: newNoteId(),
+                blocks: [NoteBlock.text(id: newNoteId())],
+              ),
+            ),
+            onOpenTask: (task) => _showTaskForm(context, task: task),
+            onOpenNote: _openStartNote,
+            onCompleteTask: (task) =>
+                _changeTaskStatus(task, task.isDone ? 'todo' : 'done'),
+            onLegacy: () => _setRemasterPreview(false),
+            themeMode: _themeMode,
+            onThemeMode: _changeThemeMode,
+            syncStatus: _syncStatus,
+            name: _profileValue('full_name'),
+            avatarUrl: _profileValue('avatar_url'),
+            onSignOut: cloudMode ? _signOut : null,
+          );
+        }
+        return Stack(
+          children: [
+            _notesMode ? _notesWorkspace(context) : _tasksWorkspace(context),
+            Positioned(
+              right: 12,
+              top: 4,
+              child: SafeArea(
+                child: IconButton.filledTonal(
+                  tooltip: 'Podgląd nowego interfejsu',
+                  onPressed: () => _setRemasterPreview(true),
+                  icon: const Icon(Icons.dashboard_customize_outlined),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ),
   );
 }
 

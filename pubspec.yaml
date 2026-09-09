@@ -65,6 +65,10 @@ dependency_overrides:
 
 # The following section is specific to Flutter packages.
 flutter:
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope.ttf
   assets:
     - .env
 

@@ -21,9 +21,11 @@ class NotesScreen extends StatefulWidget {
     this.onAttach,
     this.onDeleteAttachment,
     this.onOpenAttachment,
+    this.embedded = false,
   });
 
   final List<NoteItem> notes;
+  final bool embedded;
   final VoidCallback onOpenTasks;
   final Future<void> Function(NoteItem note) onSave;
   final Future<void> Function(NoteItem note) onDelete;
@@ -221,6 +223,7 @@ class _NotesScreenState extends State<NotesScreen> {
           ),
           onDelete: _deleteNote,
         );
+        if (widget.embedded) return content;
         if (!wide) {
           return Scaffold(
             body: SafeArea(child: content),

@@ -8,3 +8,7 @@
 .pub-cache/
 .env
 build/
+.flutter-plugins-dependencies
+run-stdout.log
+run-stderr.log
+*.iml

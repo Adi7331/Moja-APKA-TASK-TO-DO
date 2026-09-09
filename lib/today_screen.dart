@@ -33,6 +33,7 @@ class TodayScreen extends StatelessWidget {
     this.onOpenNotes,
     this.onOpenFocus,
     this.onSignOut,
+    this.embedded = false,
   });
 
   final List<TaskItem> visibleTasks;
@@ -61,6 +62,7 @@ class TodayScreen extends StatelessWidget {
   final VoidCallback? onOpenNotes;
   final ValueChanged<TaskItem>? onOpenFocus;
   final VoidCallback? onSignOut;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -92,8 +94,9 @@ class TodayScreen extends StatelessWidget {
         onOpenFocus: onOpenFocus,
         onOpenNotes: onOpenNotes,
         onSignOut: onSignOut,
-        compact: !desktop,
+        compact: !desktop || embedded,
       );
+      if (embedded) return content;
       return Scaffold(
         body: desktop
             ? Row(
