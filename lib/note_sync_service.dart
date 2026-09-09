@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'note_item.dart';
+import 'note_folder.dart';
 
 class NoteConflictException implements Exception {
   const NoteConflictException(this.noteId);
@@ -96,10 +97,17 @@ class NoteSyncService {
     return notes;
   }
 
-  Future<void> saveNote(NoteItem note, {int? expectedRevision}) async {
+  Future<void> saveNote(
+    NoteItem note, {
+    int? expectedRevision,
+    bool includeFolderId = false,
+  }) async {
     final userId = _userId;
     final expected = expectedRevision ?? note.revision - 1;
-    final payload = note.toSupabasePayload(userId: userId);
+    final payload = note.toSupabasePayload(
+      userId: userId,
+      includeFolderId: includeFolderId,
+    );
     final nextRevision = expected + 1;
     final notePayload = {...payload, 'revision': nextRevision};
     if (expectedRevision == null) {
@@ -136,6 +144,54 @@ class NoteSyncService {
         'label_id': labelRow['id'],
         'user_id': userId,
       });
+    }
+  }
+
+  Future<List<NoteFolder>> loadFolders() async {
+    final rows = await _client
+        .from('note_folders')
+        .select()
+        .eq('user_id', _userId)
+        .order('name');
+    return List<Map<String, dynamic>>.from(rows)
+        .map(
+          (row) => NoteFolder(
+            id: row['id'] as String,
+            userId: row['user_id'] as String?,
+            name: row['name'] as String? ?? 'Bez nazwy',
+            colorKey: NoteColorKey.values.firstWhere(
+              (value) => value.name == row['color_key'],
+              orElse: () => NoteColorKey.neutral,
+            ),
+            createdAt: _date(row['created_at']),
+            updatedAt: _date(row['updated_at']),
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> saveFolder(NoteFolder folder) => _client
+      .from('note_folders')
+      .upsert(folder.toSupabasePayload(_userId), onConflict: 'id');
+
+  Future<void> deleteFolder(NoteFolder folder) => _client
+      .from('note_folders')
+      .delete()
+      .eq('id', folder.id)
+      .eq('user_id', _userId);
+
+  Future<void> importLocalFolders(Iterable<NoteFolder> folders) async {
+    for (final folder in folders) {
+      await saveFolder(
+        NoteFolder(
+          id: folder.id,
+          userId: _userId,
+          name: folder.name,
+          colorKey: folder.colorKey,
+          createdAt: folder.createdAt,
+          updatedAt: folder.updatedAt,
+        ),
+      );
     }
   }
 

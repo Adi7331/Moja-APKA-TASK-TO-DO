@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 import 'note_item.dart';
+import 'note_folder.dart';
 
 class LocalNoteStore {
   LocalNoteStore({this._directory});
 
   static const storageFileName = 'notes.json';
+  static const foldersStorageFileName = 'note_folders.json';
   static const migrationKeyFileName = 'notes-cloud-migration-v1';
   final Directory? _directory;
 
@@ -36,6 +38,34 @@ class LocalNoteStore {
     final temp = File('${file.path}.tmp');
     await temp.writeAsString(
       jsonEncode(notes.map((note) => note.toStorage()).toList()),
+      flush: true,
+    );
+    if (await file.exists()) await file.delete();
+    await temp.rename(file.path);
+  }
+
+  Future<List<NoteFolder>> loadFolders() async {
+    final directory = await _dataDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}$foldersStorageFileName',
+    );
+    if (!await file.exists()) return [];
+    final raw = jsonDecode(await file.readAsString());
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map>()
+        .map((item) => NoteFolder.fromStorage(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<void> saveFolders(List<NoteFolder> folders) async {
+    final directory = await _dataDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}$foldersStorageFileName',
+    );
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(
+      jsonEncode(folders.map((folder) => folder.toStorage()).toList()),
       flush: true,
     );
     if (await file.exists()) await file.delete();

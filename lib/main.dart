@@ -30,6 +30,7 @@ import 'weekly_calendar.dart';
 import 'weekly_review.dart';
 import 'weekly_review_screen.dart';
 import 'note_item.dart';
+import 'note_folder.dart';
 import 'note_attachment_picker.dart';
 import 'notes_screen.dart';
 import 'note_sync_service.dart';
@@ -72,6 +73,7 @@ class _MyAppState extends State<MyApp> {
   bool localMode = false;
   bool cloudMode = false;
   bool _notesCloudAvailable = false;
+  bool _foldersCloudAvailable = false;
   bool _notesMode = false;
   bool _remasterPreview = false;
   String _syncStatus = 'Lokalnie';
@@ -88,6 +90,7 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription<List<Map<String, dynamic>>>? _taskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _noteSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _folderSubscription;
   StreamSubscription<AuthState>? _authSubscription;
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
@@ -113,6 +116,7 @@ class _MyAppState extends State<MyApp> {
     ),
   ];
   final notes = <NoteItem>[];
+  final folders = <NoteFolder>[];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
   late final NoteSyncService _noteSync = NoteSyncService(
     Supabase.instance.client,
@@ -162,13 +166,18 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _restoreLocalNotes() async {
     final store = LocalNoteStore();
-    final storedNotes = await store.load();
+    final restored = await Future.wait([store.load(), store.loadFolders()]);
+    final storedNotes = restored[0] as List<NoteItem>;
+    final storedFolders = restored[1] as List<NoteFolder>;
     if (!mounted) return;
     setState(() {
       _localNoteStore = store;
       notes
         ..clear()
         ..addAll(storedNotes);
+      folders
+        ..clear()
+        ..addAll(storedFolders);
     });
   }
 
@@ -178,6 +187,59 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _saveLocalNotes() async {
     if (!cloudMode) await _localNoteStore?.save(notes);
+  }
+
+  Future<void> _saveLocalFolders() async {
+    // Folder schema deployment is deliberately opt-in. Until it is applied in
+    // Supabase, local folders stay available without risking existing notes.
+    await _localNoteStore?.saveFolders(folders);
+  }
+
+  Future<void> _createFolder(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    final folder = NoteFolder(id: newNoteId(), name: trimmed);
+    if (cloudMode && _foldersCloudAvailable) {
+      await _noteSync.saveFolder(folder);
+      await _loadCloudFolders();
+      return;
+    }
+    setState(() => folders.add(folder));
+    await _saveLocalFolders();
+  }
+
+  Future<void> _deleteFolder(NoteFolder folder) async {
+    if (cloudMode && _foldersCloudAvailable) {
+      await _noteSync.deleteFolder(folder);
+      await _loadCloudFolders();
+      await _loadCloudNotes();
+      return;
+    }
+    setState(() {
+      folders.removeWhere((item) => item.id == folder.id);
+      for (var index = 0; index < notes.length; index++) {
+        if (notes[index].folderId == folder.id) {
+          notes[index] = notes[index].copyWith(folderId: null, updatedAt: DateTime.now());
+        }
+      }
+    });
+    await _saveLocalFolders();
+    await _saveLocalNotes();
+  }
+
+  Future<void> _moveNoteToFolder(NoteItem note, String? folderId) async {
+    final updated = note.copyWith(folderId: folderId, updatedAt: DateTime.now());
+    if (cloudMode && !_foldersCloudAvailable) {
+      // The present production schema may not have folder_id yet. Store the
+      // local association without changing the proven cloud notes payload.
+      setState(() {
+        final index = notes.indexWhere((item) => item.id == note.id);
+        if (index != -1) notes[index] = updated;
+      });
+      await _localNoteStore?.save(notes);
+      return;
+    }
+    await _saveNote(updated);
   }
 
   Future<void> _changeThemeMode(ThemeMode mode) async {
@@ -244,6 +306,21 @@ class _MyAppState extends State<MyApp> {
         // The task workspace remains usable while the optional notes SQL is deployed.
         _notesCloudAvailable = false;
       }
+      if (_notesCloudAvailable) {
+        try {
+          final localFolders = await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
+          final cloudFolders = await _noteSync.loadFolders();
+          if (localFolders.isNotEmpty && cloudFolders.isEmpty) {
+            await _noteSync.importLocalFolders(localFolders);
+          }
+          await _loadCloudFolders();
+          _foldersCloudAvailable = true;
+        } catch (_) {
+          // Folder SQL is a separate, backwards-compatible migration. Notes
+          // continue syncing normally until the user enables it.
+          _foldersCloudAvailable = false;
+        }
+      }
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw StateError('Brak aktywnej sesji.');
       await _taskSubscription?.cancel();
@@ -265,6 +342,14 @@ class _MyAppState extends State<MyApp> {
             .stream(primaryKey: ['id'])
             .eq('user_id', user.id)
             .listen((_) => unawaited(_refreshCloudNotes()));
+      }
+      if (_foldersCloudAvailable) {
+        await _folderSubscription?.cancel();
+        _folderSubscription = Supabase.instance.client
+            .from('note_folders')
+            .stream(primaryKey: ['id'])
+            .eq('user_id', user.id)
+            .listen((_) => unawaited(_loadCloudFolders()));
       }
       if (!mounted) return;
       setState(() {
@@ -301,6 +386,16 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future<void> _loadCloudFolders() async {
+    final loaded = await _noteSync.loadFolders();
+    if (!mounted) return;
+    setState(() {
+      folders
+        ..clear()
+        ..addAll(loaded);
+    });
+  }
+
   Future<void> _refreshCloudNotes() async {
     try {
       await _loadCloudNotes();
@@ -317,6 +412,7 @@ class _MyAppState extends State<MyApp> {
         await _noteSync.saveNote(
           note,
           expectedRevision: isNew ? null : note.revision - 1,
+          includeFolderId: _foldersCloudAvailable,
         );
       } on NoteConflictException {
         final conflict = await _noteSync.createConflictCopy(note);
@@ -360,7 +456,11 @@ class _MyAppState extends State<MyApp> {
       // Storage metadata references the note row, so create a just-started
       // note before uploading its first attachment.
       if (!notes.any((item) => item.id == note.id)) {
-        await _noteSync.saveNote(note, expectedRevision: null);
+        await _noteSync.saveNote(
+          note,
+          expectedRevision: null,
+          includeFolderId: _foldersCloudAvailable,
+        );
       }
       return _noteSync.uploadAttachment(
         attachment: attachment,
@@ -536,9 +636,11 @@ class _MyAppState extends State<MyApp> {
     await _taskSubscription?.cancel();
     await _subtaskSubscription?.cancel();
     await _noteSubscription?.cancel();
+    await _folderSubscription?.cancel();
     _taskSubscription = null;
     _subtaskSubscription = null;
     _noteSubscription = null;
+    _folderSubscription = null;
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (_) {
@@ -549,6 +651,7 @@ class _MyAppState extends State<MyApp> {
       localMode = false;
       cloudMode = false;
       _notesCloudAvailable = false;
+      _foldersCloudAvailable = false;
       _notesMode = false;
       _syncStatus = 'Lokalnie';
     });
@@ -559,6 +662,7 @@ class _MyAppState extends State<MyApp> {
     _taskSubscription?.cancel();
     _subtaskSubscription?.cancel();
     _noteSubscription?.cancel();
+    _folderSubscription?.cancel();
     _authSubscription?.cancel();
     _noticeTimer?.cancel();
     super.dispose();
@@ -878,10 +982,12 @@ class _MyAppState extends State<MyApp> {
     bool checklist = false,
     bool image = false,
     bool file = false,
+    String? folderId,
   }) => _openStartNote(
     NoteItem(
       id: newNoteId(),
       title: 'Nowa notatka',
+      folderId: folderId,
       blocks: [
         NoteBlock.text(id: newNoteId()),
         if (checklist) NoteBlock.checklist(id: newNoteId(), position: 1),
@@ -902,15 +1008,21 @@ class _MyAppState extends State<MyApp> {
     if (_remasterPreview) {
       return RemasterNotesScreen(
         notes: notes,
-        onNewNote: () => _openNewRemasterNote(),
-        onNewChecklist: () => _openNewRemasterNote(checklist: true),
+        folders: folders,
+        onNewNote: ({String? folderId}) => _openNewRemasterNote(folderId: folderId),
+        onNewChecklist: ({String? folderId}) => _openNewRemasterNote(checklist: true, folderId: folderId),
         // The editor opens the system picker itself; keeping the creation
         // route identical prevents an attachment-only note from being lost.
-        onNewImage: () => _openNewRemasterNote(image: true),
-        onNewFile: () => _openNewRemasterNote(file: true),
+        onNewImage: ({String? folderId}) =>
+            _openNewRemasterNote(image: true, folderId: folderId),
+        onNewFile: ({String? folderId}) =>
+            _openNewRemasterNote(file: true, folderId: folderId),
         onOpenNote: _openStartNote,
         onSave: _saveNote,
         onDelete: _deleteNote,
+        onMoveToFolder: _moveNoteToFolder,
+        onCreateFolder: _createFolder,
+        onDeleteFolder: _deleteFolder,
       );
     }
     return NotesScreen(

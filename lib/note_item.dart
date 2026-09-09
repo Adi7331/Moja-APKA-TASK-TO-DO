@@ -485,7 +485,10 @@ class NoteItem {
     'folderId': folderId,
   };
 
-  Map<String, dynamic> toSupabasePayload({required String userId}) => {
+  Map<String, dynamic> toSupabasePayload({
+    required String userId,
+    bool includeFolderId = false,
+  }) => {
     'id': id,
     'user_id': userId,
     'title': title.trim().substring(0, math.min(title.trim().length, 160)),
@@ -497,6 +500,7 @@ class NoteItem {
     'reminder_at': reminderAt?.toUtc().toIso8601String(),
     'revision': revision,
     'conflict_of': conflictOf,
+    if (includeFolderId) 'folder_id': folderId,
     'created_at': createdAt.toUtc().toIso8601String(),
     'updated_at': updatedAt.toUtc().toIso8601String(),
   };

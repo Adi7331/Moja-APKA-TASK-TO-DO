@@ -2,6 +2,7 @@ import 'package:dzien_po_dniu/note_item.dart';
 import 'package:dzien_po_dniu/remaster_notes_screen.dart';
 import 'package:dzien_po_dniu/remaster_tasks_screen.dart';
 import 'package:dzien_po_dniu/remaster_theme.dart';
+import 'package:dzien_po_dniu/note_folder.dart';
 import 'package:dzien_po_dniu/task_item.dart';
 import 'package:dzien_po_dniu/task_view.dart';
 import 'package:flutter/material.dart';
@@ -42,7 +43,7 @@ void main() {
     var created = 0;
     await tester.pumpWidget(app(RemasterNotesScreen(
       notes: const [],
-      onNewNote: () => created++,
+      onNewNote: ({String? folderId}) => created++,
       onOpenNote: (_) {},
       onSave: (_) async {},
       onDelete: (_) async {},
@@ -70,12 +71,30 @@ void main() {
           ],
         ),
       ],
-      onNewNote: () {},
+      onNewNote: ({String? folderId}) {},
       onOpenNote: (_) {},
       onSave: (_) async {},
       onDelete: (_) async {},
     )));
 
     expect(find.text('1 z 2 ukończone'), findsOneWidget);
+  });
+
+  testWidgets('new note keeps the selected folder', (tester) async {
+    String? createdInFolder;
+    await tester.pumpWidget(app(RemasterNotesScreen(
+      notes: const [],
+      folders: [NoteFolder(id: 'work', name: 'Praca')],
+      onNewNote: ({String? folderId}) => createdInFolder = folderId,
+      onOpenNote: (_) {},
+      onSave: (_) async {},
+      onDelete: (_) async {},
+    )));
+
+    await tester.tap(find.text('Praca'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Utwórz notatkę'));
+
+    expect(createdInFolder, 'work');
   });
 }

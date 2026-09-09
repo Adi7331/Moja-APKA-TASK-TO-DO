@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'note_item.dart';
+import 'note_folder.dart';
 import 'remaster_theme.dart';
+
+typedef NewRemasterNote = void Function({String? folderId});
 
 /// Keep-first note grid for the remaster. The screen keeps selection and its
 /// current search locally, which means switching Start / Tasks / Notes does
@@ -10,6 +13,7 @@ class RemasterNotesScreen extends StatefulWidget {
   const RemasterNotesScreen({
     super.key,
     required this.notes,
+    this.folders = const [],
     required this.onNewNote,
     required this.onOpenNote,
     required this.onSave,
@@ -17,16 +21,23 @@ class RemasterNotesScreen extends StatefulWidget {
     this.onNewChecklist,
     this.onNewImage,
     this.onNewFile,
+    this.onMoveToFolder,
+    this.onCreateFolder,
+    this.onDeleteFolder,
   });
 
   final List<NoteItem> notes;
-  final VoidCallback onNewNote;
+  final List<NoteFolder> folders;
+  final NewRemasterNote onNewNote;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
-  final VoidCallback? onNewChecklist;
-  final VoidCallback? onNewImage;
-  final VoidCallback? onNewFile;
+  final NewRemasterNote? onNewChecklist;
+  final NewRemasterNote? onNewImage;
+  final NewRemasterNote? onNewFile;
+  final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
+  final Future<void> Function(String name)? onCreateFolder;
+  final Future<void> Function(NoteFolder folder)? onDeleteFolder;
 
   @override
   State<RemasterNotesScreen> createState() => _RemasterNotesScreenState();
@@ -37,6 +48,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
   String _query = '';
   _NoteSection _section = _NoteSection.notes;
   String? _selectedNoteId;
+  String? _folderId;
 
   @override
   void dispose() {
@@ -54,7 +66,9 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
         _NoteSection.trash => note.isDeleted,
       };
       final text = '${note.title} ${note.previewText} ${note.labels.join(' ')}'.toLowerCase();
-      return section && (query.isEmpty || text.contains(query));
+      return section &&
+          (_folderId == null || note.folderId == _folderId) &&
+          (query.isEmpty || text.contains(query));
     }).toList()
       ..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
@@ -75,17 +89,23 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           query: _query,
           section: _section,
           notes: _notes,
+          folders: widget.folders,
+          selectedFolderId: _folderId,
           selectedId: _selectedNoteId,
           onQueryChanged: (value) => setState(() => _query = value),
           onSectionChanged: (value) => setState(() => _section = value),
+          onFolderChanged: (value) => setState(() => _folderId = value),
           onNewNote: widget.onNewNote,
-          onNewChecklist: widget.onNewChecklist ?? widget.onNewNote,
-          onNewImage: widget.onNewImage ?? widget.onNewNote,
-          onNewFile: widget.onNewFile ?? widget.onNewNote,
+          onNewChecklist: widget.onNewChecklist,
+          onNewImage: widget.onNewImage,
+          onNewFile: widget.onNewFile,
           onSelect: (note) => setState(() => _selectedNoteId = note.id),
           onOpen: widget.onOpenNote,
           onSave: widget.onSave,
           onDelete: widget.onDelete,
+          onMoveToFolder: widget.onMoveToFolder,
+          onCreateFolder: widget.onCreateFolder,
+          onDeleteFolder: widget.onDeleteFolder,
         );
         if (!wide) return content;
         return Row(
@@ -111,9 +131,12 @@ class _NotesGrid extends StatelessWidget {
     required this.query,
     required this.section,
     required this.notes,
+    required this.folders,
+    required this.selectedFolderId,
     required this.selectedId,
     required this.onQueryChanged,
     required this.onSectionChanged,
+    required this.onFolderChanged,
     required this.onNewNote,
     required this.onNewChecklist,
     required this.onNewImage,
@@ -122,22 +145,31 @@ class _NotesGrid extends StatelessWidget {
     required this.onOpen,
     required this.onSave,
     required this.onDelete,
+    this.onMoveToFolder,
+    this.onCreateFolder,
+    this.onDeleteFolder,
   });
   final TextEditingController search;
   final String query;
   final _NoteSection section;
   final List<NoteItem> notes;
+  final List<NoteFolder> folders;
+  final String? selectedFolderId;
   final String? selectedId;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<_NoteSection> onSectionChanged;
-  final VoidCallback onNewNote;
-  final VoidCallback onNewChecklist;
-  final VoidCallback onNewImage;
-  final VoidCallback onNewFile;
+  final ValueChanged<String?> onFolderChanged;
+  final NewRemasterNote onNewNote;
+  final NewRemasterNote? onNewChecklist;
+  final NewRemasterNote? onNewImage;
+  final NewRemasterNote? onNewFile;
   final ValueChanged<NoteItem> onSelect;
   final ValueChanged<NoteItem> onOpen;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
+  final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
+  final Future<void> Function(String name)? onCreateFolder;
+  final Future<void> Function(NoteFolder folder)? onDeleteFolder;
 
   @override
   Widget build(BuildContext context) => CustomScrollView(
@@ -155,7 +187,13 @@ class _NotesGrid extends StatelessWidget {
               decoration: const InputDecoration(hintText: 'Szukaj w notatkach', prefixIcon: Icon(Icons.search_rounded)),
             ),
             const SizedBox(height: 12),
-            _Composer(onNewNote: onNewNote, onNewChecklist: onNewChecklist, onNewImage: onNewImage, onNewFile: onNewFile),
+            _Composer(
+              selectedFolderId: selectedFolderId,
+              onNewNote: onNewNote,
+              onNewChecklist: onNewChecklist,
+              onNewImage: onNewImage,
+              onNewFile: onNewFile,
+            ),
             const SizedBox(height: 16),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -164,11 +202,23 @@ class _NotesGrid extends StatelessWidget {
                 child: ChoiceChip(label: Text(_sectionLabel(item)), selected: section == item, onSelected: (_) => onSectionChanged(item)),
               )).toList()),
             ),
+            const SizedBox(height: 12),
+            _FolderStrip(
+              folders: folders,
+              selectedFolderId: selectedFolderId,
+              onSelected: onFolderChanged,
+              onCreate: onCreateFolder,
+              onDelete: onDeleteFolder,
+            ),
           ]),
         ),
       ),
       if (notes.isEmpty)
-        SliverToBoxAdapter(child: _EmptyNotes(onNewNote: onNewNote))
+        SliverToBoxAdapter(
+          child: _EmptyNotes(
+            onNewNote: () => onNewNote(folderId: selectedFolderId),
+          ),
+        )
       else ...[
         if (notes.any((note) => note.pinned))
           SliverPadding(
@@ -191,6 +241,8 @@ class _NotesGrid extends StatelessWidget {
                   onOpen: () => onOpen(note),
                   onSave: onSave,
                   onDelete: onDelete,
+                  folders: folders,
+                  onMoveToFolder: onMoveToFolder,
                 ))).toList(),
               );
             }),
@@ -201,12 +253,97 @@ class _NotesGrid extends StatelessWidget {
   );
 }
 
+class _FolderStrip extends StatelessWidget {
+  const _FolderStrip({
+    required this.folders,
+    required this.selectedFolderId,
+    required this.onSelected,
+    this.onCreate,
+    this.onDelete,
+  });
+  final List<NoteFolder> folders;
+  final String? selectedFolderId;
+  final ValueChanged<String?> onSelected;
+  final Future<void> Function(String name)? onCreate;
+  final Future<void> Function(NoteFolder folder)? onDelete;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(children: [
+      ChoiceChip(
+        label: const Text('Wszystkie foldery'),
+        selected: selectedFolderId == null,
+        onSelected: (_) => onSelected(null),
+      ),
+      ...folders.map((folder) => Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: InputChip(
+          label: Text(folder.name),
+          selected: selectedFolderId == folder.id,
+          onPressed: () => onSelected(folder.id),
+          onDeleted: onDelete == null ? null : () => _confirmDelete(context, folder),
+        ),
+      )),
+      if (onCreate != null) Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: ActionChip(
+          avatar: const Icon(Icons.create_new_folder_outlined, size: 18),
+          label: const Text('Folder'),
+          onPressed: () => _create(context),
+        ),
+      ),
+    ]),
+  );
+
+  Future<void> _create(BuildContext context) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nowy folder'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 80,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.pop(context, value),
+          decoration: const InputDecoration(hintText: 'Np. Praca'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Anuluj')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Utwórz')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name?.trim().isEmpty ?? true) return;
+    await onCreate!(name!.trim());
+  }
+
+  Future<void> _confirmDelete(BuildContext context, NoteFolder folder) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Usunąć folder „${folder.name}”?'),
+        content: const Text('Notatki zostaną zachowane w sekcji „Bez folderu”.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Anuluj')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Usuń folder')),
+        ],
+      ),
+    );
+    if (accepted == true) await onDelete!(folder);
+  }
+}
+
 class _Composer extends StatelessWidget {
-  const _Composer({required this.onNewNote, required this.onNewChecklist, required this.onNewImage, required this.onNewFile});
-  final VoidCallback onNewNote;
-  final VoidCallback onNewChecklist;
-  final VoidCallback onNewImage;
-  final VoidCallback onNewFile;
+  const _Composer({required this.selectedFolderId, required this.onNewNote, required this.onNewChecklist, required this.onNewImage, required this.onNewFile});
+  final String? selectedFolderId;
+  final NewRemasterNote onNewNote;
+  final NewRemasterNote? onNewChecklist;
+  final NewRemasterNote? onNewImage;
+  final NewRemasterNote? onNewFile;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -214,16 +351,16 @@ class _Composer extends StatelessWidget {
       color: scheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        onTap: onNewNote,
+        onTap: () => onNewNote(folderId: selectedFolderId),
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 6, 8),
           child: Row(children: [
             const Expanded(child: Text('Utwórz notatkę…')),
-            IconButton(tooltip: 'Utwórz checklistę', onPressed: onNewChecklist, icon: const Icon(Icons.check_box_outlined)),
-            IconButton(tooltip: 'Dodaj zdjęcie do notatki', onPressed: onNewImage, icon: const Icon(Icons.image_outlined)),
-            IconButton(tooltip: 'Dodaj plik do notatki', onPressed: onNewFile, icon: const Icon(Icons.attach_file_rounded)),
-            IconButton(tooltip: 'Utwórz notatkę', onPressed: onNewNote, icon: const Icon(Icons.add_rounded)),
+            IconButton(tooltip: 'Utwórz checklistę', onPressed: onNewChecklist == null ? null : () => onNewChecklist!(folderId: selectedFolderId), icon: const Icon(Icons.check_box_outlined)),
+            IconButton(tooltip: 'Dodaj zdjęcie do notatki', onPressed: onNewImage == null ? null : () => onNewImage!(folderId: selectedFolderId), icon: const Icon(Icons.image_outlined)),
+            IconButton(tooltip: 'Dodaj plik do notatki', onPressed: onNewFile == null ? null : () => onNewFile!(folderId: selectedFolderId), icon: const Icon(Icons.attach_file_rounded)),
+            IconButton(tooltip: 'Utwórz notatkę', onPressed: () => onNewNote(folderId: selectedFolderId), icon: const Icon(Icons.add_rounded)),
           ]),
         ),
       ),
@@ -232,13 +369,15 @@ class _Composer extends StatelessWidget {
 }
 
 class _NoteCard extends StatelessWidget {
-  const _NoteCard({required this.note, required this.selected, required this.onSelect, required this.onOpen, required this.onSave, required this.onDelete});
+  const _NoteCard({required this.note, required this.selected, required this.onSelect, required this.onOpen, required this.onSave, required this.onDelete, required this.folders, this.onMoveToFolder});
   final NoteItem note;
   final bool selected;
   final VoidCallback onSelect;
   final VoidCallback onOpen;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
+  final List<NoteFolder> folders;
+  final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -284,6 +423,16 @@ class _NoteCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(children: [
                 IconButton(tooltip: 'Edytuj notatkę', onPressed: onOpen, icon: const Icon(Icons.edit_outlined)),
+                if (onMoveToFolder != null)
+                  PopupMenuButton<String?>(
+                    tooltip: 'Przenieś do folderu',
+                    onSelected: (folderId) => onMoveToFolder!(note, folderId),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: null, child: Text('Bez folderu')),
+                      ...folders.map((folder) => PopupMenuItem(value: folder.id, child: Text(folder.name))),
+                    ],
+                    icon: const Icon(Icons.folder_outlined),
+                  ),
                 IconButton(tooltip: 'Usuń notatkę', onPressed: () => onDelete(note), icon: const Icon(Icons.delete_outline_rounded)),
               ]),
             ]),

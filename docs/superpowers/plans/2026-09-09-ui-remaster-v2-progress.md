@@ -40,10 +40,12 @@ aż do dwóch ocen użytkownika. Rebranding później. Kopia tylko kodu.
 3. ✅ Nowe wnętrze Notatek: kompozytor, skróty checklisty/obrazu/pliku,
    adaptacyjna siatka i panel podglądu od 1100 dp. Edytor danych pozostał ten sam,
    dzięki czemu nie utracono autozapisu ani załączników.
-4. ◐ Dodano kompatybilny model `NoteFolder`, opcjonalne `folderId` w notatce i
-   `supabase/note_folders.sql` z RLS oraz Realtime. W kolejnym kroku trzeba dodać
-   zarządzanie folderami w UI, magazyn lokalny i synchronizację folderów. Migracja
-   nie została automatycznie uruchomiona na projekcie użytkownika.
+4. ◐ Foldery: gotowe tworzenie, wybór, usuwanie bez utraty notatek, lokalny zapis,
+   przypisywanie notatek, `NoteFolder`, opcjonalne `folderId` i
+   `supabase/note_folders.sql` z RLS oraz Realtime. Klient wykrywa brak tabeli,
+   dzięki czemu obecne konto nie traci synchronizacji notatek; po uruchomieniu
+   migracji foldery zaczną się automatycznie synchronizować. Migracja nie została
+   automatycznie uruchomiona na projekcie użytkownika.
 5. Checkpoint 2: ocena pełnych przepływów Zadań/Notatek.
 6. Logowanie, ustawienia, przegląd tygodnia, skupienie i wszystkie pozostałe ekrany.
 7. Testy migracji, kont, synchronizacji między urządzeniami oraz dostępności całej aplikacji.
