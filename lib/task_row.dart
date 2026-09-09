@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'task_category_icon.dart';
 import 'task_item.dart';
 import 'task_status_control.dart';
 
@@ -13,6 +12,7 @@ class TaskRow extends StatelessWidget {
     required this.onStatusSelected,
     required this.onDelete,
     this.onTogglePin,
+    this.onPostpone,
   });
 
   final TaskItem task;
@@ -21,14 +21,16 @@ class TaskRow extends StatelessWidget {
   final ValueChanged<String> onStatusSelected;
   final VoidCallback onDelete;
   final VoidCallback? onTogglePin;
+  final VoidCallback? onPostpone;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final emoji = categoryEmoji(task.category);
     final progress = task.subtaskCount == 0
         ? null
         : task.completedSubtaskCount / task.subtaskCount;
+    final togglePin = onTogglePin;
+    final postpone = onPostpone;
     return AnimatedOpacity(
       opacity: task.isDone ? 0.72 : 1,
       duration: const Duration(milliseconds: 120),
@@ -134,52 +136,30 @@ class TaskRow extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (emoji != null) ...[
-                    const SizedBox(width: 8),
-                    Semantics(
-                      label: 'Kategoria ${task.category}',
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(7),
-                          child: Text(emoji),
-                        ),
-                      ),
+                  if (!task.isDone && togglePin != null)
+                    _TaskActionButton(
+                      key: ValueKey('pin-task-${task.id}'),
+                      tooltip: task.pinnedToday
+                          ? 'Odepnij z planu dnia'
+                          : 'Przypnij do planu dnia',
+                      onPressed: togglePin,
+                      icon: task.pinnedToday
+                          ? Icons.push_pin
+                          : Icons.push_pin_outlined,
                     ),
-                  ],
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_horiz),
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        onDelete();
-                      } else if (value == 'pin') {
-                        onTogglePin?.call();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      if (!task.isDone && onTogglePin != null)
-                        PopupMenuItem(
-                          key: ValueKey(
-                            task.pinnedToday
-                                ? 'unpin-${task.id}'
-                                : 'pin-${task.id}',
-                          ),
-                          value: 'pin',
-                          child: Text(
-                            task.pinnedToday
-                                ? 'Odepnij z planu'
-                                : 'Przypnij do dzisiaj',
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Usuń zadanie'),
-                      ),
-                    ],
+                  if (!task.isDone && postpone != null)
+                    _TaskActionButton(
+                      key: ValueKey('postpone-task-${task.id}'),
+                      tooltip: 'Odłóż zadanie',
+                      onPressed: postpone,
+                      icon: Icons.snooze_outlined,
+                    ),
+                  _TaskActionButton(
+                    key: ValueKey('delete-task-${task.id}'),
+                    tooltip: 'Usuń zadanie',
+                    onPressed: onDelete,
+                    icon: Icons.delete_outline,
+                    destructive: true,
                   ),
                 ],
               ),
@@ -200,6 +180,54 @@ class TaskRow extends StatelessWidget {
 
   String _dueLabel(DateTime dueAt) =>
       '${dueAt.day.toString().padLeft(2, '0')}.${dueAt.month.toString().padLeft(2, '0')} · ${dueAt.hour.toString().padLeft(2, '0')}:${dueAt.minute.toString().padLeft(2, '0')}';
+}
+
+class _TaskActionButton extends StatelessWidget {
+  const _TaskActionButton({
+    super.key,
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    this.destructive = false,
+  });
+
+  final String tooltip;
+  final VoidCallback onPressed;
+  final IconData icon;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final interactionStates = <WidgetState>{
+      WidgetState.hovered,
+      WidgetState.focused,
+      WidgetState.pressed,
+    };
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (destructive && states.any(interactionStates.contains)) {
+              return scheme.error;
+            }
+            return scheme.onSurfaceVariant;
+          }),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (destructive && states.any(interactionStates.contains)) {
+              return scheme.error.withValues(alpha: 0.12);
+            }
+            return null;
+          }),
+        ),
+        icon: Icon(icon),
+      ),
+    );
+  }
 }
 
 class _TaskTag extends StatelessWidget {

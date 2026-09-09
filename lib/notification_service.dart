@@ -35,7 +35,39 @@ class NotificationService {
   Future<void> schedule({required String taskId, required String title, required DateTime when}) =>
       scheduleTaskReminder(taskId: taskId, title: title, when: when);
 
+  Future<void> scheduleNoteReminder({
+    required String noteId,
+    required String title,
+    required DateTime when,
+  }) async {
+    if (!_isInitialized) return;
+    if (!when.isAfter(DateTime.now())) return;
+    await _plugin.zonedSchedule(
+      id: _noteNotificationId(noteId),
+      title: 'Przypomnienie o notatce',
+      body: title,
+      scheduledDate: tz.TZDateTime.from(when, tz.local),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'note_reminders',
+          'Przypomnienia o notatkach',
+          channelDescription: 'Jednorazowe przypomnienia zapisane przy notatkach',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'note:$noteId',
+    );
+  }
+
   Future<void> cancel(String taskId) async {
     if (_isInitialized) await _plugin.cancel(id: taskId.hashCode);
   }
+
+  Future<void> cancelNote(String noteId) async {
+    if (_isInitialized) await _plugin.cancel(id: _noteNotificationId(noteId));
+  }
 }
+
+int _noteNotificationId(String noteId) => noteId.hashCode ^ 0x4e4f5445;

@@ -6,4 +6,5 @@
 .vscode/
 .packages
 .pub-cache/
+.env
 build/

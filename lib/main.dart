@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'local_task_store.dart';
+import 'local_note_store.dart';
+import 'cloud_migration.dart';
 import 'task_sync_service.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
@@ -14,10 +16,18 @@ import 'task_view.dart';
 import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'task_editor.dart';
+import 'task_postpone_sheet.dart';
+import 'task_schedule.dart';
+import 'quick_task_parser.dart';
+import 'focus_mode_screen.dart';
 import 'today_screen.dart';
 import 'weekly_calendar.dart';
 import 'weekly_review.dart';
 import 'weekly_review_screen.dart';
+import 'note_item.dart';
+import 'note_attachment_picker.dart';
+import 'notes_screen.dart';
+import 'note_sync_service.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 
@@ -56,6 +66,12 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   bool localMode = false;
   bool cloudMode = false;
+  bool _notesCloudAvailable = false;
+  bool _notesMode = false;
+  String _syncStatus = 'Lokalnie';
+  late Future<void> _localRestoreFuture;
+  late Future<void> _localNotesRestoreFuture;
+  bool _cloudTransitionInProgress = false;
   String _searchQuery = '';
   String _statusFilter = 'all';
   TaskView _selectedView = TaskView.today;
@@ -65,9 +81,11 @@ class _MyAppState extends State<MyApp> {
   Timer? _noticeTimer;
   StreamSubscription<List<Map<String, dynamic>>>? _taskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _noteSubscription;
   StreamSubscription<AuthState>? _authSubscription;
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
+  LocalNoteStore? _localNoteStore;
   final tasks = <TaskItem>[
     const TaskItem(
       id: 'local-1',
@@ -88,12 +106,15 @@ class _MyAppState extends State<MyApp> {
       category: 'Praca',
     ),
   ];
+  final notes = <NoteItem>[];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
+  late final NoteSyncService _noteSync = NoteSyncService(Supabase.instance.client);
 
   @override
   void initState() {
     super.initState();
-    _restoreLocalTasks();
+    _localRestoreFuture = _restoreLocalTasks();
+    _localNotesRestoreFuture = _restoreLocalNotes();
     _restoreCloudSession();
   }
 
@@ -130,8 +151,24 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future<void> _restoreLocalNotes() async {
+    final store = LocalNoteStore();
+    final storedNotes = await store.load();
+    if (!mounted) return;
+    setState(() {
+      _localNoteStore = store;
+      notes
+        ..clear()
+        ..addAll(storedNotes);
+    });
+  }
+
   Future<void> _saveLocalTasks() async {
     if (!cloudMode) await _localStore?.save(tasks);
+  }
+
+  Future<void> _saveLocalNotes() async {
+    if (!cloudMode) await _localNoteStore?.save(notes);
   }
 
   Future<void> _changeThemeMode(ThemeMode mode) async {
@@ -157,25 +194,216 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _enterCloudMode() async {
+    if (_cloudTransitionInProgress || cloudMode) return;
+    _cloudTransitionInProgress = true;
+    if (mounted) {
+      setState(() {
+        localMode = true;
+        _syncStatus = 'Synchronizowanie…';
+      });
+    }
+    try {
+      await _localRestoreFuture;
+      await _localNotesRestoreFuture;
+      final localTasks = await _localStore?.load() ?? const <TaskItem>[];
+      final cloudRows = await _sync.loadTasks();
+      final store = _localStore;
+      final decision = decideLocalTaskMigration(
+        localTaskCount: localTasks.length,
+        cloudTaskCount: cloudRows.length,
+        migrationCompleted: store?.cloudMigrationCompleted ?? false,
+      );
+      if (decision.shouldImport) {
+        await _sync.importLocalTasks(localTasks);
+        await store?.markCloudMigrationCompleted();
+      }
+      await _loadCloudTasks();
+      try {
+        final localNotes = await _localNoteStore?.load() ?? const <NoteItem>[];
+        final cloudNotes = await _noteSync.loadNotes();
+        final noteMigrationCompleted =
+            await _localNoteStore?.cloudMigrationCompleted ?? false;
+        if (localNotes.isNotEmpty && cloudNotes.isEmpty && !noteMigrationCompleted) {
+          await _noteSync.importLocalNotes(localNotes);
+          await _localNoteStore?.markCloudMigrationCompleted();
+        }
+        await _loadCloudNotes();
+        _notesCloudAvailable = true;
+      } catch (_) {
+        // The task workspace remains usable while the optional notes SQL is deployed.
+        _notesCloudAvailable = false;
+      }
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw StateError('Brak aktywnej sesji.');
+      await _taskSubscription?.cancel();
+      _taskSubscription = Supabase.instance.client
+          .from('tasks')
+          .stream(primaryKey: ['id'])
+          .eq('user_id', user.id)
+          .listen((_) => unawaited(_refreshCloudTasks()));
+      await _subtaskSubscription?.cancel();
+      _subtaskSubscription = Supabase.instance.client
+          .from('subtasks')
+          .stream(primaryKey: ['id'])
+          .eq('user_id', user.id)
+          .listen((_) => unawaited(_refreshCloudTasks()));
+      if (_notesCloudAvailable) {
+        await _noteSubscription?.cancel();
+        _noteSubscription = Supabase.instance.client
+            .from('notes')
+            .stream(primaryKey: ['id'])
+            .eq('user_id', user.id)
+            .listen((_) => unawaited(_refreshCloudNotes()));
+      }
+      if (!mounted) return;
+      setState(() {
+        cloudMode = true;
+        _syncStatus = 'Zsynchronizowano';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        cloudMode = false;
+        _syncStatus = 'Błąd synchronizacji';
+      });
+    } finally {
+      _cloudTransitionInProgress = false;
+    }
+  }
+
+  Future<void> _refreshCloudTasks() async {
+    try {
+      await _loadCloudTasks();
+      if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+    } catch (_) {
+      if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
+    }
+  }
+
+  Future<void> _loadCloudNotes() async {
+    final loaded = await _noteSync.loadNotes(includeTrash: true);
+    if (!mounted) return;
     setState(() {
-      localMode = true;
-      cloudMode = true;
+      notes
+        ..clear()
+        ..addAll(loaded);
     });
-    await _loadCloudTasks();
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    await _taskSubscription?.cancel();
-    _taskSubscription = Supabase.instance.client
-        .from('tasks')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', user.id)
-        .listen((_) => _loadCloudTasks());
-    await _subtaskSubscription?.cancel();
-    _subtaskSubscription = Supabase.instance.client
-        .from('subtasks')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', user.id)
-        .listen((_) => _loadCloudTasks());
+  }
+
+  Future<void> _refreshCloudNotes() async {
+    try {
+      await _loadCloudNotes();
+      if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+    } catch (_) {
+      if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
+    }
+  }
+
+  Future<void> _saveNote(NoteItem note) async {
+    if (cloudMode && _notesCloudAvailable) {
+      try {
+        final isNew = !notes.any((item) => item.id == note.id);
+        await _noteSync.saveNote(
+          note,
+          expectedRevision: isNew ? null : note.revision - 1,
+        );
+      } on NoteConflictException {
+        final conflict = await _noteSync.createConflictCopy(note);
+        if (mounted) {
+          setState(() {
+            notes.removeWhere((item) => item.id == note.id);
+            notes.add(conflict);
+          });
+        }
+        return;
+      }
+      await _loadCloudNotes();
+      await _scheduleNoteReminder(note);
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        final index = notes.indexWhere((item) => item.id == note.id);
+        if (index == -1) {
+          notes.insert(0, note);
+        } else {
+          notes[index] = note;
+        }
+      });
+    }
+    await _saveLocalNotes();
+    await _scheduleNoteReminder(note);
+  }
+
+  Future<NoteAttachment> _attachNoteFile(
+    NoteItem note,
+    NoteAttachmentCandidate candidate,
+  ) async {
+    final attachment = NoteAttachment(
+      id: newNoteId(),
+      fileName: candidate.fileName,
+      mimeType: candidate.mimeType,
+      byteSize: candidate.byteSize,
+    );
+    if (cloudMode && _notesCloudAvailable) {
+      // Storage metadata references the note row, so create a just-started
+      // note before uploading its first attachment.
+      if (!notes.any((item) => item.id == note.id)) {
+        await _noteSync.saveNote(note, expectedRevision: null);
+      }
+      return _noteSync.uploadAttachment(
+        attachment: attachment,
+        noteId: note.id,
+        file: candidate.file,
+      );
+    }
+    final store = _localNoteStore;
+    if (store == null) {
+      return NoteAttachment(
+        id: attachment.id,
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        byteSize: attachment.byteSize,
+        localPath: candidate.file.path,
+      );
+    }
+    return store.copyAttachment(
+      noteId: note.id,
+      attachmentId: attachment.id,
+      source: candidate.file,
+      fileName: candidate.fileName,
+      mimeType: candidate.mimeType,
+    );
+  }
+
+  Future<String?> _openNoteAttachment(NoteAttachment attachment) async {
+    if (!cloudMode || !_notesCloudAvailable) return null;
+    return _noteSync.createAttachmentUrl(attachment);
+  }
+
+  Future<void> _deleteNoteAttachment(NoteAttachment attachment) async {
+    if (cloudMode && _notesCloudAvailable) {
+      await _noteSync.deleteAttachment(attachment);
+      return;
+    }
+    await _localNoteStore?.deleteAttachment(attachment);
+  }
+
+  Future<void> _scheduleNoteReminder(NoteItem note) async {
+    await NotificationService.instance.cancelNote(note.id);
+    final reminder = note.reminderAt;
+    if (reminder != null) {
+      await NotificationService.instance.scheduleNoteReminder(
+        noteId: note.id,
+        title: note.title.isEmpty ? 'Notatka' : note.title,
+        when: reminder,
+      );
+    }
+  }
+
+  Future<void> _deleteNote(NoteItem note) async {
+    final trashed = note.copyWith(deletedAt: DateTime.now(), updatedAt: DateTime.now());
+    await _saveNote(trashed);
   }
 
   Future<void> _showTaskForm(BuildContext context, {TaskItem? task}) async {
@@ -225,11 +453,11 @@ class _MyAppState extends State<MyApp> {
                 title: draft.title,
                 note: draft.note,
                 category: draft.category,
-              priority: draft.priority,
-              dueAt: draft.dueAt,
-              reminderAt: draft.reminderAt,
-              repeatRule: draft.repeatRule,
-              subtasks: draft.subtasks,
+                priority: draft.priority,
+                dueAt: draft.dueAt,
+                reminderAt: draft.reminderAt,
+                repeatRule: draft.repeatRule,
+                subtasks: draft.subtasks,
               );
             });
             await _saveLocalTasks();
@@ -290,10 +518,33 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future<void> _signOut() async {
+    await _taskSubscription?.cancel();
+    await _subtaskSubscription?.cancel();
+    await _noteSubscription?.cancel();
+    _taskSubscription = null;
+    _subtaskSubscription = null;
+    _noteSubscription = null;
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {
+      // The local UI still needs to leave cloud mode if the network is down.
+    }
+    if (!mounted) return;
+    setState(() {
+      localMode = false;
+      cloudMode = false;
+      _notesCloudAvailable = false;
+      _notesMode = false;
+      _syncStatus = 'Lokalnie';
+    });
+  }
+
   @override
   void dispose() {
     _taskSubscription?.cancel();
     _subtaskSubscription?.cancel();
+    _noteSubscription?.cancel();
     _authSubscription?.cancel();
     _noticeTimer?.cancel();
     super.dispose();
@@ -307,7 +558,11 @@ class _MyAppState extends State<MyApp> {
       completedAt: completedAt,
     );
     final next = status == 'done' && task.repeatRule != null
-        ? createNextOccurrence(task, completedAt!, 'local-${_nextLocalTaskId++}')
+        ? createNextOccurrence(
+            task,
+            completedAt!,
+            'local-${_nextLocalTaskId++}',
+          )
         : null;
     if (cloudMode) {
       await _sync.completeAndCreateNext(updated, next);
@@ -321,6 +576,113 @@ class _MyAppState extends State<MyApp> {
       await _saveLocalTasks();
     }
     if (status == 'done') await NotificationService.instance.cancel(task.id);
+    if (status == 'done' && task.repeatRule == null) {
+      _showUndoSnackBar(
+        'Zadanie oznaczone jako gotowe',
+        () => _restoreTaskState(task),
+      );
+    }
+  }
+
+  Future<void> _restoreTaskState(TaskItem task) async {
+    if (cloudMode) {
+      await _sync.updateOrganizerTask(task);
+      await _loadCloudTasks();
+    } else {
+      final index = tasks.indexWhere((item) => item.id == task.id);
+      if (index == -1) return;
+      setState(() => tasks[index] = task);
+      await _saveLocalTasks();
+    }
+    final reminderTime = task.reminderAt ?? task.dueAt;
+    if (reminderTime != null) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: task.id,
+        title: task.title,
+        when: reminderTime,
+      );
+    }
+  }
+
+  Future<void> _postponeTask(TaskItem task) async {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+    final option = await showTaskPostponeSheet(context);
+    if (option == null) return;
+    final plan = planTaskPostponement(task, DateTime.now(), option);
+    if (cloudMode) {
+      await _sync.updateOrganizerTask(plan.updatedTask);
+      await _loadCloudTasks();
+    } else {
+      final index = tasks.indexWhere((item) => item.id == task.id);
+      if (index == -1) return;
+      setState(() => tasks[index] = plan.updatedTask);
+      await _saveLocalTasks();
+    }
+    await NotificationService.instance.cancel(task.id);
+    if (plan.reminderTime != null) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: task.id,
+        title: task.title,
+        when: plan.reminderTime!,
+      );
+    }
+    _showSuccessNotice('Zadanie odłożone');
+  }
+
+  Future<void> _quickAddTask(String rawText, {String? sourceNoteId}) async {
+    final parsed = parseQuickTask(rawText, DateTime.now());
+    if (parsed.title.isEmpty) {
+      _showSuccessNotice('Wpisz nazwę zadania.');
+      return;
+    }
+    late final String taskId;
+    if (cloudMode) {
+      final row = await _sync.addTask(
+        parsed.title,
+        dueAt: parsed.dueAt,
+        sourceNoteId: sourceNoteId,
+      );
+      taskId = row['id'] as String;
+      await _loadCloudTasks();
+    } else {
+      taskId = 'local-${_nextLocalTaskId++}';
+      setState(
+        () => tasks.add(
+          TaskItem(
+            id: taskId,
+            title: parsed.title,
+            status: 'todo',
+            dueAt: parsed.dueAt,
+            sourceNoteId: sourceNoteId,
+          ),
+        ),
+      );
+      await _saveLocalTasks();
+    }
+    if (parsed.dueAt != null) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: taskId,
+        title: parsed.title,
+        when: parsed.dueAt!,
+      );
+    }
+    _showSuccessNotice();
+  }
+
+  void _openFocusTask(TaskItem task) {
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => FocusModeScreen(
+          task: task,
+          onComplete: () async {
+            await _changeTaskStatus(task, 'done');
+            if (routeContext.mounted) Navigator.of(routeContext).pop();
+          },
+          onPostpone: () => _postponeTask(task),
+        ),
+      ),
+    );
   }
 
   Future<void> _togglePinnedToday(TaskItem task) async {
@@ -362,8 +724,9 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _confirmDeleteTask(BuildContext context, TaskItem task) async {
+    final modalContext = _navigatorKey.currentContext ?? context;
     final accepted = await showDialog<bool>(
-      context: context,
+      context: modalContext,
       builder: (context) => AlertDialog(
         title: const Text('Usunąć zadanie?'),
         content: Text('„${task.title}” zniknie z Twojej listy.'),
@@ -380,6 +743,7 @@ class _MyAppState extends State<MyApp> {
       ),
     );
     if (accepted != true) return;
+    final localIndex = tasks.indexOf(task);
     if (cloudMode) {
       await _sync.deleteTask(task.id);
       await _loadCloudTasks();
@@ -388,6 +752,46 @@ class _MyAppState extends State<MyApp> {
       await _saveLocalTasks();
     }
     await NotificationService.instance.cancel(task.id);
+    _showUndoSnackBar(
+      'Zadanie usunięte',
+      () => _restoreDeletedTask(task, localIndex),
+    );
+  }
+
+  Future<void> _restoreDeletedTask(TaskItem task, int localIndex) async {
+    if (cloudMode) {
+      await _sync.restoreTask(task.id);
+      await _loadCloudTasks();
+    } else {
+      if (tasks.any((item) => item.id == task.id)) return;
+      final restoreIndex = localIndex.clamp(0, tasks.length).toInt();
+      setState(() => tasks.insert(restoreIndex, task));
+      await _saveLocalTasks();
+    }
+    final reminderTime = task.reminderAt ?? task.dueAt;
+    if (reminderTime != null) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: task.id,
+        title: task.title,
+        when: reminderTime,
+      );
+    }
+  }
+
+  void _showUndoSnackBar(String message, Future<void> Function() onUndo) {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(
+          label: 'Cofnij',
+          onPressed: () => unawaited(onUndo()),
+        ),
+      ),
+    );
   }
 
   List<TaskItem> _matchingTasks(
@@ -433,7 +837,27 @@ class _MyAppState extends State<MyApp> {
     darkTheme: buildDarkTheme(),
     themeMode: _themeMode,
     home: localMode
-        ? TodayScreen(
+        ? _notesMode
+            ? NotesScreen(
+                notes: notes,
+                onOpenTasks: () => setState(() => _notesMode = false),
+                onSave: _saveNote,
+                onDelete: _deleteNote,
+                onCreateTask: (note, title) => _quickAddTask(title, sourceNoteId: note.id),
+                onAttach: _attachNoteFile,
+                onDeleteAttachment: _deleteNoteAttachment,
+                onOpenAttachment: _openNoteAttachment,
+                onPermanentlyDelete: (note) async {
+                  if (cloudMode && _notesCloudAvailable) {
+                    await _noteSync.permanentlyDeleteNote(note);
+                  } else {
+                    setState(() => notes.removeWhere((item) => item.id == note.id));
+                    await _saveLocalNotes();
+                  }
+                },
+                syncStatus: _syncStatus,
+              )
+            : TodayScreen(
             visibleTasks: _todayTasks,
             laterTasks: _laterTasks,
             selectedView: _selectedView,
@@ -444,6 +868,7 @@ class _MyAppState extends State<MyApp> {
             themeMode: _themeMode,
             onThemeModeChanged: _changeThemeMode,
             successNotice: _successNotice,
+            syncStatus: _syncStatus,
             searchQuery: _searchQuery,
             onSearchChanged: (value) => setState(() => _searchQuery = value),
             selectedFilter: _statusFilter,
@@ -452,6 +877,10 @@ class _MyAppState extends State<MyApp> {
             onCompleteTask: (task) => _changeTaskStatus(task, 'done'),
             onStatusSelected: (task, status) => _changeTaskStatus(task, status),
             onDeleteTask: (task) => _confirmDeleteTask(context, task),
+            onPostponeTask: _postponeTask,
+            onQuickAddText: _quickAddTask,
+            onOpenFocus: _openFocusTask,
+            onSignOut: _signOut,
             pinnedTasks: pinnedTodayTasks(tasks),
             onTogglePin: _togglePinnedToday,
             onOpenWeek: () => _navigatorKey.currentState?.push(
@@ -477,6 +906,7 @@ class _MyAppState extends State<MyApp> {
               ),
             ),
             onQuickAdd: () => _showTaskForm(context),
+            onOpenNotes: () => setState(() => _notesMode = true),
           )
         : LoginPage(
             onLocalMode: () => setState(() => localMode = true),

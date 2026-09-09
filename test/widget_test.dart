@@ -13,7 +13,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:dzien_po_dniu/main.dart';
 import 'package:dzien_po_dniu/subtask_item.dart';
-import 'package:dzien_po_dniu/task_category_icon.dart';
 import 'package:dzien_po_dniu/task_editor.dart';
 import 'package:dzien_po_dniu/task_item.dart';
 import 'package:dzien_po_dniu/task_row.dart';
@@ -23,12 +22,6 @@ import 'package:dzien_po_dniu/today_screen.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-  });
-
-  test('maps known categories to a restrained emoji hint', () {
-    expect(categoryEmoji('Praca'), '💼');
-    expect(categoryEmoji('Dom'), '🏠');
-    expect(categoryEmoji('Skrzynka'), isNull);
   });
 
   test('moving a task reschedules its implicit due-time reminder', () {
@@ -63,6 +56,67 @@ void main() {
     expect(plan.updatedTask.dueAt, DateTime(2026, 9, 9, 14, 30));
     expect(plan.updatedTask.reminderAt, customReminder);
     expect(plan.reminderTime, isNull);
+  });
+
+  testWidgets('shows the current cloud sync status in the daily header', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.today,
+          onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          successNotice: null,
+          syncStatus: 'Zsynchronizowano',
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Zsynchronizowano'), findsOneWidget);
+  });
+
+  testWidgets('offers sign out in the account menu', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.today,
+          onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          successNotice: null,
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () {},
+          onSignOut: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('task-view-menu')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wyloguj'), findsOneWidget);
   });
 
   testWidgets('shows the sectioned daily plan', (WidgetTester tester) async {
@@ -123,6 +177,154 @@ void main() {
     expect(find.text('Szybko zapisz zadanie'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quick-add-task')));
     expect(quickAddTapped, isTrue);
+  });
+
+  testWidgets('opens quick add when the empty focus card is tapped', (
+    WidgetTester tester,
+  ) async {
+    var quickAddTapped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.today,
+          onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          successNotice: null,
+          syncStatus: 'Lokalnie',
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () => quickAddTapped = true,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('open-focus-mode')));
+
+    expect(quickAddTapped, isTrue);
+  });
+
+  testWidgets('does not render category emoji in a task row', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TaskRow(
+            task: const TaskItem(
+              id: 'no-category-emoji',
+              title: 'Zadanie bez emoji',
+              status: 'todo',
+              category: 'Dom',
+            ),
+            onOpen: () {},
+            onComplete: () {},
+            onStatusSelected: (_) {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('🏠'), findsNothing);
+    expect(find.text('Dom'), findsOneWidget);
+  });
+
+  testWidgets('submits a compact quick task without opening the full editor', (
+    WidgetTester tester,
+  ) async {
+    var submitted = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TodayScreen(
+          visibleTasks: const [],
+          laterTasks: const [],
+          selectedView: TaskView.today,
+          onViewChanged: (_) {},
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          successNotice: null,
+          searchQuery: '',
+          onSearchChanged: (_) {},
+          selectedFilter: 'all',
+          onFilterChanged: (_) {},
+          onOpenTask: (_) {},
+          onCompleteTask: (_) {},
+          onStatusSelected: (_, _) {},
+          onDeleteTask: (_) {},
+          onQuickAdd: () {},
+          onQuickAddText: (value) => submitted = value,
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('quick-task-input')),
+      'Zadzwonić jutro 18:30',
+    );
+    await tester.tap(find.byKey(const ValueKey('quick-task-submit')));
+
+    expect(submitted, 'Zadzwonić jutro 18:30');
+  });
+
+  testWidgets(
+    'opens focus from the now card when a focus callback is available',
+    (WidgetTester tester) async {
+      TaskItem? focused;
+      final task = TaskItem(
+        id: 'now-task',
+        title: 'Jedna ważna rzecz',
+        status: 'todo',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TodayScreen(
+            visibleTasks: [task],
+            laterTasks: const [],
+            selectedView: TaskView.today,
+            onViewChanged: (_) {},
+            themeMode: ThemeMode.system,
+            onThemeModeChanged: (_) {},
+            successNotice: null,
+            searchQuery: '',
+            onSearchChanged: (_) {},
+            selectedFilter: 'all',
+            onFilterChanged: (_) {},
+            onOpenTask: (_) {},
+            onCompleteTask: (_) {},
+            onStatusSelected: (_, _) {},
+            onDeleteTask: (_) {},
+            onQuickAdd: () {},
+            onOpenFocus: (item) => focused = item,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('open-focus-mode')));
+      expect(focused?.id, 'now-task');
+    },
+  );
+
+  testWidgets('opens the focus route from the local daily plan', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('open-focus-mode')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Skupienie'), findsOneWidget);
+    expect(find.byKey(const ValueKey('focus-complete')), findsOneWidget);
   });
 
   testWidgets('changes the current view from the compact menu', (
@@ -241,7 +443,7 @@ void main() {
   });
 
   testWidgets(
-    'uses direct desktop status controls and keeps status out of more menu',
+    'uses direct desktop status controls without a task overflow menu',
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1100, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -282,22 +484,15 @@ void main() {
       expect(statusSelections, 1);
       expect(selectedStatus, 'in_progress');
 
-      await tester.tap(find.byType(PopupMenuButton<String>));
-      await tester.pumpAndSettle();
-
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
       expect(
-        find.widgetWithText(PopupMenuItem<String>, 'Do zrobienia'),
-        findsNothing,
+        find.byKey(const ValueKey('delete-task-desktop-status')),
+        findsOneWidget,
       );
       expect(
-        find.widgetWithText(PopupMenuItem<String>, 'W trakcie'),
-        findsNothing,
+        find.byKey(const ValueKey('pin-task-desktop-status')),
+        findsOneWidget,
       );
-      expect(
-        find.widgetWithText(PopupMenuItem<String>, 'Oznacz jako zrobione'),
-        findsNothing,
-      );
-      expect(find.text('Usuń zadanie'), findsOneWidget);
     },
   );
 
@@ -384,17 +579,110 @@ void main() {
     },
   );
 
-  testWidgets('shows a delete action in the task menu', (
+  testWidgets(
+    'shows direct delete and pin actions without a task overflow menu',
+    (WidgetTester tester) async {
+      var deleted = false;
+      var pinned = false;
+      var postponed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskRow(
+              task: const TaskItem(
+                id: 'direct-actions',
+                title: 'Zadanie z szybkim działaniem',
+                status: 'todo',
+              ),
+              onOpen: () {},
+              onComplete: () {},
+              onStatusSelected: (_) {},
+              onDelete: () => deleted = true,
+              onTogglePin: () => pinned = true,
+              onPostpone: () => postponed = true,
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('delete-task-direct-actions')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('pin-task-direct-actions')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('postpone-task-direct-actions')),
+        findsOneWidget,
+      );
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('pin-task-direct-actions')));
+      await tester.tap(
+        find.byKey(const ValueKey('postpone-task-direct-actions')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('delete-task-direct-actions')),
+      );
+
+      expect(pinned, isTrue);
+      expect(postponed, isTrue);
+      expect(deleted, isTrue);
+    },
+  );
+
+  testWidgets('restores a locally deleted task from the undo action', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Tryb lokalny'));
-    await tester.pump();
-
-    await tester.tap(find.byType(PopupMenuButton<String>).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Usuń zadanie'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('delete-task-local-1')).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Usunąć zadanie?'), findsOneWidget);
+    await tester.tap(find.text('Usuń'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zadanie usunięte'), findsOneWidget);
+    expect(find.text('Wykosić trawnik'), findsNothing);
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wykosić trawnik'), findsWidgets);
+  });
+
+  testWidgets('restores a completed local task from the undo action', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.circle_outlined).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Zadanie oznaczone jako gotowe'), findsOneWidget);
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.circle_outlined), findsWidgets);
+  });
+
+  testWidgets('postpones a local task from its direct task action', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('postpone-task-local-1')).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jutro rano'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zadanie odłożone'), findsOneWidget);
   });
 
   testWidgets('filters local tasks by the search phrase', (
@@ -464,6 +752,26 @@ void main() {
     expect(find.text('Dodaj zadanie'), findsNothing);
     expect(find.text('Nowe zadanie'), findsWidgets);
     expect(find.text('Zapisano zadanie'), findsOneWidget);
+  });
+
+  testWidgets('adds a locally parsed quick task from the daily plan', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('quick-task-input')),
+      'Oddzwonić do Marka jutro 18:30',
+    );
+    await tester.tap(find.byKey(const ValueKey('quick-task-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zapisano zadanie'), findsOneWidget);
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(find.text('Oddzwonić do Marka'), findsWidgets);
   });
 
   testWidgets('expands additional task editor options', (
@@ -543,10 +851,7 @@ void main() {
       MaterialApp(
         home: Builder(
           builder: (context) => FilledButton(
-            onPressed: () => showTaskEditor(
-              context,
-              onSave: (_) async {},
-            ),
+            onPressed: () => showTaskEditor(context, onSave: (_) async {}),
             child: const Text('Otwórz edytor'),
           ),
         ),
@@ -563,18 +868,28 @@ void main() {
     expect(find.text('Dodaj termin i godzinę'), findsNothing);
   });
 
-  testWidgets('editor saves a due-date reminder and weekly repeat', (tester) async {
+  testWidgets('editor saves a due-date reminder and weekly repeat', (
+    tester,
+  ) async {
     TaskDraft? saved;
-    await tester.pumpWidget(MaterialApp(home: Builder(
-      builder: (context) => FilledButton(
-        onPressed: () => showTaskEditor(context, onSave: (draft) async => saved = draft),
-        child: const Text('Otwórz edytor organizera'),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () =>
+                showTaskEditor(context, onSave: (draft) async => saved = draft),
+            child: const Text('Otwórz edytor organizera'),
+          ),
+        ),
       ),
-    )));
+    );
 
     await tester.tap(find.text('Otwórz edytor organizera'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('task-title-input')), 'Rytuał');
+    await tester.enterText(
+      find.byKey(const ValueKey('task-title-input')),
+      'Rytuał',
+    );
     await tester.tap(find.text('Więcej opcji'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('repeat-weekly')));
@@ -738,7 +1053,7 @@ void main() {
         {
           'id': 'seeded-week',
           'title': 'Zadanie do przeniesienia',
-          'status': 'done',
+          'status': 'todo',
           'note': '',
           'category': 'Praca',
           'priority': 'medium',

@@ -17,6 +17,7 @@ class TaskItem {
     this.pinnedToday = false,
     this.completedAt,
     this.subtasks = const [],
+    this.sourceNoteId,
   });
 
   factory TaskItem.fromRow(Map<String, dynamic> row) => TaskItem(
@@ -41,6 +42,7 @@ class TaskItem {
             .map((item) => SubtaskItem.fromRow(
                 Map<String, dynamic>.from(item as Map)))
             .toList(),
+        sourceNoteId: row['source_note_id'] as String?,
       );
 
   factory TaskItem.fromStorage(Map<String, dynamic> stored) => TaskItem(
@@ -65,6 +67,7 @@ class TaskItem {
             .map((item) => SubtaskItem.fromStorage(
                 Map<String, dynamic>.from(item as Map)))
             .toList(),
+        sourceNoteId: stored['sourceNoteId'] as String?,
       );
 
   final String id;
@@ -79,6 +82,7 @@ class TaskItem {
   final bool pinnedToday;
   final DateTime? completedAt;
   final List<SubtaskItem> subtasks;
+  final String? sourceNoteId;
 
   bool get isDone => status == 'done';
   int get subtaskCount => subtasks.length;
@@ -97,6 +101,7 @@ class TaskItem {
     bool? pinnedToday,
     Object? completedAt = _unset,
     List<SubtaskItem>? subtasks,
+    Object? sourceNoteId = _unset,
   }) => TaskItem(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -116,6 +121,9 @@ class TaskItem {
             ? this.completedAt
             : completedAt as DateTime?,
         subtasks: subtasks ?? this.subtasks,
+        sourceNoteId: identical(sourceNoteId, _unset)
+            ? this.sourceNoteId
+            : sourceNoteId as String?,
       );
 
   Map<String, dynamic> toStorage() => {
@@ -131,6 +139,7 @@ class TaskItem {
         'pinnedToday': pinnedToday,
         'completedAt': completedAt?.toIso8601String(),
         'subtasks': subtasks.map((step) => step.toStorage()).toList(),
+        'sourceNoteId': sourceNoteId,
       };
 
   Map<String, dynamic> toSupabasePayload() => {
@@ -144,6 +153,7 @@ class TaskItem {
         'repeat_rule': repeatRule?.toJson(),
         'pinned_today': pinnedToday,
         'completed_at': completedAt?.toUtc().toIso8601String(),
+        if (sourceNoteId != null) 'source_note_id': sourceNoteId,
       };
 
   static RepeatRule? _readRepeatRule(Object? raw) {
