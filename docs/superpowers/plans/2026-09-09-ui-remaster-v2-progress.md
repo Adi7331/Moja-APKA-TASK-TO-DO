@@ -1,4 +1,4 @@
-# UI remaster v2 — checkpoint 1
+# UI remaster v2 — checkpoint 1 + rozpoczęty checkpoint 2
 
 ## Zatwierdzony kierunek
 
@@ -33,13 +33,17 @@ aż do dwóch ocen użytkownika. Rebranding później. Kopia tylko kodu.
 
 ## Kolejność dalszej pracy po checkpoint 1
 
-1. Ocena wyglądu Start na telefonie/PC i ewentualna korekta wizualna.
-2. Nowe wnętrze Zadań: kompaktowe akcje, podwidoki, desktopowy panel szczegółów,
-   telefonowy pełny ekran, uproszczony mobilny kalendarz. Obecnie zakładka używa istniejącego widoku.
-3. Nowe wnętrze Notatek: adaptacyjna siatka, panel edytora, foldery + etykiety.
-   Obecnie zakładka używa istniejącego widoku/edytora. Folderów jeszcze nie dodano.
-4. Modele NoteFolder i opcjonalny folderId; lokalny magazyn i migracja Supabase z RLS,
-   Realtime i usuwaniem folderu bez usuwania treści. Nie wdrażano migracji w checkpoint 1.
+1. ✅ Ocena Start na telefonie/PC — zatwierdzona przez użytkownika.
+2. ✅ Nowe wnętrze Zadań: kompaktowe wiersze, status bez dodatkowego menu,
+   bezpośrednie odłożenie/usunięcie, podwidoki i panel szczegółów od 1100 dp.
+   Mobilny edytor i kalendarz nadal korzystają z działających ekranów istniejącego modułu.
+3. ✅ Nowe wnętrze Notatek: kompozytor, skróty checklisty/obrazu/pliku,
+   adaptacyjna siatka i panel podglądu od 1100 dp. Edytor danych pozostał ten sam,
+   dzięki czemu nie utracono autozapisu ani załączników.
+4. ◐ Dodano kompatybilny model `NoteFolder`, opcjonalne `folderId` w notatce i
+   `supabase/note_folders.sql` z RLS oraz Realtime. W kolejnym kroku trzeba dodać
+   zarządzanie folderami w UI, magazyn lokalny i synchronizację folderów. Migracja
+   nie została automatycznie uruchomiona na projekcie użytkownika.
 5. Checkpoint 2: ocena pełnych przepływów Zadań/Notatek.
 6. Logowanie, ustawienia, przegląd tygodnia, skupienie i wszystkie pozostałe ekrany.
 7. Testy migracji, kont, synchronizacji między urządzeniami oraz dostępności całej aplikacji.

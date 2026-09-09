@@ -1,0 +1,81 @@
+import 'package:dzien_po_dniu/note_item.dart';
+import 'package:dzien_po_dniu/remaster_notes_screen.dart';
+import 'package:dzien_po_dniu/remaster_tasks_screen.dart';
+import 'package:dzien_po_dniu/remaster_theme.dart';
+import 'package:dzien_po_dniu/task_item.dart';
+import 'package:dzien_po_dniu/task_view.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  Widget app(Widget child) => MaterialApp(
+    theme: buildRemasterTheme(Brightness.light),
+    home: Scaffold(body: child),
+  );
+
+  testWidgets('task row exposes the status actions without a menu', (tester) async {
+    String? selectedStatus;
+    await tester.pumpWidget(app(RemasterTasksScreen(
+      tasks: const [
+        TaskItem(id: 'task-1', title: 'Dopracować widok', status: 'todo'),
+      ],
+      selectedView: TaskView.today,
+      onViewChanged: (_) {},
+      onOpenTask: (_) {},
+      onStatusSelected: (_, status) => selectedStatus = status,
+      onDeleteTask: (_) {},
+      onPostponeTask: (_) {},
+      onQuickAdd: () {},
+      onOpenWeek: () {},
+      onOpenWeeklyReview: () {},
+    )));
+
+    final action = tester.widget<IconButton>(find.ancestor(
+      of: find.byIcon(Icons.timelapse_rounded),
+      matching: find.byType(IconButton),
+    ));
+    action.onPressed!.call();
+    expect(selectedStatus, 'doing');
+  });
+
+  testWidgets('notes composer starts another new note immediately', (tester) async {
+    var created = 0;
+    await tester.pumpWidget(app(RemasterNotesScreen(
+      notes: const [],
+      onNewNote: () => created++,
+      onOpenNote: (_) {},
+      onSave: (_) async {},
+      onDelete: (_) async {},
+    )));
+
+    await tester.tap(find.byTooltip('Utwórz notatkę'));
+    expect(created, 1);
+    expect(find.text('Nie masz jeszcze notatek'), findsOneWidget);
+  });
+
+  testWidgets('notes show a compact checklist summary on a card', (tester) async {
+    await tester.pumpWidget(app(RemasterNotesScreen(
+      notes: [
+        NoteItem(
+          id: 'note-1',
+          title: 'Zakupy',
+          blocks: [
+            NoteBlock.checklist(
+              id: 'block-1',
+              items: const [
+                NoteChecklistItem(id: 'item-1', text: 'Mleko'),
+                NoteChecklistItem(id: 'item-2', text: 'Chleb', isDone: true),
+              ],
+            ),
+          ],
+        ),
+      ],
+      onNewNote: () {},
+      onOpenNote: (_) {},
+      onSave: (_) async {},
+      onDelete: (_) async {},
+    )));
+
+    expect(find.text('1 z 2 ukończone'), findsOneWidget);
+  });
+}

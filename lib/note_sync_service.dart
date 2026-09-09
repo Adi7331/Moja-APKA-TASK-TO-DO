@@ -89,6 +89,7 @@ class NoteSyncService {
                   ))
               .toList(),
           labels: labels,
+          folderId: row['folder_id'] as String?,
         ),
       );
     }

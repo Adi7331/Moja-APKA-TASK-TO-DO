@@ -9,6 +9,7 @@ void main() {
       title: 'Plan tygodnia',
       colorKey: NoteColorKey.blue,
       pinned: true,
+      folderId: 'folder-praca',
       labels: const ['praca'],
       blocks: [
         NoteBlock.text(id: 'b1', text: 'Najważniejsze rzeczy'),
@@ -27,6 +28,7 @@ void main() {
     expect(restored.id, note.id);
     expect(restored.title, note.title);
     expect(restored.pinned, isTrue);
+    expect(restored.folderId, 'folder-praca');
     expect(restored.labels, ['praca']);
     expect(restored.blocks[1].checklistItems.first.text, 'Telefon');
     expect(restored.blocks[1].checklistItems.last.isDone, isTrue);

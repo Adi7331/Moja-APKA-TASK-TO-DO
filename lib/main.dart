@@ -17,6 +17,8 @@ import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'remaster_theme.dart';
 import 'remaster_shell.dart';
+import 'remaster_notes_screen.dart';
+import 'remaster_tasks_screen.dart';
 import 'note_editor_screen.dart';
 import 'task_editor.dart';
 import 'task_postpone_sheet.dart';
@@ -847,7 +849,12 @@ class _MyAppState extends State<MyApp> {
     await preferences.setBool('ui_remaster_v2', value);
   }
 
-  Future<void> _openStartNote(NoteItem note) async {
+  Future<void> _openStartNote(
+    NoteItem note, {
+    bool initialImagePicker = false,
+    bool initialFilePicker = false,
+    bool initialChecklist = false,
+  }) async {
     await _navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => NoteEditorScreen(
@@ -859,10 +866,31 @@ class _MyAppState extends State<MyApp> {
           onAttach: _attachNoteFile,
           onDeleteAttachment: _deleteNoteAttachment,
           onOpenAttachment: _openNoteAttachment,
+          initialImagePicker: initialImagePicker,
+          initialFilePicker: initialFilePicker,
+          initialChecklist: initialChecklist,
         ),
       ),
     );
   }
+
+  Future<void> _openNewRemasterNote({
+    bool checklist = false,
+    bool image = false,
+    bool file = false,
+  }) => _openStartNote(
+    NoteItem(
+      id: newNoteId(),
+      title: 'Nowa notatka',
+      blocks: [
+        NoteBlock.text(id: newNoteId()),
+        if (checklist) NoteBlock.checklist(id: newNoteId(), position: 1),
+      ],
+    ),
+    initialImagePicker: image,
+    initialFilePicker: file,
+    initialChecklist: checklist,
+  );
 
   String? _profileValue(String key) {
     if (!cloudMode) return null;
@@ -870,7 +898,22 @@ class _MyAppState extends State<MyApp> {
         as String?;
   }
 
-  Widget _notesWorkspace(BuildContext context) => NotesScreen(
+  Widget _notesWorkspace(BuildContext context) {
+    if (_remasterPreview) {
+      return RemasterNotesScreen(
+        notes: notes,
+        onNewNote: () => _openNewRemasterNote(),
+        onNewChecklist: () => _openNewRemasterNote(checklist: true),
+        // The editor opens the system picker itself; keeping the creation
+        // route identical prevents an attachment-only note from being lost.
+        onNewImage: () => _openNewRemasterNote(image: true),
+        onNewFile: () => _openNewRemasterNote(file: true),
+        onOpenNote: _openStartNote,
+        onSave: _saveNote,
+        onDelete: _deleteNote,
+      );
+    }
+    return NotesScreen(
     notes: notes,
     embedded: _remasterPreview,
     onOpenTasks: () => _remasterPreview
@@ -892,8 +935,47 @@ class _MyAppState extends State<MyApp> {
     },
     syncStatus: _syncStatus,
   );
+  }
 
-  Widget _tasksWorkspace(BuildContext context) => TodayScreen(
+  Widget _tasksWorkspace(BuildContext context) {
+    if (_remasterPreview) {
+      return RemasterTasksScreen(
+        tasks: tasks,
+        selectedView: _selectedView,
+        onViewChanged: (view) => setState(() {
+          _selectedView = view;
+          if (view != TaskView.today) _statusFilter = 'all';
+        }),
+        onOpenTask: (task) => _showTaskForm(context, task: task),
+        onStatusSelected: _changeTaskStatus,
+        onDeleteTask: (task) => _confirmDeleteTask(context, task),
+        onPostponeTask: _postponeTask,
+        onQuickAdd: () => _showTaskForm(context),
+        onOpenWeek: () => _navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (routeContext) => WeeklyCalendarScreen(
+              tasks: tasks,
+              initialWeek: DateTime.now(),
+              onOpenTask: (task) => _showTaskForm(routeContext, task: task),
+              onMoveTask: _moveTaskToWeekDay,
+              onQuickAdd: () => _showTaskForm(routeContext),
+            ),
+          ),
+        ),
+        onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => WeeklyReviewScreen(
+              review: buildWeeklyReview(tasks, DateTime.now()),
+              onOpenDailyPlan: () {
+                _navigatorKey.currentState?.pop();
+                setState(() => _selectedView = TaskView.today);
+              },
+            ),
+          ),
+        ),
+      );
+    }
+    return TodayScreen(
     visibleTasks: _todayTasks,
     embedded: _remasterPreview,
     laterTasks: _laterTasks,
@@ -947,6 +1029,7 @@ class _MyAppState extends State<MyApp> {
         ? RemasterShell.select(context, AppSpace.notes)
         : setState(() => _notesMode = true),
   );
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -980,12 +1063,7 @@ class _MyAppState extends State<MyApp> {
               builder: (context) => _notesWorkspace(context),
             ),
             onAddTask: () => _showTaskForm(context),
-            onAddNote: () => _openStartNote(
-              NoteItem(
-                id: newNoteId(),
-                blocks: [NoteBlock.text(id: newNoteId())],
-              ),
-            ),
+            onAddNote: () => _openNewRemasterNote(),
             onOpenTask: (task) => _showTaskForm(context, task: task),
             onOpenNote: _openStartNote,
             onCompleteTask: (task) =>

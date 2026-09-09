@@ -353,6 +353,7 @@ class NoteItem {
     this.labels = const [],
     this.attachments = const [],
     this.conflictOf,
+    this.folderId,
   }) : createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
 
@@ -378,6 +379,7 @@ class NoteItem {
         .map((item) => NoteAttachment.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList(),
     conflictOf: json['conflictOf'] as String?,
+    folderId: json['folderId'] as String?,
   );
 
   final String id;
@@ -395,6 +397,9 @@ class NoteItem {
   final List<String> labels;
   final List<NoteAttachment> attachments;
   final String? conflictOf;
+  /// A note belongs to at most one folder. A missing value intentionally means
+  /// "Bez folderu" so older local files remain readable.
+  final String? folderId;
 
   bool get isArchived => archivedAt != null;
   bool get isDeleted => deletedAt != null;
@@ -435,6 +440,7 @@ class NoteItem {
     List<String>? labels,
     List<NoteAttachment>? attachments,
     Object? conflictOf = _unset,
+    Object? folderId = _unset,
   }) => NoteItem(
     id: id ?? this.id,
     userId: identical(userId, _unset) ? this.userId : userId as String?,
@@ -457,6 +463,7 @@ class NoteItem {
     conflictOf: identical(conflictOf, _unset)
         ? this.conflictOf
         : conflictOf as String?,
+    folderId: identical(folderId, _unset) ? this.folderId : folderId as String?,
   );
 
   Map<String, dynamic> toStorage() => {
@@ -475,6 +482,7 @@ class NoteItem {
     'labels': labels,
     'attachments': attachments.map((attachment) => attachment.toJson()).toList(),
     'conflictOf': conflictOf,
+    'folderId': folderId,
   };
 
   Map<String, dynamic> toSupabasePayload({required String userId}) => {
