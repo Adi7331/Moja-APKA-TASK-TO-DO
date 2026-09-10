@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'note_item.dart';
 import 'task_item.dart';
 import 'remaster_theme.dart';
+import 'remaster_settings_screen.dart';
 
 enum AppSpace { start, tasks, notes }
 
@@ -22,6 +23,7 @@ class RemasterShell extends StatefulWidget {
     required this.onOpenTask,
     required this.onOpenNote,
     required this.onCompleteTask,
+    required this.onOpenFocus,
     required this.onLegacy,
     required this.themeMode,
     required this.onThemeMode,
@@ -36,6 +38,7 @@ class RemasterShell extends StatefulWidget {
   final Widget notesContent;
   final VoidCallback onAddTask, onAddNote, onLegacy;
   final ValueChanged<TaskItem> onOpenTask, onCompleteTask;
+  final ValueChanged<TaskItem> onOpenFocus;
   final ValueChanged<NoteItem> onOpenNote;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeMode;
@@ -106,69 +109,16 @@ class _RemasterShellState extends State<RemasterShell> {
     );
   }
 
-  void _account() => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (sheet) => SafeArea(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.name ?? 'Twoja przestrzeń',
-                style: Theme.of(sheet).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(widget.syncStatus),
-              const SizedBox(height: 24),
-              Text('Wygląd', style: Theme.of(sheet).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final mode in ThemeMode.values)
-                    ChoiceChip(
-                      label: Text(switch (mode) {
-                        ThemeMode.system => 'Systemowy',
-                        ThemeMode.light => 'Jasny',
-                        ThemeMode.dark => 'Ciemny',
-                      }),
-                      selected: widget.themeMode == mode,
-                      onSelected: (_) {
-                        widget.onThemeMode(mode);
-                        Navigator.pop(sheet);
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.history_rounded),
-                title: const Text('Wróć do poprzedniego wyglądu'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  widget.onLegacy();
-                },
-              ),
-              if (widget.onSignOut != null)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.logout_rounded),
-                  title: const Text('Wyloguj się'),
-                  onTap: () {
-                    Navigator.pop(sheet);
-                    widget.onSignOut!();
-                  },
-                ),
-            ],
-          ),
-        ),
+  void _account() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => RemasterSettingsScreen(
+        name: widget.name,
+        avatarUrl: widget.avatarUrl,
+        syncStatus: widget.syncStatus,
+        themeMode: widget.themeMode,
+        onThemeMode: widget.onThemeMode,
+        onLegacy: widget.onLegacy,
+        onSignOut: widget.onSignOut,
       ),
     ),
   );
@@ -511,7 +461,7 @@ class _RemasterShellState extends State<RemasterShell> {
                     color: remasterNoteColor(context, i),
                     borderRadius: BorderRadius.circular(18),
                     clipBehavior: Clip.antiAlias,
-                    child: InkWell(
+                          child: InkWell(
                       onTap: () => widget.onOpenNote(recent[i]),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -627,9 +577,9 @@ class _RemasterShellState extends State<RemasterShell> {
                         ),
                         child: InkWell(
                           key: const ValueKey('remaster-now'),
-                          onTap: focus == null
+                            onTap: focus == null
                               ? widget.onAddTask
-                              : () => widget.onOpenTask(focus),
+                              : () => widget.onOpenFocus(focus),
                           child: Padding(
                             padding: const EdgeInsets.all(24),
                             child: Row(

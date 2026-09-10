@@ -16,6 +16,8 @@ import 'task_view.dart';
 import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'remaster_theme.dart';
+import 'remaster_login_page.dart';
+import 'remaster_focus_mode_screen.dart';
 import 'remaster_shell.dart';
 import 'remaster_notes_screen.dart';
 import 'remaster_tasks_screen.dart';
@@ -793,7 +795,16 @@ class _MyAppState extends State<MyApp> {
   void _openFocusTask(TaskItem task) {
     _navigatorKey.currentState?.push(
       MaterialPageRoute<void>(
-        builder: (routeContext) => FocusModeScreen(
+        builder: (routeContext) => _remasterPreview
+            ? RemasterFocusModeScreen(
+                task: task,
+                onComplete: () async {
+                  await _changeTaskStatus(task, 'done');
+                  if (routeContext.mounted) Navigator.of(routeContext).pop();
+                },
+                onPostpone: () => _postponeTask(task),
+              )
+            : FocusModeScreen(
           task: task,
           onComplete: () async {
             await _changeTaskStatus(task, 'done');
@@ -1159,6 +1170,14 @@ class _MyAppState extends State<MyApp> {
     home: Builder(
       builder: (context) {
         if (!localMode) {
+          if (_remasterPreview) {
+            return RemasterLoginPage(
+              onLocalMode: () => setState(() => localMode = true),
+              onSignedIn: _enterCloudMode,
+              onGoogleSignIn: () =>
+                  SupabaseGoogleSignInAction(Supabase.instance.client).start(),
+            );
+          }
           return LoginPage(
             onLocalMode: () => setState(() => localMode = true),
             onSignedIn: _enterCloudMode,
@@ -1182,6 +1201,7 @@ class _MyAppState extends State<MyApp> {
             onOpenNote: _openStartNote,
             onCompleteTask: (task) =>
                 _changeTaskStatus(task, task.isDone ? 'todo' : 'done'),
+            onOpenFocus: _openFocusTask,
             onLegacy: () => _setRemasterPreview(false),
             themeMode: _themeMode,
             onThemeMode: _changeThemeMode,
