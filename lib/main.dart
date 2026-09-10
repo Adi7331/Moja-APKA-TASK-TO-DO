@@ -19,6 +19,8 @@ import 'remaster_theme.dart';
 import 'remaster_shell.dart';
 import 'remaster_notes_screen.dart';
 import 'remaster_tasks_screen.dart';
+import 'remaster_weekly_calendar.dart';
+import 'remaster_weekly_review.dart';
 import 'note_editor_screen.dart';
 import 'task_editor.dart';
 import 'task_postpone_sheet.dart';
@@ -1065,7 +1067,7 @@ class _MyAppState extends State<MyApp> {
         onQuickAdd: () => _showTaskForm(context),
         onOpenWeek: () => _navigatorKey.currentState?.push(
           MaterialPageRoute(
-            builder: (routeContext) => WeeklyCalendarScreen(
+            builder: (routeContext) => RemasterWeeklyCalendarScreen(
               tasks: tasks,
               initialWeek: DateTime.now(),
               onOpenTask: (task) => _showTaskForm(routeContext, task: task),
@@ -1076,7 +1078,7 @@ class _MyAppState extends State<MyApp> {
         ),
         onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
           MaterialPageRoute(
-            builder: (_) => WeeklyReviewScreen(
+            builder: (_) => RemasterWeeklyReviewScreen(
               review: buildWeeklyReview(tasks, DateTime.now()),
               onOpenDailyPlan: () {
                 _navigatorKey.currentState?.pop();
