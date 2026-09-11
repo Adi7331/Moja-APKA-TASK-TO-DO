@@ -868,6 +868,10 @@ class _NoteCard extends StatelessWidget {
     final documentAttachment = note.attachments
         .where((attachment) => !attachment.mimeType.startsWith('image/'))
         .firstOrNull;
+    final reminder = note.reminderAt;
+    final reminderLabel = reminder == null
+        ? null
+        : '${MaterialLocalizations.of(context).formatMediumDate(reminder)} · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(reminder))}';
     return Semantics(
       button: true,
       label: 'Notatka ${note.title.isEmpty ? 'bez tytułu' : note.title}',
@@ -926,6 +930,34 @@ class _NoteCard extends StatelessWidget {
                     maxLines: 5,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+                if (reminderLabel != null) ...[
+                  const SizedBox(height: 12),
+                  Semantics(
+                    container: true,
+                    label: 'Przypomnienie: $reminderLabel',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.schedule_rounded,
+                            size: 16,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Przypomnienie · $reminderLabel',
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
                 if (note.checklistTotal > 0) ...[

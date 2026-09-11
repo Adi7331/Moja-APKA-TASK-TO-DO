@@ -353,6 +353,30 @@ void main() {
     expect(permanentlyDeleted, isTrue);
   });
 
+  testWidgets('a note card makes its reminder visible before opening', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(
+              id: 'note-1',
+              title: 'Rachunki',
+              reminderAt: DateTime(2026, 9, 12, 10, 30),
+            ),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Przypomnienie'), findsOneWidget);
+  });
+
   testWidgets('pinned notes and remaining notes have separate sections', (
     tester,
   ) async {
