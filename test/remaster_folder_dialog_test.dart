@@ -39,4 +39,39 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('renaming a folder keeps its identity for assigned notes', (
+    tester,
+  ) async {
+    NoteFolder? renamedFolder;
+    final folder = NoteFolder(id: 'car', name: 'Samochód');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RemasterNotesScreen(
+            notes: const <NoteItem>[],
+            folders: <NoteFolder>[folder],
+            onNewNote: ({String? folderId}) {},
+            onOpenNote: (_) {},
+            onSave: (_) async {},
+            onDelete: (_) async {},
+            onRenameFolder: (updated) async => renamedFolder = updated,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Opcje folderu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Zmień nazwę folderu'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Auto');
+    await tester.tap(find.text('Zapisz'));
+    await tester.pumpAndSettle();
+
+    expect(renamedFolder, isNotNull);
+    expect(renamedFolder!.id, 'car');
+    expect(renamedFolder!.name, 'Auto');
+    expect(tester.takeException(), isNull);
+  });
 }

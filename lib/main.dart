@@ -234,6 +234,20 @@ class _MyAppState extends State<MyApp> {
     await _saveLocalNotes();
   }
 
+  Future<void> _renameFolder(NoteFolder folder) async {
+    final updated = folder.copyWith(updatedAt: DateTime.now());
+    if (cloudMode && _foldersCloudAvailable) {
+      await _noteSync.saveFolder(updated);
+      await _loadCloudFolders();
+      return;
+    }
+    setState(() {
+      final index = folders.indexWhere((item) => item.id == folder.id);
+      if (index != -1) folders[index] = updated;
+    });
+    await _saveLocalFolders();
+  }
+
   Future<void> _moveNoteToFolder(NoteItem note, String? folderId) async {
     final updated = note.copyWith(
       folderId: folderId,
@@ -1046,6 +1060,7 @@ class _MyAppState extends State<MyApp> {
         onDelete: _deleteNote,
         onMoveToFolder: _moveNoteToFolder,
         onCreateFolder: _createFolder,
+        onRenameFolder: _renameFolder,
         onDeleteFolder: _deleteFolder,
       );
     }

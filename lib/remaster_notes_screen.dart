@@ -23,6 +23,7 @@ class RemasterNotesScreen extends StatefulWidget {
     this.onNewFile,
     this.onMoveToFolder,
     this.onCreateFolder,
+    this.onRenameFolder,
     this.onDeleteFolder,
   });
 
@@ -37,6 +38,7 @@ class RemasterNotesScreen extends StatefulWidget {
   final NewRemasterNote? onNewFile;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
   final Future<void> Function(String name)? onCreateFolder;
+  final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
 
   @override
@@ -109,6 +111,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           onDelete: widget.onDelete,
           onMoveToFolder: widget.onMoveToFolder,
           onCreateFolder: widget.onCreateFolder,
+          onRenameFolder: widget.onRenameFolder,
           onDeleteFolder: widget.onDeleteFolder,
         );
         if (!wide) return content;
@@ -154,6 +157,7 @@ class _NotesGrid extends StatelessWidget {
     required this.onDelete,
     this.onMoveToFolder,
     this.onCreateFolder,
+    this.onRenameFolder,
     this.onDeleteFolder,
   });
   final TextEditingController search;
@@ -176,6 +180,7 @@ class _NotesGrid extends StatelessWidget {
   final Future<void> Function(NoteItem) onDelete;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
   final Future<void> Function(String name)? onCreateFolder;
+  final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
 
   @override
@@ -233,6 +238,7 @@ class _NotesGrid extends StatelessWidget {
                 selectedFolderId: selectedFolderId,
                 onSelected: onFolderChanged,
                 onCreate: onCreateFolder,
+                onRename: onRenameFolder,
                 onDelete: onDeleteFolder,
               ),
             ],
@@ -305,12 +311,14 @@ class _FolderStrip extends StatelessWidget {
     required this.selectedFolderId,
     required this.onSelected,
     this.onCreate,
+    this.onRename,
     this.onDelete,
   });
   final List<NoteFolder> folders;
   final String? selectedFolderId;
   final ValueChanged<String?> onSelected;
   final Future<void> Function(String name)? onCreate;
+  final Future<void> Function(NoteFolder folder)? onRename;
   final Future<void> Function(NoteFolder folder)? onDelete;
 
   @override
@@ -326,13 +334,40 @@ class _FolderStrip extends StatelessWidget {
         ...folders.map(
           (folder) => Padding(
             padding: const EdgeInsets.only(left: 8),
-            child: InputChip(
-              label: Text(folder.name),
-              selected: selectedFolderId == folder.id,
-              onPressed: () => onSelected(folder.id),
-              onDeleted: onDelete == null
-                  ? null
-                  : () => _confirmDelete(context, folder),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InputChip(
+                  label: Text(folder.name),
+                  selected: selectedFolderId == folder.id,
+                  onPressed: () => onSelected(folder.id),
+                ),
+                if (onRename != null || onDelete != null)
+                  PopupMenuButton<_FolderMenuAction>(
+                    tooltip: 'Opcje folderu',
+                    onSelected: (action) async {
+                      switch (action) {
+                        case _FolderMenuAction.rename:
+                          await _rename(context, folder);
+                        case _FolderMenuAction.delete:
+                          await _confirmDelete(context, folder);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (onRename != null)
+                        const PopupMenuItem(
+                          value: _FolderMenuAction.rename,
+                          child: Text('Zmień nazwę folderu'),
+                        ),
+                      if (onDelete != null)
+                        const PopupMenuItem(
+                          value: _FolderMenuAction.delete,
+                          child: Text('Usuń folder'),
+                        ),
+                    ],
+                    icon: const Icon(Icons.more_horiz_rounded),
+                  ),
+              ],
             ),
           ),
         ),
@@ -358,6 +393,18 @@ class _FolderStrip extends StatelessWidget {
     await onCreate!(name!.trim());
   }
 
+  Future<void> _rename(BuildContext context, NoteFolder folder) async {
+    if (onRename == null) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameFolderDialog(initialName: folder.name),
+    );
+    if (name == null || name.trim().isEmpty || name.trim() == folder.name) {
+      return;
+    }
+    await onRename!(folder.copyWith(name: name.trim()));
+  }
+
   Future<void> _confirmDelete(BuildContext context, NoteFolder folder) async {
     final accepted = await showDialog<bool>(
       context: context,
@@ -378,9 +425,11 @@ class _FolderStrip extends StatelessWidget {
         ],
       ),
     );
-    if (accepted == true) await onDelete!(folder);
+    if (accepted == true && onDelete != null) await onDelete!(folder);
   }
 }
+
+enum _FolderMenuAction { rename, delete }
 
 /// Owns its controller for the full lifetime of the modal route.
 ///
@@ -430,6 +479,55 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
         child: const Text('Anuluj'),
       ),
       FilledButton(onPressed: _submit, child: const Text('Utwórz')),
+    ],
+  );
+}
+
+class _RenameFolderDialog extends StatefulWidget {
+  const _RenameFolderDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_RenameFolderDialog> createState() => _RenameFolderDialogState();
+}
+
+class _RenameFolderDialogState extends State<_RenameFolderDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop((value ?? _controller.text).trim());
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Zmień nazwę folderu'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      maxLength: 80,
+      textInputAction: TextInputAction.done,
+      onSubmitted: _submit,
+      decoration: const InputDecoration(labelText: 'Nazwa folderu'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Anuluj'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Zapisz')),
     ],
   );
 }
