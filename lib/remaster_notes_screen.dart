@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'note_item.dart';
@@ -759,6 +761,13 @@ class _NoteCard extends StatelessWidget {
     final folder = folders
         .where((item) => item.id == note.folderId)
         .firstOrNull;
+    final imageAttachment = note.attachments
+        .where(
+          (attachment) =>
+              attachment.mimeType.startsWith('image/') &&
+              attachment.localPath?.isNotEmpty == true,
+        )
+        .firstOrNull;
     return Semantics(
       button: true,
       label: 'Notatka ${note.title.isEmpty ? 'bez tytułu' : note.title}',
@@ -802,6 +811,10 @@ class _NoteCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (imageAttachment != null) ...[
+                  const SizedBox(height: 12),
+                  _ImageAttachmentPreview(attachment: imageAttachment),
+                ],
                 if (preview.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -901,6 +914,41 @@ class _NoteCard extends StatelessWidget {
                   ],
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageAttachmentPreview extends StatelessWidget {
+  const _ImageAttachmentPreview({required this.attachment});
+
+  final NoteAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      container: true,
+      image: true,
+      label: 'Podgląd zdjęcia: ${attachment.fileName}',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Image.file(
+            File(attachment.localPath!),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => ColoredBox(
+              color: scheme.surfaceContainerHighest,
+              child: Center(
+                child: Icon(
+                  Icons.image_not_supported_outlined,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ),
         ),

@@ -130,6 +130,38 @@ void main() {
     expect(find.text('1 z 2 ukończone'), findsOneWidget);
   });
 
+  testWidgets('a note card exposes a preview for its image attachment', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(
+              id: 'note-1',
+              title: 'Plan podróży',
+              attachments: [
+                NoteAttachment(
+                  id: 'image-1',
+                  fileName: 'mapa.png',
+                  mimeType: 'image/png',
+                  byteSize: 1024,
+                  localPath: 'C:/brakujacy-plik/mapa.png',
+                ),
+              ],
+            ),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.bySemanticsLabel('Podgląd zdjęcia: mapa.png'), findsOneWidget);
+  });
+
   testWidgets('new note keeps the selected folder', (tester) async {
     String? createdInFolder;
     await tester.pumpWidget(
