@@ -170,4 +170,61 @@ void main() {
     expect(find.text('PRZYPIĘTE'), findsOneWidget);
     expect(find.text('POZOSTAŁE'), findsOneWidget);
   });
+
+  testWidgets('note section filters stay within a 390 pixel phone viewport', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          key: const ValueKey('phone-viewport'),
+          width: 390,
+          height: 844,
+          child: Scaffold(
+            body: RemasterNotesScreen(
+              notes: const <NoteItem>[],
+              onNewNote: ({String? folderId}) {},
+              onOpenNote: (_) {},
+              onSave: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('phone-viewport')),
+    );
+    for (final label in ['Notatki', 'Przypomnienia', 'Archiwum', 'Kosz']) {
+      expect(
+        tester.getRect(find.text(label).last).right,
+        lessThanOrEqualTo(viewport.right),
+      );
+    }
+  });
+
+  testWidgets('note search also finds notes by their folder name', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(id: 'note-1', title: 'Wymiana opon', folderId: 'car'),
+          ],
+          folders: [NoteFolder(id: 'car', name: 'Samochód')],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'samochód');
+    await tester.pump();
+
+    expect(find.text('Wymiana opon'), findsOneWidget);
+  });
 }

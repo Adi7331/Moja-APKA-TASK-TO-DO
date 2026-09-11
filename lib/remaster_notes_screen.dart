@@ -73,8 +73,12 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
             _NoteSection.archive => note.isArchived && !note.isDeleted,
             _NoteSection.trash => note.isDeleted,
           };
+          final folderName = widget.folders
+              .where((folder) => folder.id == note.folderId)
+              .firstOrNull
+              ?.name;
           final text =
-              '${note.title} ${note.previewText} ${note.labels.join(' ')}'
+              '${note.title} ${note.previewText} ${note.labels.join(' ')} ${folderName ?? ''}'
                   .toLowerCase();
           return section &&
               (_folderId == null || note.folderId == _folderId) &&
