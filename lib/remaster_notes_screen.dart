@@ -768,6 +768,9 @@ class _NoteCard extends StatelessWidget {
               attachment.localPath?.isNotEmpty == true,
         )
         .firstOrNull;
+    final documentAttachment = note.attachments
+        .where((attachment) => !attachment.mimeType.startsWith('image/'))
+        .firstOrNull;
     return Semantics(
       button: true,
       label: 'Notatka ${note.title.isEmpty ? 'bez tytułu' : note.title}',
@@ -814,6 +817,10 @@ class _NoteCard extends StatelessWidget {
                 if (imageAttachment != null) ...[
                   const SizedBox(height: 12),
                   _ImageAttachmentPreview(attachment: imageAttachment),
+                ],
+                if (documentAttachment != null) ...[
+                  const SizedBox(height: 12),
+                  _DocumentAttachmentSummary(attachment: documentAttachment),
                 ],
                 if (preview.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -955,6 +962,74 @@ class _ImageAttachmentPreview extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DocumentAttachmentSummary extends StatelessWidget {
+  const _DocumentAttachmentSummary({required this.attachment});
+
+  final NoteAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final kind = _attachmentKind(attachment);
+    final size = _attachmentSize(attachment.byteSize);
+    return Semantics(
+      container: true,
+      label: 'Załączony dokument: ${attachment.fileName}, $kind, $size',
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: Icon(
+                Icons.insert_drive_file_outlined,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    attachment.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$kind · $size',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _attachmentKind(NoteAttachment attachment) {
+  if (attachment.mimeType == 'application/pdf') return 'PDF';
+  final extension = attachment.fileName.split('.').lastOrNull;
+  return extension == null || extension == attachment.fileName
+      ? 'Dokument'
+      : extension.toUpperCase();
+}
+
+String _attachmentSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
 class _NotePreview extends StatelessWidget {

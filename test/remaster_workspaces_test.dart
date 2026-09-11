@@ -162,6 +162,36 @@ void main() {
     expect(find.bySemanticsLabel('Podgląd zdjęcia: mapa.png'), findsOneWidget);
   });
 
+  testWidgets('a note card identifies an attached document', (tester) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(
+              id: 'note-1',
+              title: 'Formalności',
+              attachments: [
+                NoteAttachment(
+                  id: 'document-1',
+                  fileName: 'budżet.pdf',
+                  mimeType: 'application/pdf',
+                  byteSize: 2048,
+                ),
+              ],
+            ),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.text('budżet.pdf'), findsOneWidget);
+    expect(find.text('PDF · 2 KB'), findsOneWidget);
+  });
+
   testWidgets('new note keeps the selected folder', (tester) async {
     String? createdInFolder;
     await tester.pumpWidget(
