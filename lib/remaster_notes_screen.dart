@@ -322,66 +322,59 @@ class _FolderStrip extends StatelessWidget {
   final Future<void> Function(NoteFolder folder)? onDelete;
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: Row(
-      children: [
-        ChoiceChip(
-          label: const Text('Wszystkie foldery'),
-          selected: selectedFolderId == null,
-          onSelected: (_) => onSelected(null),
-        ),
-        ...folders.map(
-          (folder) => Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                InputChip(
-                  label: Text(folder.name),
-                  selected: selectedFolderId == folder.id,
-                  onPressed: () => onSelected(folder.id),
-                ),
-                if (onRename != null || onDelete != null)
-                  PopupMenuButton<_FolderMenuAction>(
-                    tooltip: 'Opcje folderu',
-                    onSelected: (action) async {
-                      switch (action) {
-                        case _FolderMenuAction.rename:
-                          await _rename(context, folder);
-                        case _FolderMenuAction.delete:
-                          await _confirmDelete(context, folder);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      if (onRename != null)
-                        const PopupMenuItem(
-                          value: _FolderMenuAction.rename,
-                          child: Text('Zmień nazwę folderu'),
-                        ),
-                      if (onDelete != null)
-                        const PopupMenuItem(
-                          value: _FolderMenuAction.delete,
-                          child: Text('Usuń folder'),
-                        ),
-                    ],
-                    icon: const Icon(Icons.more_horiz_rounded),
-                  ),
-              ],
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      ChoiceChip(
+        label: const Text('Wszystkie foldery'),
+        selected: selectedFolderId == null,
+        onSelected: (_) => onSelected(null),
+      ),
+      ...folders.map(
+        (folder) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InputChip(
+              label: Text(folder.name),
+              selected: selectedFolderId == folder.id,
+              onPressed: () => onSelected(folder.id),
             ),
-          ),
+            if (onRename != null || onDelete != null)
+              PopupMenuButton<_FolderMenuAction>(
+                tooltip: 'Opcje folderu',
+                onSelected: (action) async {
+                  switch (action) {
+                    case _FolderMenuAction.rename:
+                      await _rename(context, folder);
+                    case _FolderMenuAction.delete:
+                      await _confirmDelete(context, folder);
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (onRename != null)
+                    const PopupMenuItem(
+                      value: _FolderMenuAction.rename,
+                      child: Text('Zmień nazwę folderu'),
+                    ),
+                  if (onDelete != null)
+                    const PopupMenuItem(
+                      value: _FolderMenuAction.delete,
+                      child: Text('Usuń folder'),
+                    ),
+                ],
+                icon: const Icon(Icons.more_horiz_rounded),
+              ),
+          ],
         ),
-        if (onCreate != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: ActionChip(
-              avatar: const Icon(Icons.create_new_folder_outlined, size: 18),
-              label: const Text('Folder'),
-              onPressed: () => _create(context),
-            ),
-          ),
-      ],
-    ),
+      ),
+      if (onCreate != null)
+        ActionChip(
+          avatar: const Icon(Icons.create_new_folder_outlined, size: 18),
+          label: const Text('Folder'),
+          onPressed: () => _create(context),
+        ),
+    ],
   );
 
   Future<void> _create(BuildContext context) async {
@@ -619,6 +612,9 @@ class _NoteCard extends StatelessWidget {
         ? scheme.surfaceContainerLow
         : remasterNoteColor(context, note.colorKey.index - 1);
     final preview = note.previewText.replaceFirst(note.title, '').trim();
+    final folder = folders
+        .where((item) => item.id == note.folderId)
+        .firstOrNull;
     return Semantics(
       button: true,
       label: 'Notatka ${note.title.isEmpty ? 'bez tytułu' : note.title}',
@@ -699,6 +695,31 @@ class _NoteCard extends StatelessWidget {
                           ),
                         )
                         .toList(),
+                  ),
+                ],
+                if (folder != null) ...[
+                  const SizedBox(height: 12),
+                  Semantics(
+                    container: true,
+                    label: 'Folder: ${folder.name}',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.folder_outlined,
+                            size: 16,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          folder.name,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
                 const SizedBox(height: 6),

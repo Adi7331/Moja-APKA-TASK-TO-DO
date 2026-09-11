@@ -74,4 +74,43 @@ void main() {
     expect(renamedFolder!.name, 'Auto');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('folder controls stay within a 390 pixel phone viewport', (
+    tester,
+  ) async {
+    final folders = <NoteFolder>[
+      NoteFolder(id: 'work', name: 'Praca'),
+      NoteFolder(id: 'home', name: 'Dom'),
+      NoteFolder(id: 'health', name: 'Zdrowie'),
+      NoteFolder(id: 'ideas', name: 'Pomysły'),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 390,
+          height: 844,
+          child: Scaffold(
+            body: RemasterNotesScreen(
+              notes: const <NoteItem>[],
+              folders: folders,
+              onNewNote: ({String? folderId}) {},
+              onOpenNote: (_) {},
+              onSave: (_) async {},
+              onDelete: (_) async {},
+              onRenameFolder: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final viewport = tester.getRect(find.byType(Scaffold));
+    for (final name in folders.map((folder) => folder.name)) {
+      expect(
+        tester.getRect(find.text(name)).right,
+        lessThanOrEqualTo(viewport.right),
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
 }
