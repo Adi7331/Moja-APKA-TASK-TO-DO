@@ -68,6 +68,32 @@ void main() {
     expect(find.text('Nie masz jeszcze notatek'), findsOneWidget);
   });
 
+  testWidgets('a phone tap opens a note directly', (tester) async {
+    var opened = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 390,
+          height: 844,
+          child: Scaffold(
+            body: RemasterNotesScreen(
+              notes: [NoteItem(id: 'note-1', title: 'Szybka notatka')],
+              onNewNote: ({String? folderId}) {},
+              onOpenNote: (_) => opened++,
+              onSave: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Szybka notatka'));
+    await tester.pump();
+
+    expect(opened, 1);
+  });
+
   testWidgets('notes show a compact checklist summary on a card', (
     tester,
   ) async {

@@ -106,6 +106,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           folders: widget.folders,
           selectedFolderId: _folderId,
           selectedId: _selectedNoteId,
+          openOnTap: !wide,
           onQueryChanged: (value) => setState(() => _query = value),
           onSectionChanged: (value) => setState(() => _section = value),
           onFolderChanged: (value) => setState(() => _folderId = value),
@@ -152,6 +153,7 @@ class _NotesGrid extends StatelessWidget {
     required this.folders,
     required this.selectedFolderId,
     required this.selectedId,
+    required this.openOnTap,
     required this.onQueryChanged,
     required this.onSectionChanged,
     required this.onFolderChanged,
@@ -175,6 +177,7 @@ class _NotesGrid extends StatelessWidget {
   final List<NoteFolder> folders;
   final String? selectedFolderId;
   final String? selectedId;
+  final bool openOnTap;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<_NoteSection> onSectionChanged;
   final ValueChanged<String?> onFolderChanged;
@@ -275,6 +278,7 @@ class _NotesGrid extends StatelessWidget {
             notes: notes.where((note) => note.pinned).toList(),
             selectedId: selectedId,
             folders: folders,
+            openOnTap: openOnTap,
             onSelect: onSelect,
             onOpen: onOpen,
             onSave: onSave,
@@ -298,6 +302,7 @@ class _NotesGrid extends StatelessWidget {
             notes: notes.where((note) => !note.pinned).toList(),
             selectedId: selectedId,
             folders: folders,
+            openOnTap: openOnTap,
             onSelect: onSelect,
             onOpen: onOpen,
             onSave: onSave,
@@ -315,6 +320,7 @@ class _NoteCards extends StatelessWidget {
     required this.notes,
     required this.selectedId,
     required this.folders,
+    required this.openOnTap,
     required this.onSelect,
     required this.onOpen,
     required this.onSave,
@@ -325,6 +331,7 @@ class _NoteCards extends StatelessWidget {
   final List<NoteItem> notes;
   final String? selectedId;
   final List<NoteFolder> folders;
+  final bool openOnTap;
   final ValueChanged<NoteItem> onSelect;
   final ValueChanged<NoteItem> onOpen;
   final Future<void> Function(NoteItem) onSave;
@@ -353,6 +360,7 @@ class _NoteCards extends StatelessWidget {
                     child: _NoteCard(
                       note: note,
                       selected: note.id == selectedId,
+                      openOnTap: openOnTap,
                       onSelect: () => onSelect(note),
                       onOpen: () => onOpen(note),
                       onSave: onSave,
@@ -728,6 +736,7 @@ class _NoteCard extends StatelessWidget {
   const _NoteCard({
     required this.note,
     required this.selected,
+    required this.openOnTap,
     required this.onSelect,
     required this.onOpen,
     required this.onSave,
@@ -737,6 +746,7 @@ class _NoteCard extends StatelessWidget {
   });
   final NoteItem note;
   final bool selected;
+  final bool openOnTap;
   final VoidCallback onSelect;
   final VoidCallback onOpen;
   final Future<void> Function(NoteItem) onSave;
@@ -760,8 +770,8 @@ class _NoteCard extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
-          onTap: onSelect,
-          onDoubleTap: onOpen,
+          onTap: openOnTap ? onOpen : onSelect,
+          onDoubleTap: openOnTap ? null : onOpen,
           borderRadius: BorderRadius.circular(18),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
