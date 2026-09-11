@@ -256,7 +256,7 @@ class _NotesGrid extends StatelessWidget {
           ),
         )
       else ...[
-        if (notes.any((note) => note.pinned))
+        if (notes.any((note) => note.pinned)) ...[
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
             sliver: SliverToBoxAdapter(
@@ -267,45 +267,102 @@ class _NotesGrid extends StatelessWidget {
               ),
             ),
           ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-          sliver: SliverToBoxAdapter(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 900
-                    ? 3
-                    : constraints.maxWidth >= 560
-                    ? 2
-                    : 1;
-                final width =
-                    (constraints.maxWidth - (columns - 1) * 12) / columns;
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: notes
-                      .map(
-                        (note) => SizedBox(
-                          width: width,
-                          child: _NoteCard(
-                            note: note,
-                            selected: note.id == selectedId,
-                            onSelect: () => onSelect(note),
-                            onOpen: () => onOpen(note),
-                            onSave: onSave,
-                            onDelete: onDelete,
-                            folders: folders,
-                            onMoveToFolder: onMoveToFolder,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                );
-              },
-            ),
+          _NoteCards(
+            notes: notes.where((note) => note.pinned).toList(),
+            selectedId: selectedId,
+            folders: folders,
+            onSelect: onSelect,
+            onOpen: onOpen,
+            onSave: onSave,
+            onDelete: onDelete,
+            onMoveToFolder: onMoveToFolder,
           ),
-        ),
+        ],
+        if (notes.any((note) => !note.pinned)) ...[
+          if (notes.any((note) => note.pinned))
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  'POZOSTAŁE',
+                  style: Theme.of(context).textTheme.labelMedium
+                      ?.copyWith(letterSpacing: 1.1),
+                ),
+              ),
+            ),
+          _NoteCards(
+            notes: notes.where((note) => !note.pinned).toList(),
+            selectedId: selectedId,
+            folders: folders,
+            onSelect: onSelect,
+            onOpen: onOpen,
+            onSave: onSave,
+            onDelete: onDelete,
+            onMoveToFolder: onMoveToFolder,
+          ),
+        ],
       ],
     ],
+  );
+}
+
+class _NoteCards extends StatelessWidget {
+  const _NoteCards({
+    required this.notes,
+    required this.selectedId,
+    required this.folders,
+    required this.onSelect,
+    required this.onOpen,
+    required this.onSave,
+    required this.onDelete,
+    this.onMoveToFolder,
+  });
+
+  final List<NoteItem> notes;
+  final String? selectedId;
+  final List<NoteFolder> folders;
+  final ValueChanged<NoteItem> onSelect;
+  final ValueChanged<NoteItem> onOpen;
+  final Future<void> Function(NoteItem) onSave;
+  final Future<void> Function(NoteItem) onDelete;
+  final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
+
+  @override
+  Widget build(BuildContext context) => SliverPadding(
+    padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
+    sliver: SliverToBoxAdapter(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 900
+              ? 3
+              : constraints.maxWidth >= 560
+              ? 2
+              : 1;
+          final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: notes
+                .map(
+                  (note) => SizedBox(
+                    width: width,
+                    child: _NoteCard(
+                      note: note,
+                      selected: note.id == selectedId,
+                      onSelect: () => onSelect(note),
+                      onOpen: () => onOpen(note),
+                      onSave: onSave,
+                      onDelete: onDelete,
+                      folders: folders,
+                      onMoveToFolder: onMoveToFolder,
+                    ),
+                  ),
+                )
+                .toList(),
+          );
+        },
+      ),
+    ),
   );
 }
 

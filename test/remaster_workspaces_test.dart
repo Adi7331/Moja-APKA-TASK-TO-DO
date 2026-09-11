@@ -148,4 +148,26 @@ void main() {
     // card itself, visible before opening the note.
     expect(find.text('Samochód'), findsNWidgets(2));
   });
+
+  testWidgets('pinned notes and remaining notes have separate sections', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(id: 'pinned', title: 'Najważniejsza', pinned: true),
+            NoteItem(id: 'regular', title: 'Na później'),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.text('PRZYPIĘTE'), findsOneWidget);
+    expect(find.text('POZOSTAŁE'), findsOneWidget);
+  });
 }
