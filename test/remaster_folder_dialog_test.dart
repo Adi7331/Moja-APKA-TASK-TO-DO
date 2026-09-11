@@ -9,6 +9,7 @@ void main() {
     'creating a folder closes its dialog before rebuilding the strip',
     (tester) async {
       final folders = <NoteFolder>[];
+      NoteColorKey? selectedColor;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -20,8 +21,13 @@ void main() {
                 onOpenNote: (_) {},
                 onSave: (_) async {},
                 onDelete: (_) async {},
-                onCreateFolder: (name) async {
-                  setState(() => folders.add(NoteFolder(id: name, name: name)));
+                onCreateFolder: (name, color) async {
+                  selectedColor = color;
+                  setState(
+                    () => folders.add(
+                      NoteFolder(id: name, name: name, colorKey: color),
+                    ),
+                  );
                 },
               ),
             ),
@@ -32,10 +38,12 @@ void main() {
       await tester.tap(find.text('Folder'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, 'Samochód');
+      await tester.tap(find.text('Lawenda'));
       await tester.tap(find.text('Utwórz'));
       await tester.pumpAndSettle();
 
       expect(find.text('Samochód'), findsOneWidget);
+      expect(selectedColor, NoteColorKey.lavender);
       expect(tester.takeException(), isNull);
     },
   );

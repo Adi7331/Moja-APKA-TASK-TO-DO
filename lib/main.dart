@@ -199,10 +199,14 @@ class _MyAppState extends State<MyApp> {
     await _localNoteStore?.saveFolders(folders);
   }
 
-  Future<void> _createFolder(String name) async {
+  Future<void> _createFolder(String name, NoteColorKey colorKey) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
-    final folder = NoteFolder(id: newNoteId(), name: trimmed);
+    final folder = NoteFolder(
+      id: newNoteId(),
+      name: trimmed,
+      colorKey: colorKey,
+    );
     if (cloudMode && _foldersCloudAvailable) {
       await _noteSync.saveFolder(folder);
       await _loadCloudFolders();

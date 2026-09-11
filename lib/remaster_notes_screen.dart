@@ -5,6 +5,10 @@ import 'note_folder.dart';
 import 'remaster_theme.dart';
 
 typedef NewRemasterNote = void Function({String? folderId});
+typedef SaveRemasterFolder = Future<void> Function(
+  String name,
+  NoteColorKey colorKey,
+);
 
 /// Keep-first note grid for the remaster. The screen keeps selection and its
 /// current search locally, which means switching Start / Tasks / Notes does
@@ -37,7 +41,7 @@ class RemasterNotesScreen extends StatefulWidget {
   final NewRemasterNote? onNewImage;
   final NewRemasterNote? onNewFile;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
-  final Future<void> Function(String name)? onCreateFolder;
+  final SaveRemasterFolder? onCreateFolder;
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
 
@@ -179,7 +183,7 @@ class _NotesGrid extends StatelessWidget {
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
-  final Future<void> Function(String name)? onCreateFolder;
+  final SaveRemasterFolder? onCreateFolder;
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
 
@@ -317,7 +321,7 @@ class _FolderStrip extends StatelessWidget {
   final List<NoteFolder> folders;
   final String? selectedFolderId;
   final ValueChanged<String?> onSelected;
-  final Future<void> Function(String name)? onCreate;
+  final SaveRemasterFolder? onCreate;
   final Future<void> Function(NoteFolder folder)? onRename;
   final Future<void> Function(NoteFolder folder)? onDelete;
 
@@ -338,6 +342,7 @@ class _FolderStrip extends StatelessWidget {
             InputChip(
               label: Text(folder.name),
               selected: selectedFolderId == folder.id,
+              backgroundColor: _folderTint(context, folder.colorKey),
               onPressed: () => onSelected(folder.id),
             ),
             if (onRename != null || onDelete != null)
@@ -378,24 +383,28 @@ class _FolderStrip extends StatelessWidget {
   );
 
   Future<void> _create(BuildContext context) async {
-    final name = await showDialog<String>(
+    final draft = await showDialog<_FolderDraft>(
       context: context,
       builder: (_) => const _CreateFolderDialog(),
     );
-    if (name?.trim().isEmpty ?? true) return;
-    await onCreate!(name!.trim());
+    if (draft == null || draft.name.isEmpty || onCreate == null) return;
+    await onCreate!(draft.name, draft.colorKey);
   }
 
   Future<void> _rename(BuildContext context, NoteFolder folder) async {
     if (onRename == null) return;
-    final name = await showDialog<String>(
+    final draft = await showDialog<_FolderDraft>(
       context: context,
-      builder: (_) => _RenameFolderDialog(initialName: folder.name),
+      builder: (_) => _RenameFolderDialog(folder: folder),
     );
-    if (name == null || name.trim().isEmpty || name.trim() == folder.name) {
+    if (draft == null ||
+        draft.name.isEmpty ||
+        (draft.name == folder.name && draft.colorKey == folder.colorKey)) {
       return;
     }
-    await onRename!(folder.copyWith(name: name.trim()));
+    await onRename!(
+      folder.copyWith(name: draft.name, colorKey: draft.colorKey),
+    );
   }
 
   Future<void> _confirmDelete(BuildContext context, NoteFolder folder) async {
@@ -424,6 +433,22 @@ class _FolderStrip extends StatelessWidget {
 
 enum _FolderMenuAction { rename, delete }
 
+typedef _FolderDraft = ({String name, NoteColorKey colorKey});
+
+Color? _folderTint(BuildContext context, NoteColorKey colorKey) =>
+    colorKey == NoteColorKey.neutral
+    ? null
+    : remasterNoteColor(context, colorKey.index - 1);
+
+String _folderColorLabel(NoteColorKey colorKey) => switch (colorKey) {
+  NoteColorKey.neutral => 'Neutralny',
+  NoteColorKey.blue => 'Błękit',
+  NoteColorKey.lavender => 'Lawenda',
+  NoteColorKey.mint => 'Mięta',
+  NoteColorKey.peach => 'Koral',
+  NoteColorKey.sand => 'Piasek',
+};
+
 /// Owns its controller for the full lifetime of the modal route.
 ///
 /// The route can remain mounted during its closing animation, so disposing a
@@ -438,6 +463,7 @@ class _CreateFolderDialog extends StatefulWidget {
 
 class _CreateFolderDialogState extends State<_CreateFolderDialog> {
   late final TextEditingController _controller;
+  var _colorKey = NoteColorKey.neutral;
 
   @override
   void initState() {
@@ -452,19 +478,33 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
   }
 
   void _submit([String? value]) {
-    Navigator.of(context).pop((value ?? _controller.text).trim());
+    Navigator.of(context)
+        .pop((name: (value ?? _controller.text).trim(), colorKey: _colorKey));
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Nowy folder'),
-    content: TextField(
-      controller: _controller,
-      autofocus: true,
-      maxLength: 80,
-      textInputAction: TextInputAction.done,
-      onSubmitted: _submit,
-      decoration: const InputDecoration(hintText: 'Np. Praca'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: 80,
+          textInputAction: TextInputAction.done,
+          onSubmitted: _submit,
+          decoration: const InputDecoration(labelText: 'Nazwa folderu'),
+        ),
+        const SizedBox(height: 8),
+        Text('Kolor', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        _FolderColorPicker(
+          value: _colorKey,
+          onChanged: (value) => setState(() => _colorKey = value),
+        ),
+      ],
     ),
     actions: [
       TextButton(
@@ -477,9 +517,9 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
 }
 
 class _RenameFolderDialog extends StatefulWidget {
-  const _RenameFolderDialog({required this.initialName});
+  const _RenameFolderDialog({required this.folder});
 
-  final String initialName;
+  final NoteFolder folder;
 
   @override
   State<_RenameFolderDialog> createState() => _RenameFolderDialogState();
@@ -487,11 +527,13 @@ class _RenameFolderDialog extends StatefulWidget {
 
 class _RenameFolderDialogState extends State<_RenameFolderDialog> {
   late final TextEditingController _controller;
+  late NoteColorKey _colorKey;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialName);
+    _controller = TextEditingController(text: widget.folder.name);
+    _colorKey = widget.folder.colorKey;
   }
 
   @override
@@ -501,19 +543,33 @@ class _RenameFolderDialogState extends State<_RenameFolderDialog> {
   }
 
   void _submit([String? value]) {
-    Navigator.of(context).pop((value ?? _controller.text).trim());
+    Navigator.of(context)
+        .pop((name: (value ?? _controller.text).trim(), colorKey: _colorKey));
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Zmień nazwę folderu'),
-    content: TextField(
-      controller: _controller,
-      autofocus: true,
-      maxLength: 80,
-      textInputAction: TextInputAction.done,
-      onSubmitted: _submit,
-      decoration: const InputDecoration(labelText: 'Nazwa folderu'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: 80,
+          textInputAction: TextInputAction.done,
+          onSubmitted: _submit,
+          decoration: const InputDecoration(labelText: 'Nazwa folderu'),
+        ),
+        const SizedBox(height: 8),
+        Text('Kolor', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        _FolderColorPicker(
+          value: _colorKey,
+          onChanged: (value) => setState(() => _colorKey = value),
+        ),
+      ],
     ),
     actions: [
       TextButton(
@@ -521,6 +577,27 @@ class _RenameFolderDialogState extends State<_RenameFolderDialog> {
         child: const Text('Anuluj'),
       ),
       FilledButton(onPressed: _submit, child: const Text('Zapisz')),
+    ],
+  );
+}
+
+class _FolderColorPicker extends StatelessWidget {
+  const _FolderColorPicker({required this.value, required this.onChanged});
+
+  final NoteColorKey value;
+  final ValueChanged<NoteColorKey> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      for (final colorKey in NoteColorKey.values)
+        ChoiceChip(
+          label: Text(_folderColorLabel(colorKey)),
+          selected: value == colorKey,
+          onSelected: (_) => onChanged(colorKey),
+        ),
     ],
   );
 }
