@@ -954,6 +954,22 @@ class _NoteCard extends StatelessWidget {
                       onPressed: onOpen,
                       icon: const Icon(Icons.edit_outlined),
                     ),
+                    IconButton(
+                      tooltip: note.isArchived
+                          ? 'Przywróć z archiwum'
+                          : 'Archiwizuj notatkę',
+                      onPressed: () => onSave(
+                        note.copyWith(
+                          archivedAt: note.isArchived ? null : DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        ),
+                      ),
+                      icon: Icon(
+                        note.isArchived
+                            ? Icons.unarchive_outlined
+                            : Icons.archive_outlined,
+                      ),
+                    ),
                     if (onMoveToFolder != null)
                       PopupMenuButton<String?>(
                         tooltip: 'Przenieś do folderu',

@@ -266,6 +266,28 @@ void main() {
     expect(find.text('Kupić kawę'), findsNothing);
   });
 
+  testWidgets('a note card archives a note without opening its editor', (
+    tester,
+  ) async {
+    NoteItem? saved;
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [NoteItem(id: 'note-1', title: 'Rachunki')],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (note) async => saved = note,
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Archiwizuj notatkę'));
+    await tester.pump();
+
+    expect(saved?.isArchived, isTrue);
+  });
+
   testWidgets('pinned notes and remaining notes have separate sections', (
     tester,
   ) async {
