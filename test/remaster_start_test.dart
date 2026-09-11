@@ -34,26 +34,14 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('preview is opt-in and can return to the original interface', (
-    tester,
-  ) async {
+  testWidgets('remaster is the default interface for local mode', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Podgląd nowego interfejsu'), findsOneWidget);
-    await tester.tap(find.byTooltip('Podgląd nowego interfejsu'));
-    await tester.pumpAndSettle();
     expect(find.byType(RemasterShell), findsOneWidget);
-    await tester.tap(find.byTooltip('Konto i wygląd').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Wróć do poprzedniego wyglądu'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Podgląd nowego interfejsu'), findsOneWidget);
-    expect(
-      (await SharedPreferences.getInstance()).getBool('ui_remaster_v2'),
-      false,
-    );
+    expect(find.byTooltip('Podgląd nowego interfejsu'), findsNothing);
+    expect(find.text('Wróć do poprzedniego wyglądu'), findsNothing);
   });
 }

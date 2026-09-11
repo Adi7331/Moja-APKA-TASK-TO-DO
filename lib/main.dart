@@ -79,7 +79,7 @@ class _MyAppState extends State<MyApp> {
   bool _notesCloudAvailable = false;
   bool _foldersCloudAvailable = false;
   bool _notesMode = false;
-  bool _remasterPreview = false;
+  bool _remasterPreview = true;
   String _syncStatus = 'Lokalnie';
   late Future<void> _localRestoreFuture;
   late Future<void> _localNotesRestoreFuture;
@@ -158,7 +158,7 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _localStore = store;
       _themeMode = _themeModeFromStorage(preferences.getString('theme_mode'));
-      _remasterPreview = preferences.getBool('ui_remaster_v2') ?? false;
+      _remasterPreview = true;
       if (storedTasks.isNotEmpty) {
         tasks
           ..clear()

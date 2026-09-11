@@ -93,42 +93,27 @@ class RemasterSettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text(
-                  'Aplikacja',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.history_rounded),
-                        title: const Text('Wróć do poprzedniego wyglądu'),
-                        subtitle: const Text(
-                          'Nowy interfejs możesz ponownie włączyć później.',
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          onLegacy();
-                        },
-                      ),
-                      if (onSignOut != null) ...[
-                        Divider(height: 1, color: scheme.outlineVariant),
-                        ListTile(
-                          leading: Icon(
-                            Icons.logout_rounded,
-                            color: scheme.error,
-                          ),
-                          title: Text(
-                            'Wyloguj się',
-                            style: TextStyle(color: scheme.error),
-                          ),
-                          onTap: onSignOut,
-                        ),
-                      ],
-                    ],
+                if (onSignOut != null) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Konto',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.logout_rounded,
+                        color: scheme.error,
+                      ),
+                      title: Text(
+                        'Wyloguj się',
+                        style: TextStyle(color: scheme.error),
+                      ),
+                      onTap: onSignOut,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
