@@ -223,7 +223,10 @@ class _MyAppState extends State<MyApp> {
       folders.removeWhere((item) => item.id == folder.id);
       for (var index = 0; index < notes.length; index++) {
         if (notes[index].folderId == folder.id) {
-          notes[index] = notes[index].copyWith(folderId: null, updatedAt: DateTime.now());
+          notes[index] = notes[index].copyWith(
+            folderId: null,
+            updatedAt: DateTime.now(),
+          );
         }
       }
     });
@@ -232,7 +235,10 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _moveNoteToFolder(NoteItem note, String? folderId) async {
-    final updated = note.copyWith(folderId: folderId, updatedAt: DateTime.now());
+    final updated = note.copyWith(
+      folderId: folderId,
+      updatedAt: DateTime.now(),
+    );
     if (cloudMode && !_foldersCloudAvailable) {
       // The present production schema may not have folder_id yet. Store the
       // local association without changing the proven cloud notes payload.
@@ -312,7 +318,8 @@ class _MyAppState extends State<MyApp> {
       }
       if (_notesCloudAvailable) {
         try {
-          final localFolders = await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
+          final localFolders =
+              await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
           final cloudFolders = await _noteSync.loadFolders();
           if (localFolders.isNotEmpty && cloudFolders.isEmpty) {
             await _noteSync.importLocalFolders(localFolders);
@@ -531,6 +538,7 @@ class _MyAppState extends State<MyApp> {
     await showTaskEditor(
       modalContext,
       task: task,
+      remastered: _remasterPreview,
       onSave: (draft) async {
         late final String taskId;
         if (task != null) {
@@ -805,13 +813,13 @@ class _MyAppState extends State<MyApp> {
                 onPostpone: () => _postponeTask(task),
               )
             : FocusModeScreen(
-          task: task,
-          onComplete: () async {
-            await _changeTaskStatus(task, 'done');
-            if (routeContext.mounted) Navigator.of(routeContext).pop();
-          },
-          onPostpone: () => _postponeTask(task),
-        ),
+                task: task,
+                onComplete: () async {
+                  await _changeTaskStatus(task, 'done');
+                  if (routeContext.mounted) Navigator.of(routeContext).pop();
+                },
+                onPostpone: () => _postponeTask(task),
+              ),
       ),
     );
   }
@@ -986,6 +994,7 @@ class _MyAppState extends State<MyApp> {
           initialImagePicker: initialImagePicker,
           initialFilePicker: initialFilePicker,
           initialChecklist: initialChecklist,
+          remastered: _remasterPreview,
         ),
       ),
     );
@@ -1022,8 +1031,10 @@ class _MyAppState extends State<MyApp> {
       return RemasterNotesScreen(
         notes: notes,
         folders: folders,
-        onNewNote: ({String? folderId}) => _openNewRemasterNote(folderId: folderId),
-        onNewChecklist: ({String? folderId}) => _openNewRemasterNote(checklist: true, folderId: folderId),
+        onNewNote: ({String? folderId}) =>
+            _openNewRemasterNote(folderId: folderId),
+        onNewChecklist: ({String? folderId}) =>
+            _openNewRemasterNote(checklist: true, folderId: folderId),
         // The editor opens the system picker itself; keeping the creation
         // route identical prevents an attachment-only note from being lost.
         onNewImage: ({String? folderId}) =>
@@ -1039,27 +1050,28 @@ class _MyAppState extends State<MyApp> {
       );
     }
     return NotesScreen(
-    notes: notes,
-    embedded: _remasterPreview,
-    onOpenTasks: () => _remasterPreview
-        ? RemasterShell.select(context, AppSpace.tasks)
-        : setState(() => _notesMode = false),
-    onSave: _saveNote,
-    onDelete: _deleteNote,
-    onCreateTask: (note, title) => _quickAddTask(title, sourceNoteId: note.id),
-    onAttach: _attachNoteFile,
-    onDeleteAttachment: _deleteNoteAttachment,
-    onOpenAttachment: _openNoteAttachment,
-    onPermanentlyDelete: (note) async {
-      if (cloudMode && _notesCloudAvailable) {
-        await _noteSync.permanentlyDeleteNote(note);
-      } else {
-        setState(() => notes.removeWhere((item) => item.id == note.id));
-        await _saveLocalNotes();
-      }
-    },
-    syncStatus: _syncStatus,
-  );
+      notes: notes,
+      embedded: _remasterPreview,
+      onOpenTasks: () => _remasterPreview
+          ? RemasterShell.select(context, AppSpace.tasks)
+          : setState(() => _notesMode = false),
+      onSave: _saveNote,
+      onDelete: _deleteNote,
+      onCreateTask: (note, title) =>
+          _quickAddTask(title, sourceNoteId: note.id),
+      onAttach: _attachNoteFile,
+      onDeleteAttachment: _deleteNoteAttachment,
+      onOpenAttachment: _openNoteAttachment,
+      onPermanentlyDelete: (note) async {
+        if (cloudMode && _notesCloudAvailable) {
+          await _noteSync.permanentlyDeleteNote(note);
+        } else {
+          setState(() => notes.removeWhere((item) => item.id == note.id));
+          await _saveLocalNotes();
+        }
+      },
+      syncStatus: _syncStatus,
+    );
   }
 
   Widget _tasksWorkspace(BuildContext context) {
@@ -1101,59 +1113,59 @@ class _MyAppState extends State<MyApp> {
       );
     }
     return TodayScreen(
-    visibleTasks: _todayTasks,
-    embedded: _remasterPreview,
-    laterTasks: _laterTasks,
-    selectedView: _selectedView,
-    onViewChanged: (view) => setState(() {
-      _selectedView = view;
-      if (view != TaskView.today) _statusFilter = 'all';
-    }),
-    themeMode: _themeMode,
-    onThemeModeChanged: _changeThemeMode,
-    successNotice: _successNotice,
-    syncStatus: _syncStatus,
-    searchQuery: _searchQuery,
-    onSearchChanged: (value) => setState(() => _searchQuery = value),
-    selectedFilter: _statusFilter,
-    onFilterChanged: (value) => setState(() => _statusFilter = value),
-    onOpenTask: (task) => _showTaskForm(context, task: task),
-    onCompleteTask: (task) => _changeTaskStatus(task, 'done'),
-    onStatusSelected: (task, status) => _changeTaskStatus(task, status),
-    onDeleteTask: (task) => _confirmDeleteTask(context, task),
-    onPostponeTask: _postponeTask,
-    onQuickAddText: _quickAddTask,
-    onOpenFocus: _openFocusTask,
-    onSignOut: _signOut,
-    pinnedTasks: pinnedTodayTasks(tasks),
-    onTogglePin: _togglePinnedToday,
-    onOpenWeek: () => _navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (routeContext) => WeeklyCalendarScreen(
-          tasks: tasks,
-          initialWeek: DateTime.now(),
-          onOpenTask: (task) => _showTaskForm(routeContext, task: task),
-          onMoveTask: _moveTaskToWeekDay,
-          onQuickAdd: () => _showTaskForm(routeContext),
+      visibleTasks: _todayTasks,
+      embedded: _remasterPreview,
+      laterTasks: _laterTasks,
+      selectedView: _selectedView,
+      onViewChanged: (view) => setState(() {
+        _selectedView = view;
+        if (view != TaskView.today) _statusFilter = 'all';
+      }),
+      themeMode: _themeMode,
+      onThemeModeChanged: _changeThemeMode,
+      successNotice: _successNotice,
+      syncStatus: _syncStatus,
+      searchQuery: _searchQuery,
+      onSearchChanged: (value) => setState(() => _searchQuery = value),
+      selectedFilter: _statusFilter,
+      onFilterChanged: (value) => setState(() => _statusFilter = value),
+      onOpenTask: (task) => _showTaskForm(context, task: task),
+      onCompleteTask: (task) => _changeTaskStatus(task, 'done'),
+      onStatusSelected: (task, status) => _changeTaskStatus(task, status),
+      onDeleteTask: (task) => _confirmDeleteTask(context, task),
+      onPostponeTask: _postponeTask,
+      onQuickAddText: _quickAddTask,
+      onOpenFocus: _openFocusTask,
+      onSignOut: _signOut,
+      pinnedTasks: pinnedTodayTasks(tasks),
+      onTogglePin: _togglePinnedToday,
+      onOpenWeek: () => _navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (routeContext) => WeeklyCalendarScreen(
+            tasks: tasks,
+            initialWeek: DateTime.now(),
+            onOpenTask: (task) => _showTaskForm(routeContext, task: task),
+            onMoveTask: _moveTaskToWeekDay,
+            onQuickAdd: () => _showTaskForm(routeContext),
+          ),
         ),
       ),
-    ),
-    onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (_) => WeeklyReviewScreen(
-          review: buildWeeklyReview(tasks, DateTime.now()),
-          onOpenDailyPlan: () {
-            _navigatorKey.currentState?.pop();
-            setState(() => _selectedView = TaskView.today);
-          },
+      onOpenWeeklyReview: () => _navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => WeeklyReviewScreen(
+            review: buildWeeklyReview(tasks, DateTime.now()),
+            onOpenDailyPlan: () {
+              _navigatorKey.currentState?.pop();
+              setState(() => _selectedView = TaskView.today);
+            },
+          ),
         ),
       ),
-    ),
-    onQuickAdd: () => _showTaskForm(context),
-    onOpenNotes: () => _remasterPreview
-        ? RemasterShell.select(context, AppSpace.notes)
-        : setState(() => _notesMode = true),
-  );
+      onQuickAdd: () => _showTaskForm(context),
+      onOpenNotes: () => _remasterPreview
+          ? RemasterShell.select(context, AppSpace.notes)
+          : setState(() => _notesMode = true),
+    );
   }
 
   @override

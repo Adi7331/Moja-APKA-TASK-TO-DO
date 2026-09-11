@@ -42,6 +42,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('Podgląd nowego interfejsu'), findsOneWidget);
     await tester.tap(find.byTooltip('Podgląd nowego interfejsu'));
     await tester.pumpAndSettle();
     expect(find.byType(RemasterShell), findsOneWidget);

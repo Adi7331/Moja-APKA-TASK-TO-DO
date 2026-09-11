@@ -29,15 +29,21 @@ class TaskDraft {
 Future<void> showTaskEditor(
   BuildContext context, {
   TaskItem? task,
+  bool remastered = false,
   required Future<void> Function(TaskDraft draft) onSave,
 }) {
-  final form = _TaskEditorForm(task: task, onSave: onSave);
+  final form = _TaskEditorForm(
+    task: task,
+    onSave: onSave,
+    remastered: remastered,
+  );
   if (MediaQuery.sizeOf(context).width >= 720) {
     return showDialog<void>(
       context: context,
       builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.all(24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
+          constraints: BoxConstraints(maxWidth: remastered ? 580 : 440),
           child: form,
         ),
       ),
@@ -46,6 +52,8 @@ Future<void> showTaskEditor(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: remastered,
+    useSafeArea: remastered,
     builder: (sheetContext) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
       child: form,
@@ -54,9 +62,14 @@ Future<void> showTaskEditor(
 }
 
 class _TaskEditorForm extends StatefulWidget {
-  const _TaskEditorForm({required this.task, required this.onSave});
+  const _TaskEditorForm({
+    required this.task,
+    required this.onSave,
+    required this.remastered,
+  });
   final TaskItem? task;
   final Future<void> Function(TaskDraft draft) onSave;
+  final bool remastered;
 
   @override
   State<_TaskEditorForm> createState() => _TaskEditorFormState();
@@ -100,16 +113,53 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
   @override
   Widget build(BuildContext context) => SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          key: widget.remastered
+              ? const ValueKey('remaster-task-editor')
+              : null,
+          padding: EdgeInsets.fromLTRB(
+            widget.remastered ? 24 : 20,
+            widget.remastered ? 24 : 20,
+            widget.remastered ? 24 : 20,
+            24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(children: [
+                if (widget.remastered) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.add_task_rounded,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
-                  child: Text(
-                    widget.task == null ? 'Nowe zadanie' : 'Edytuj zadanie',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.task == null ? 'Nowe zadanie' : 'Edytuj zadanie',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      if (widget.remastered) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Następny krok',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 IconButton(
@@ -118,7 +168,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                   icon: const Icon(Icons.close),
                 ),
               ]),
-              const SizedBox(height: 14),
+              const SizedBox(height: 20),
               TextField(
                 key: const ValueKey('task-title-input'),
                 controller: _title,
@@ -245,6 +295,9 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : Icon(widget.task == null ? Icons.add : Icons.save),
                 label: Text(widget.task == null ? 'Dodaj zadanie' : 'Zapisz zmiany'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
               ),
             ],
           ),

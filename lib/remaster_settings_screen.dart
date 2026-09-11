@@ -50,7 +50,10 @@ class RemasterSettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text('Synchronizacja', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Synchronizacja',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 Card(
                   child: ListTile(
@@ -58,8 +61,8 @@ class RemasterSettingsScreen extends StatelessWidget {
                       syncStatus.contains('Błąd')
                           ? Icons.cloud_off_rounded
                           : syncStatus == 'Lokalnie'
-                              ? Icons.offline_pin_outlined
-                              : Icons.cloud_done_outlined,
+                          ? Icons.offline_pin_outlined
+                          : Icons.cloud_done_outlined,
                     ),
                     title: Text(syncStatus),
                     subtitle: Text(
@@ -90,7 +93,10 @@ class RemasterSettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text('Aplikacja', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Aplikacja',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 Card(
                   child: Column(
@@ -98,14 +104,25 @@ class RemasterSettingsScreen extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.history_rounded),
                         title: const Text('Wróć do poprzedniego wyglądu'),
-                        subtitle: const Text('Nowy interfejs możesz ponownie włączyć później.'),
-                        onTap: onLegacy,
+                        subtitle: const Text(
+                          'Nowy interfejs możesz ponownie włączyć później.',
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          onLegacy();
+                        },
                       ),
                       if (onSignOut != null) ...[
                         Divider(height: 1, color: scheme.outlineVariant),
                         ListTile(
-                          leading: Icon(Icons.logout_rounded, color: scheme.error),
-                          title: Text('Wyloguj się', style: TextStyle(color: scheme.error)),
+                          leading: Icon(
+                            Icons.logout_rounded,
+                            color: scheme.error,
+                          ),
+                          title: Text(
+                            'Wyloguj się',
+                            style: TextStyle(color: scheme.error),
+                          ),
                           onTap: onSignOut,
                         ),
                       ],
@@ -133,10 +150,14 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial = (name?.trim().isNotEmpty ?? false) ? name!.trim()[0].toUpperCase() : '?';
+    final initial = (name?.trim().isNotEmpty ?? false)
+        ? name!.trim()[0].toUpperCase()
+        : '?';
     return CircleAvatar(
       radius: 24,
-      foregroundImage: avatarUrl == null || avatarUrl!.isEmpty ? null : NetworkImage(avatarUrl!),
+      foregroundImage: avatarUrl == null || avatarUrl!.isEmpty
+          ? null
+          : NetworkImage(avatarUrl!),
       child: Text(initial),
     );
   }

@@ -58,26 +58,30 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
 
   List<NoteItem> get _notes {
     final query = _query.trim().toLowerCase();
-    final result = widget.notes.where((note) {
-      final section = switch (_section) {
-        _NoteSection.notes => !note.isArchived && !note.isDeleted,
-        _NoteSection.reminders => note.reminderAt != null && !note.isArchived && !note.isDeleted,
-        _NoteSection.archive => note.isArchived && !note.isDeleted,
-        _NoteSection.trash => note.isDeleted,
-      };
-      final text = '${note.title} ${note.previewText} ${note.labels.join(' ')}'.toLowerCase();
-      return section &&
-          (_folderId == null || note.folderId == _folderId) &&
-          (query.isEmpty || text.contains(query));
-    }).toList()
-      ..sort((a, b) {
-        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-        return b.updatedAt.compareTo(a.updatedAt);
-      });
+    final result =
+        widget.notes.where((note) {
+          final section = switch (_section) {
+            _NoteSection.notes => !note.isArchived && !note.isDeleted,
+            _NoteSection.reminders =>
+              note.reminderAt != null && !note.isArchived && !note.isDeleted,
+            _NoteSection.archive => note.isArchived && !note.isDeleted,
+            _NoteSection.trash => note.isDeleted,
+          };
+          final text =
+              '${note.title} ${note.previewText} ${note.labels.join(' ')}'
+                  .toLowerCase();
+          return section &&
+              (_folderId == null || note.folderId == _folderId) &&
+              (query.isEmpty || text.contains(query));
+        }).toList()..sort((a, b) {
+          if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+          return b.updatedAt.compareTo(a.updatedAt);
+        });
     return result;
   }
 
-  NoteItem? get _selected => _notes.where((note) => note.id == _selectedNoteId).firstOrNull;
+  NoteItem? get _selected =>
+      _notes.where((note) => note.id == _selectedNoteId).firstOrNull;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +115,10 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
         return Row(
           children: [
             Expanded(child: content),
-            Container(width: 1, color: Theme.of(context).colorScheme.outlineVariant),
+            Container(
+              width: 1,
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
             SizedBox(
               width: 348,
               child: _NotePreview(note: _selected, onOpen: widget.onOpenNote),
@@ -178,39 +185,58 @@ class _NotesGrid extends StatelessWidget {
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 14),
         sliver: SliverToBoxAdapter(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Notatki', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 18),
-            TextField(
-              controller: search,
-              onChanged: onQueryChanged,
-              decoration: const InputDecoration(hintText: 'Szukaj w notatkach', prefixIcon: Icon(Icons.search_rounded)),
-            ),
-            const SizedBox(height: 12),
-            _Composer(
-              selectedFolderId: selectedFolderId,
-              onNewNote: onNewNote,
-              onNewChecklist: onNewChecklist,
-              onNewImage: onNewImage,
-              onNewFile: onNewFile,
-            ),
-            const SizedBox(height: 16),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: _NoteSection.values.map((item) => Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(label: Text(_sectionLabel(item)), selected: section == item, onSelected: (_) => onSectionChanged(item)),
-              )).toList()),
-            ),
-            const SizedBox(height: 12),
-            _FolderStrip(
-              folders: folders,
-              selectedFolderId: selectedFolderId,
-              onSelected: onFolderChanged,
-              onCreate: onCreateFolder,
-              onDelete: onDeleteFolder,
-            ),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Notatki',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: search,
+                onChanged: onQueryChanged,
+                decoration: const InputDecoration(
+                  hintText: 'Szukaj w notatkach',
+                  prefixIcon: Icon(Icons.search_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _Composer(
+                selectedFolderId: selectedFolderId,
+                onNewNote: onNewNote,
+                onNewChecklist: onNewChecklist,
+                onNewImage: onNewImage,
+                onNewFile: onNewFile,
+              ),
+              const SizedBox(height: 16),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _NoteSection.values
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(_sectionLabel(item)),
+                            selected: section == item,
+                            onSelected: (_) => onSectionChanged(item),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _FolderStrip(
+                folders: folders,
+                selectedFolderId: selectedFolderId,
+                onSelected: onFolderChanged,
+                onCreate: onCreateFolder,
+                onDelete: onDeleteFolder,
+              ),
+            ],
+          ),
         ),
       ),
       if (notes.isEmpty)
@@ -223,29 +249,49 @@ class _NotesGrid extends StatelessWidget {
         if (notes.any((note) => note.pinned))
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-            sliver: SliverToBoxAdapter(child: Text('PRZYPIĘTE', style: Theme.of(context).textTheme.labelMedium?.copyWith(letterSpacing: 1.1))),
+            sliver: SliverToBoxAdapter(
+              child: Text(
+                'PRZYPIĘTE',
+                style: Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(letterSpacing: 1.1),
+              ),
+            ),
           ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
           sliver: SliverToBoxAdapter(
-            child: LayoutBuilder(builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 560 ? 2 : 1;
-              final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: notes.map((note) => SizedBox(width: width, child: _NoteCard(
-                  note: note,
-                  selected: note.id == selectedId,
-                  onSelect: () => onSelect(note),
-                  onOpen: () => onOpen(note),
-                  onSave: onSave,
-                  onDelete: onDelete,
-                  folders: folders,
-                  onMoveToFolder: onMoveToFolder,
-                ))).toList(),
-              );
-            }),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 900
+                    ? 3
+                    : constraints.maxWidth >= 560
+                    ? 2
+                    : 1;
+                final width =
+                    (constraints.maxWidth - (columns - 1) * 12) / columns;
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: notes
+                      .map(
+                        (note) => SizedBox(
+                          width: width,
+                          child: _NoteCard(
+                            note: note,
+                            selected: note.id == selectedId,
+                            onSelect: () => onSelect(note),
+                            onOpen: () => onOpen(note),
+                            onSave: onSave,
+                            onDelete: onDelete,
+                            folders: folders,
+                            onMoveToFolder: onMoveToFolder,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -270,53 +316,44 @@ class _FolderStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
-    child: Row(children: [
-      ChoiceChip(
-        label: const Text('Wszystkie foldery'),
-        selected: selectedFolderId == null,
-        onSelected: (_) => onSelected(null),
-      ),
-      ...folders.map((folder) => Padding(
-        padding: const EdgeInsets.only(left: 8),
-        child: InputChip(
-          label: Text(folder.name),
-          selected: selectedFolderId == folder.id,
-          onPressed: () => onSelected(folder.id),
-          onDeleted: onDelete == null ? null : () => _confirmDelete(context, folder),
+    child: Row(
+      children: [
+        ChoiceChip(
+          label: const Text('Wszystkie foldery'),
+          selected: selectedFolderId == null,
+          onSelected: (_) => onSelected(null),
         ),
-      )),
-      if (onCreate != null) Padding(
-        padding: const EdgeInsets.only(left: 8),
-        child: ActionChip(
-          avatar: const Icon(Icons.create_new_folder_outlined, size: 18),
-          label: const Text('Folder'),
-          onPressed: () => _create(context),
+        ...folders.map(
+          (folder) => Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: InputChip(
+              label: Text(folder.name),
+              selected: selectedFolderId == folder.id,
+              onPressed: () => onSelected(folder.id),
+              onDeleted: onDelete == null
+                  ? null
+                  : () => _confirmDelete(context, folder),
+            ),
+          ),
         ),
-      ),
-    ]),
+        if (onCreate != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: ActionChip(
+              avatar: const Icon(Icons.create_new_folder_outlined, size: 18),
+              label: const Text('Folder'),
+              onPressed: () => _create(context),
+            ),
+          ),
+      ],
+    ),
   );
 
   Future<void> _create(BuildContext context) async {
-    final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nowy folder'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 80,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (value) => Navigator.pop(context, value),
-          decoration: const InputDecoration(hintText: 'Np. Praca'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Anuluj')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Utwórz')),
-        ],
-      ),
+      builder: (_) => const _CreateFolderDialog(),
     );
-    controller.dispose();
     if (name?.trim().isEmpty ?? true) return;
     await onCreate!(name!.trim());
   }
@@ -326,10 +363,18 @@ class _FolderStrip extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Usunąć folder „${folder.name}”?'),
-        content: const Text('Notatki zostaną zachowane w sekcji „Bez folderu”.'),
+        content: const Text(
+          'Notatki zostaną zachowane w sekcji „Bez folderu”.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Anuluj')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Usuń folder')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Usuń folder'),
+          ),
         ],
       ),
     );
@@ -337,8 +382,66 @@ class _FolderStrip extends StatelessWidget {
   }
 }
 
+/// Owns its controller for the full lifetime of the modal route.
+///
+/// The route can remain mounted during its closing animation, so disposing a
+/// controller in the caller immediately after [showDialog] returns makes the
+/// still-visible [TextField] subscribe to an already disposed controller.
+class _CreateFolderDialog extends StatefulWidget {
+  const _CreateFolderDialog();
+
+  @override
+  State<_CreateFolderDialog> createState() => _CreateFolderDialogState();
+}
+
+class _CreateFolderDialogState extends State<_CreateFolderDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop((value ?? _controller.text).trim());
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Nowy folder'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      maxLength: 80,
+      textInputAction: TextInputAction.done,
+      onSubmitted: _submit,
+      decoration: const InputDecoration(hintText: 'Np. Praca'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Anuluj'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Utwórz')),
+    ],
+  );
+}
+
 class _Composer extends StatelessWidget {
-  const _Composer({required this.selectedFolderId, required this.onNewNote, required this.onNewChecklist, required this.onNewImage, required this.onNewFile});
+  const _Composer({
+    required this.selectedFolderId,
+    required this.onNewNote,
+    required this.onNewChecklist,
+    required this.onNewImage,
+    required this.onNewFile,
+  });
   final String? selectedFolderId;
   final NewRemasterNote onNewNote;
   final NewRemasterNote? onNewChecklist;
@@ -355,13 +458,37 @@ class _Composer extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 6, 8),
-          child: Row(children: [
-            const Expanded(child: Text('Utwórz notatkę…')),
-            IconButton(tooltip: 'Utwórz checklistę', onPressed: onNewChecklist == null ? null : () => onNewChecklist!(folderId: selectedFolderId), icon: const Icon(Icons.check_box_outlined)),
-            IconButton(tooltip: 'Dodaj zdjęcie do notatki', onPressed: onNewImage == null ? null : () => onNewImage!(folderId: selectedFolderId), icon: const Icon(Icons.image_outlined)),
-            IconButton(tooltip: 'Dodaj plik do notatki', onPressed: onNewFile == null ? null : () => onNewFile!(folderId: selectedFolderId), icon: const Icon(Icons.attach_file_rounded)),
-            IconButton(tooltip: 'Utwórz notatkę', onPressed: () => onNewNote(folderId: selectedFolderId), icon: const Icon(Icons.add_rounded)),
-          ]),
+          child: Row(
+            children: [
+              const Expanded(child: Text('Utwórz notatkę…')),
+              IconButton(
+                tooltip: 'Utwórz checklistę',
+                onPressed: onNewChecklist == null
+                    ? null
+                    : () => onNewChecklist!(folderId: selectedFolderId),
+                icon: const Icon(Icons.check_box_outlined),
+              ),
+              IconButton(
+                tooltip: 'Dodaj zdjęcie do notatki',
+                onPressed: onNewImage == null
+                    ? null
+                    : () => onNewImage!(folderId: selectedFolderId),
+                icon: const Icon(Icons.image_outlined),
+              ),
+              IconButton(
+                tooltip: 'Dodaj plik do notatki',
+                onPressed: onNewFile == null
+                    ? null
+                    : () => onNewFile!(folderId: selectedFolderId),
+                icon: const Icon(Icons.attach_file_rounded),
+              ),
+              IconButton(
+                tooltip: 'Utwórz notatkę',
+                onPressed: () => onNewNote(folderId: selectedFolderId),
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -369,7 +496,16 @@ class _Composer extends StatelessWidget {
 }
 
 class _NoteCard extends StatelessWidget {
-  const _NoteCard({required this.note, required this.selected, required this.onSelect, required this.onOpen, required this.onSave, required this.onDelete, required this.folders, this.onMoveToFolder});
+  const _NoteCard({
+    required this.note,
+    required this.selected,
+    required this.onSelect,
+    required this.onOpen,
+    required this.onSave,
+    required this.onDelete,
+    required this.folders,
+    this.onMoveToFolder,
+  });
   final NoteItem note;
   final bool selected;
   final VoidCallback onSelect;
@@ -397,45 +533,112 @@ class _NoteCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(child: Text(note.title.isEmpty ? 'Bez tytułu' : note.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium)),
-                IconButton(
-                  tooltip: note.pinned ? 'Odepnij notatkę' : 'Przypnij notatkę',
-                  onPressed: () => onSave(note.copyWith(pinned: !note.pinned, updatedAt: DateTime.now())),
-                  icon: Icon(note.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        note.title.isEmpty ? 'Bez tytułu' : note.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: note.pinned
+                          ? 'Odepnij notatkę'
+                          : 'Przypnij notatkę',
+                      onPressed: () => onSave(
+                        note.copyWith(
+                          pinned: !note.pinned,
+                          updatedAt: DateTime.now(),
+                        ),
+                      ),
+                      icon: Icon(
+                        note.pinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                      ),
+                    ),
+                  ],
                 ),
-              ]),
-              if (preview.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(preview, maxLines: 5, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
-              ],
-              if (note.checklistTotal > 0) ...[
-                const SizedBox(height: 14),
-                Text('${note.checklistDone} z ${note.checklistTotal} ukończone', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(value: note.checklistDone / note.checklistTotal, minHeight: 4, borderRadius: BorderRadius.circular(99)),
-              ],
-              if (note.labels.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(spacing: 6, runSpacing: 6, children: note.labels.take(3).map((label) => Chip(label: Text(label), visualDensity: VisualDensity.compact)).toList()),
-              ],
-              const SizedBox(height: 6),
-              Row(children: [
-                IconButton(tooltip: 'Edytuj notatkę', onPressed: onOpen, icon: const Icon(Icons.edit_outlined)),
-                if (onMoveToFolder != null)
-                  PopupMenuButton<String?>(
-                    tooltip: 'Przenieś do folderu',
-                    onSelected: (folderId) => onMoveToFolder!(note, folderId),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: null, child: Text('Bez folderu')),
-                      ...folders.map((folder) => PopupMenuItem(value: folder.id, child: Text(folder.name))),
-                    ],
-                    icon: const Icon(Icons.folder_outlined),
+                if (preview.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    preview,
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                IconButton(tooltip: 'Usuń notatkę', onPressed: () => onDelete(note), icon: const Icon(Icons.delete_outline_rounded)),
-              ]),
-            ]),
+                ],
+                if (note.checklistTotal > 0) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    '${note.checklistDone} z ${note.checklistTotal} ukończone',
+                    style: Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: note.checklistDone / note.checklistTotal,
+                    minHeight: 4,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ],
+                if (note.labels.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: note.labels
+                        .take(3)
+                        .map(
+                          (label) => Chip(
+                            label: Text(label),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Edytuj notatkę',
+                      onPressed: onOpen,
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    if (onMoveToFolder != null)
+                      PopupMenuButton<String?>(
+                        tooltip: 'Przenieś do folderu',
+                        onSelected: (folderId) =>
+                            onMoveToFolder!(note, folderId),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: null,
+                            child: Text('Bez folderu'),
+                          ),
+                          ...folders.map(
+                            (folder) => PopupMenuItem(
+                              value: folder.id,
+                              child: Text(folder.name),
+                            ),
+                          ),
+                        ],
+                        icon: const Icon(Icons.folder_outlined),
+                      ),
+                    IconButton(
+                      tooltip: 'Usuń notatkę',
+                      onPressed: () => onDelete(note),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -450,18 +653,47 @@ class _NotePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = note;
-    if (current == null) return Center(child: Text('Wybierz notatkę', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
+    if (current == null) {
+      return Center(
+        child: Text(
+          'Wybierz notatkę',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.all(24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('PODGLĄD', style: Theme.of(context).textTheme.labelMedium?.copyWith(letterSpacing: 1.1, color: Theme.of(context).colorScheme.primary)),
-        const SizedBox(height: 16),
-        Text(current.title.isEmpty ? 'Bez tytułu' : current.title, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 12),
-        Text(current.previewText, maxLines: 12, overflow: TextOverflow.ellipsis),
-        const Spacer(),
-        FilledButton.tonalIcon(onPressed: () => onOpen(current), icon: const Icon(Icons.edit_outlined), label: const Text('Otwórz edytor')),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PODGLĄD',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              letterSpacing: 1.1,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            current.title.isEmpty ? 'Bez tytułu' : current.title,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            current.previewText,
+            maxLines: 12,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const Spacer(),
+          FilledButton.tonalIcon(
+            onPressed: () => onOpen(current),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('Otwórz edytor'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -473,15 +705,31 @@ class _EmptyNotes extends StatelessWidget {
   Widget build(BuildContext context) => Center(
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 72, horizontal: 24),
-      child: Column(children: [
-        Icon(Icons.lightbulb_outline_rounded, size: 42, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 16),
-        Text('Nie masz jeszcze notatek', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        const Text('Zapisz myśl, listę albo plan. Wrócisz do niej na każdym urządzeniu.', textAlign: TextAlign.center),
-        const SizedBox(height: 20),
-        FilledButton.icon(onPressed: onNewNote, icon: const Icon(Icons.add), label: const Text('Utwórz notatkę')),
-      ]),
+      child: Column(
+        children: [
+          Icon(
+            Icons.lightbulb_outline_rounded,
+            size: 42,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Nie masz jeszcze notatek',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Zapisz myśl, listę albo plan. Wrócisz do niej na każdym urządzeniu.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: onNewNote,
+            icon: const Icon(Icons.add),
+            label: const Text('Utwórz notatkę'),
+          ),
+        ],
+      ),
     ),
   );
 }
