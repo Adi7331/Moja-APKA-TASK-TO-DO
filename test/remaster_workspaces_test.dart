@@ -288,6 +288,71 @@ void main() {
     expect(saved?.isArchived, isTrue);
   });
 
+  testWidgets('a trashed note can be restored directly from the trash view', (
+    tester,
+  ) async {
+    NoteItem? saved;
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(
+              id: 'note-1',
+              title: 'Rachunki',
+              deletedAt: DateTime(2026, 9, 11),
+            ),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (note) async => saved = note,
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Kosz'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Przywróć notatkę z kosza'));
+    await tester.pump();
+
+    expect(saved?.isDeleted, isFalse);
+  });
+
+  testWidgets('a trashed note requires confirmation before permanent deletion', (
+    tester,
+  ) async {
+    var permanentlyDeleted = false;
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(
+              id: 'note-1',
+              title: 'Rachunki',
+              deletedAt: DateTime(2026, 9, 11),
+            ),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+          onPermanentlyDelete: (_) async => permanentlyDeleted = true,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Kosz'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Usuń notatkę trwale'));
+    await tester.pumpAndSettle();
+    expect(find.text('Usunąć notatkę trwale?'), findsOneWidget);
+
+    await tester.tap(find.text('Usuń trwale'));
+    await tester.pumpAndSettle();
+
+    expect(permanentlyDeleted, isTrue);
+  });
+
   testWidgets('pinned notes and remaining notes have separate sections', (
     tester,
   ) async {

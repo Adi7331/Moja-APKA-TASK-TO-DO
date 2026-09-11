@@ -24,6 +24,7 @@ class RemasterNotesScreen extends StatefulWidget {
     required this.onOpenNote,
     required this.onSave,
     required this.onDelete,
+    this.onPermanentlyDelete,
     this.onNewChecklist,
     this.onNewImage,
     this.onNewFile,
@@ -39,6 +40,7 @@ class RemasterNotesScreen extends StatefulWidget {
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
+  final Future<void> Function(NoteItem)? onPermanentlyDelete;
   final NewRemasterNote? onNewChecklist;
   final NewRemasterNote? onNewImage;
   final NewRemasterNote? onNewFile;
@@ -134,6 +136,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           onOpen: widget.onOpenNote,
           onSave: widget.onSave,
           onDelete: widget.onDelete,
+          onPermanentlyDelete: widget.onPermanentlyDelete,
           onMoveToFolder: widget.onMoveToFolder,
           onCreateFolder: widget.onCreateFolder,
           onRenameFolder: widget.onRenameFolder,
@@ -184,6 +187,7 @@ class _NotesGrid extends StatelessWidget {
     required this.onOpen,
     required this.onSave,
     required this.onDelete,
+    this.onPermanentlyDelete,
     this.onMoveToFolder,
     this.onCreateFolder,
     this.onRenameFolder,
@@ -211,6 +215,7 @@ class _NotesGrid extends StatelessWidget {
   final ValueChanged<NoteItem> onOpen;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
+  final Future<void> Function(NoteItem)? onPermanentlyDelete;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
   final SaveRemasterFolder? onCreateFolder;
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
@@ -309,6 +314,7 @@ class _NotesGrid extends StatelessWidget {
             onOpen: onOpen,
             onSave: onSave,
             onDelete: onDelete,
+            onPermanentlyDelete: onPermanentlyDelete,
             onMoveToFolder: onMoveToFolder,
           ),
         ],
@@ -333,6 +339,7 @@ class _NotesGrid extends StatelessWidget {
             onOpen: onOpen,
             onSave: onSave,
             onDelete: onDelete,
+            onPermanentlyDelete: onPermanentlyDelete,
             onMoveToFolder: onMoveToFolder,
           ),
         ],
@@ -351,6 +358,7 @@ class _NoteCards extends StatelessWidget {
     required this.onOpen,
     required this.onSave,
     required this.onDelete,
+    this.onPermanentlyDelete,
     this.onMoveToFolder,
   });
 
@@ -362,6 +370,7 @@ class _NoteCards extends StatelessWidget {
   final ValueChanged<NoteItem> onOpen;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
+  final Future<void> Function(NoteItem)? onPermanentlyDelete;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
 
   @override
@@ -391,6 +400,7 @@ class _NoteCards extends StatelessWidget {
                       onOpen: () => onOpen(note),
                       onSave: onSave,
                       onDelete: onDelete,
+                      onPermanentlyDelete: onPermanentlyDelete,
                       folders: folders,
                       onMoveToFolder: onMoveToFolder,
                     ),
@@ -799,6 +809,7 @@ class _NoteCard extends StatelessWidget {
     required this.onOpen,
     required this.onSave,
     required this.onDelete,
+    this.onPermanentlyDelete,
     required this.folders,
     this.onMoveToFolder,
   });
@@ -809,6 +820,32 @@ class _NoteCard extends StatelessWidget {
   final VoidCallback onOpen;
   final Future<void> Function(NoteItem) onSave;
   final Future<void> Function(NoteItem) onDelete;
+  final Future<void> Function(NoteItem)? onPermanentlyDelete;
+
+  Future<void> _requestDelete(BuildContext context) async {
+    if (!note.isDeleted || onPermanentlyDelete == null) {
+      await onDelete(note);
+      return;
+    }
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Usunąć notatkę trwale?'),
+        content: const Text('Tej operacji nie można cofnąć.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Usuń trwale'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true) await onPermanentlyDelete!(note);
+  }
   final List<NoteFolder> folders;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
   @override
@@ -955,17 +992,26 @@ class _NoteCard extends StatelessWidget {
                       icon: const Icon(Icons.edit_outlined),
                     ),
                     IconButton(
-                      tooltip: note.isArchived
+                      tooltip: note.isDeleted
+                          ? 'Przywróć notatkę z kosza'
+                          : note.isArchived
                           ? 'Przywróć z archiwum'
                           : 'Archiwizuj notatkę',
                       onPressed: () => onSave(
                         note.copyWith(
-                          archivedAt: note.isArchived ? null : DateTime.now(),
+                          archivedAt: note.isDeleted
+                              ? note.archivedAt
+                              : note.isArchived
+                              ? null
+                              : DateTime.now(),
+                          deletedAt: note.isDeleted ? null : note.deletedAt,
                           updatedAt: DateTime.now(),
                         ),
                       ),
                       icon: Icon(
-                        note.isArchived
+                        note.isDeleted
+                            ? Icons.restore_from_trash_outlined
+                            : note.isArchived
                             ? Icons.unarchive_outlined
                             : Icons.archive_outlined,
                       ),
@@ -990,8 +1036,10 @@ class _NoteCard extends StatelessWidget {
                         icon: const Icon(Icons.folder_outlined),
                       ),
                     IconButton(
-                      tooltip: 'Usuń notatkę',
-                      onPressed: () => onDelete(note),
+                      tooltip: note.isDeleted && onPermanentlyDelete != null
+                          ? 'Usuń notatkę trwale'
+                          : 'Usuń notatkę',
+                      onPressed: () => _requestDelete(context),
                       icon: const Icon(Icons.delete_outline_rounded),
                     ),
                   ],

@@ -549,6 +549,16 @@ class _MyAppState extends State<MyApp> {
     await _saveNote(trashed);
   }
 
+  Future<void> _permanentlyDeleteNote(NoteItem note) async {
+    if (cloudMode && _notesCloudAvailable) {
+      await _noteSync.permanentlyDeleteNote(note);
+      await _loadCloudNotes();
+      return;
+    }
+    setState(() => notes.removeWhere((item) => item.id == note.id));
+    await _saveLocalNotes();
+  }
+
   Future<void> _showTaskForm(BuildContext context, {TaskItem? task}) async {
     final modalContext = _navigatorKey.currentContext;
     if (modalContext == null) return;
@@ -1062,6 +1072,7 @@ class _MyAppState extends State<MyApp> {
         onOpenNote: _openStartNote,
         onSave: _saveNote,
         onDelete: _deleteNote,
+        onPermanentlyDelete: _permanentlyDeleteNote,
         onMoveToFolder: _moveNoteToFolder,
         onCreateFolder: _createFolder,
         onRenameFolder: _renameFolder,
@@ -1081,14 +1092,7 @@ class _MyAppState extends State<MyApp> {
       onAttach: _attachNoteFile,
       onDeleteAttachment: _deleteNoteAttachment,
       onOpenAttachment: _openNoteAttachment,
-      onPermanentlyDelete: (note) async {
-        if (cloudMode && _notesCloudAvailable) {
-          await _noteSync.permanentlyDeleteNote(note);
-        } else {
-          setState(() => notes.removeWhere((item) => item.id == note.id));
-          await _saveLocalNotes();
-        }
-      },
+      onPermanentlyDelete: _permanentlyDeleteNote,
       syncStatus: _syncStatus,
     );
   }
