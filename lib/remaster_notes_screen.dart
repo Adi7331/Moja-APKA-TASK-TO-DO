@@ -226,22 +226,18 @@ class _NotesGrid extends StatelessWidget {
                 onNewFile: onNewFile,
               ),
               const SizedBox(height: 16),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _NoteSection.values
-                      .map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(_sectionLabel(item)),
-                            selected: section == item,
-                            onSelected: (_) => onSectionChanged(item),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _NoteSection.values
+                    .map(
+                      (item) => ChoiceChip(
+                        label: Text(_sectionLabel(item)),
+                        selected: section == item,
+                        onSelected: (_) => onSectionChanged(item),
+                      ),
+                    )
+                    .toList(),
               ),
               const SizedBox(height: 12),
               _FolderStrip(

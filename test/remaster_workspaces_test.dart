@@ -230,6 +230,44 @@ void main() {
     }
   });
 
+  testWidgets('note section filters wrap at 200 percent phone text size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: SizedBox(
+          key: const ValueKey('large-text-phone-viewport'),
+          width: 390,
+          height: 844,
+          child: Scaffold(
+            body: RemasterNotesScreen(
+              notes: const <NoteItem>[],
+              onNewNote: ({String? folderId}) {},
+              onOpenNote: (_) {},
+              onSave: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('large-text-phone-viewport')),
+    );
+    for (final label in ['Notatki', 'Przypomnienia', 'Archiwum', 'Kosz']) {
+      expect(
+        tester.getRect(find.text(label).last).right,
+        lessThanOrEqualTo(viewport.right),
+      );
+    }
+  });
+
   testWidgets('note search also finds notes by their folder name', (
     tester,
   ) async {
