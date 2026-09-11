@@ -52,7 +52,9 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
 
   List<TaskItem> get _tasks {
     final normalized = _query.trim().toLowerCase();
-    return tasksForView(widget.tasks, _activeView, DateTime.now()).where((task) {
+    return tasksForView(widget.tasks, _activeView, DateTime.now()).where((
+      task,
+    ) {
       return normalized.isEmpty ||
           task.title.toLowerCase().contains(normalized) ||
           task.note.toLowerCase().contains(normalized) ||
@@ -63,7 +65,8 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
   TaskItem? get _selected {
     final id = _selectedTaskId;
     if (id == null) return _tasks.firstOrNull;
-    return _tasks.where((task) => task.id == id).firstOrNull ?? _tasks.firstOrNull;
+    return _tasks.where((task) => task.id == id).firstOrNull ??
+        _tasks.firstOrNull;
   }
 
   void _setView(TaskView view) {
@@ -170,7 +173,10 @@ class _TaskList extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text('Zadania', style: Theme.of(context).textTheme.headlineMedium),
+                      child: Text(
+                        'Zadania',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
                     ),
                     IconButton(
                       tooltip: 'Widok tygodnia',
@@ -199,14 +205,16 @@ class _TaskList extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: TaskView.values
-                        .map((view) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                label: Text(_viewTitle(view)),
-                                selected: activeView == view,
-                                onSelected: (_) => onViewChanged(view),
-                              ),
-                            ))
+                        .map(
+                          (view) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(_viewTitle(view)),
+                              selected: activeView == view,
+                              onSelected: (_) => onViewChanged(view),
+                            ),
+                          ),
+                        )
                         .toList(),
                   ),
                 ),
@@ -226,7 +234,8 @@ class _TaskList extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
                           '${tasks.length} ${tasks.length == 1 ? 'zadanie' : 'zadań'}',
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: scheme.onSurfaceVariant),
                         ),
                       );
                     }
@@ -236,7 +245,8 @@ class _TaskList extends StatelessWidget {
                       selected: task.id == selectedTaskId,
                       onSelect: () => onSelect(task),
                       onOpen: () => onOpen(task),
-                      onStatusSelected: (status) => onStatusSelected(task, status),
+                      onStatusSelected: (status) =>
+                          onStatusSelected(task, status),
                       onPostpone: () => onPostpone(task),
                       onDelete: () => onDelete(task),
                     );
@@ -271,97 +281,151 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      button: true,
-      label: 'Zadanie ${task.title}',
-      child: Material(
-        color: selected ? scheme.primaryContainer.withValues(alpha: .55) : scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: onSelect,
-          onDoubleTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                IconButton(
-                  tooltip: task.isDone ? 'Przywróć zadanie' : 'Ukończ zadanie',
-                  onPressed: () => onStatusSelected(task.isDone ? 'todo' : 'done'),
-                  icon: Icon(task.isDone ? Icons.check_circle_rounded : Icons.circle_outlined),
-                  color: task.isDone ? scheme.primary : scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: onOpen,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            task.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  decoration: task.isDone ? TextDecoration.lineThrough : null,
-                                ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            _taskMeta(task),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                _TaskStatusButton(
-                  tooltip: 'Oznacz jako do zrobienia',
-                  icon: Icons.radio_button_unchecked_rounded,
-                  selected: task.status == 'todo',
-                  onPressed: () => onStatusSelected('todo'),
-                ),
-                _TaskStatusButton(
-                  tooltip: 'Oznacz jako w trakcie',
-                  icon: Icons.timelapse_rounded,
-                  selected: task.status == 'doing',
-                  onPressed: () => onStatusSelected('doing'),
-                ),
-                _TaskStatusButton(
-                  tooltip: 'Oznacz jako gotowe',
-                  icon: Icons.check_circle_outline_rounded,
-                  selected: task.status == 'done',
-                  onPressed: () => onStatusSelected('done'),
-                ),
-                IconButton(
-                  tooltip: 'Odłóż zadanie',
-                  onPressed: onPostpone,
-                  icon: const Icon(Icons.snooze_rounded),
-                ),
-                IconButton(
-                  tooltip: 'Usuń zadanie',
-                  onPressed: onDelete,
-                  color: scheme.onSurfaceVariant,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-              ],
+    final actions = [
+      _TaskStatusButton(
+        tooltip: 'Oznacz jako do zrobienia',
+        icon: Icons.radio_button_unchecked_rounded,
+        selected: task.status == 'todo',
+        onPressed: () => onStatusSelected('todo'),
+      ),
+      _TaskStatusButton(
+        tooltip: 'Oznacz jako w trakcie',
+        icon: Icons.timelapse_rounded,
+        selected: task.status == 'doing',
+        onPressed: () => onStatusSelected('doing'),
+      ),
+      _TaskStatusButton(
+        tooltip: 'Oznacz jako gotowe',
+        icon: Icons.check_circle_outline_rounded,
+        selected: task.status == 'done',
+        onPressed: () => onStatusSelected('done'),
+      ),
+      IconButton(
+        tooltip: 'Odłóż zadanie',
+        onPressed: onPostpone,
+        icon: const Icon(Icons.snooze_rounded),
+      ),
+      IconButton(
+        tooltip: 'Usuń zadanie',
+        onPressed: onDelete,
+        color: scheme.onSurfaceVariant,
+        icon: const Icon(Icons.delete_outline_rounded),
+      ),
+    ];
+    final title = InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              task.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                decoration: task.isDone ? TextDecoration.lineThrough : null,
+              ),
             ),
-          ),
+            const SizedBox(height: 3),
+            Text(
+              _taskMeta(task),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
         ),
       ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        return Semantics(
+          button: true,
+          label: 'Zadanie ${task.title}',
+          child: Material(
+            color: selected
+                ? scheme.primaryContainer.withValues(alpha: .55)
+                : scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: onSelect,
+              onDoubleTap: onOpen,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                child: compact
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                tooltip: task.isDone
+                                    ? 'Przywróć zadanie'
+                                    : 'Ukończ zadanie',
+                                onPressed: () => onStatusSelected(
+                                  task.isDone ? 'todo' : 'done',
+                                ),
+                                icon: Icon(
+                                  task.isDone
+                                      ? Icons.check_circle_rounded
+                                      : Icons.circle_outlined,
+                                ),
+                                color: task.isDone
+                                    ? scheme.primary
+                                    : scheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: title),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(spacing: 8, runSpacing: 8, children: actions),
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            tooltip: task.isDone
+                                ? 'Przywróć zadanie'
+                                : 'Ukończ zadanie',
+                            onPressed: () =>
+                                onStatusSelected(task.isDone ? 'todo' : 'done'),
+                            icon: Icon(
+                              task.isDone
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                            ),
+                            color: task.isDone
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(child: title),
+                          ...actions,
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
 class _TaskStatusButton extends StatelessWidget {
-  const _TaskStatusButton({required this.tooltip, required this.icon, required this.selected, required this.onPressed});
+  const _TaskStatusButton({
+    required this.tooltip,
+    required this.icon,
+    required this.selected,
+    required this.onPressed,
+  });
   final String tooltip;
   final IconData icon;
   final bool selected;
@@ -374,8 +438,12 @@ class _TaskStatusButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: selected ? scheme.primaryContainer : Colors.transparent,
-        foregroundColor: selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+        backgroundColor: selected
+            ? scheme.primaryContainer
+            : Colors.transparent,
+        foregroundColor: selected
+            ? scheme.onPrimaryContainer
+            : scheme.onSurfaceVariant,
       ),
       icon: Icon(icon),
     );
@@ -383,7 +451,13 @@ class _TaskStatusButton extends StatelessWidget {
 }
 
 class _TaskInspector extends StatelessWidget {
-  const _TaskInspector({required this.task, required this.onOpen, required this.onStatusSelected, required this.onPostpone, required this.onDelete});
+  const _TaskInspector({
+    required this.task,
+    required this.onOpen,
+    required this.onStatusSelected,
+    required this.onPostpone,
+    required this.onDelete,
+  });
   final TaskItem? task;
   final ValueChanged<TaskItem> onOpen;
   final void Function(TaskItem task, String status) onStatusSelected;
@@ -395,18 +469,30 @@ class _TaskInspector extends StatelessWidget {
     final current = task;
     final scheme = Theme.of(context).colorScheme;
     if (current == null) {
-      return Center(child: Text('Wybierz zadanie', style: TextStyle(color: scheme.onSurfaceVariant)));
+      return Center(
+        child: Text(
+          'Wybierz zadanie',
+          style: TextStyle(color: scheme.onSurfaceVariant),
+        ),
+      );
     }
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('SZCZEGÓŁY', style: Theme.of(context).textTheme.labelMedium?.copyWith(letterSpacing: 1.1, color: scheme.primary)),
+          Text(
+            'SZCZEGÓŁY',
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(letterSpacing: 1.1, color: scheme.primary),
+          ),
           const SizedBox(height: 16),
           Text(current.title, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
-          Text(_taskMeta(current), style: TextStyle(color: scheme.onSurfaceVariant)),
+          Text(
+            _taskMeta(current),
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
           if (current.note.trim().isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(current.note, style: Theme.of(context).textTheme.bodyLarge),
@@ -418,10 +504,20 @@ class _TaskInspector extends StatelessWidget {
             label: const Text('Edytuj zadanie'),
           ),
           const SizedBox(height: 8),
-          Row(children: [
-            IconButton(tooltip: 'Odłóż zadanie', onPressed: () => onPostpone(current), icon: const Icon(Icons.snooze_rounded)),
-            IconButton(tooltip: 'Usuń zadanie', onPressed: () => onDelete(current), icon: const Icon(Icons.delete_outline_rounded)),
-          ]),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Odłóż zadanie',
+                onPressed: () => onPostpone(current),
+                icon: const Icon(Icons.snooze_rounded),
+              ),
+              IconButton(
+                tooltip: 'Usuń zadanie',
+                onPressed: () => onDelete(current),
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -437,13 +533,27 @@ class _EmptyTasks extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 72, horizontal: 24),
       child: Column(
         children: [
-          Icon(Icons.task_alt_rounded, size: 42, color: Theme.of(context).colorScheme.primary),
+          Icon(
+            Icons.task_alt_rounded,
+            size: 42,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(height: 16),
-          Text('Tu jest spokojnie', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Tu jest spokojnie',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 8),
-          const Text('Dodaj pierwsze zadanie albo wróć do niego później.', textAlign: TextAlign.center),
+          const Text(
+            'Dodaj pierwsze zadanie albo wróć do niego później.',
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 20),
-          FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Dodaj zadanie')),
+          FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: const Text('Dodaj zadanie'),
+          ),
         ],
       ),
     ),
@@ -459,6 +569,12 @@ String _viewTitle(TaskView view) => switch (view) {
 
 String _taskMeta(TaskItem task) {
   final due = task.dueAt;
-  final day = due == null ? null : '${due.day.toString().padLeft(2, '0')}.${due.month.toString().padLeft(2, '0')}';
-  return [task.category, ?day, if (task.priority == 'high') 'Wysoki priorytet'].join(' · ');
+  final day = due == null
+      ? null
+      : '${due.day.toString().padLeft(2, '0')}.${due.month.toString().padLeft(2, '0')}';
+  return [
+    task.category,
+    ?day,
+    if (task.priority == 'high') 'Wysoki priorytet',
+  ].join(' · ');
 }
