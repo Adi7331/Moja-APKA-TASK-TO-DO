@@ -237,6 +237,35 @@ void main() {
     expect(find.text('Samochód'), findsNWidgets(2));
   });
 
+  testWidgets('a note label filter limits the visible note cards', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [
+            NoteItem(
+              id: 'work',
+              title: 'Dopiąć ofertę',
+              labels: const ['Praca'],
+            ),
+            NoteItem(id: 'home', title: 'Kupić kawę', labels: const ['Dom']),
+          ],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Praca'));
+    await tester.pump();
+
+    expect(find.text('Dopiąć ofertę'), findsOneWidget);
+    expect(find.text('Kupić kawę'), findsNothing);
+  });
+
   testWidgets('pinned notes and remaining notes have separate sections', (
     tester,
   ) async {

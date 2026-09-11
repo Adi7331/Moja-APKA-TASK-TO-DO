@@ -57,6 +57,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
   _NoteSection _section = _NoteSection.notes;
   String? _selectedNoteId;
   String? _folderId;
+  String? _label;
 
   @override
   void dispose() {
@@ -84,6 +85,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
                   .toLowerCase();
           return section &&
               (_folderId == null || note.folderId == _folderId) &&
+              (_label == null || note.labels.contains(_label)) &&
               (query.isEmpty || text.contains(query));
         }).toList()..sort((a, b) {
           if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
@@ -91,6 +93,15 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
         });
     return result;
   }
+
+  List<String> get _labels =>
+      widget.notes
+          .expand((note) => note.labels)
+          .map((label) => label.trim())
+          .where((label) => label.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
 
   NoteItem? get _selected =>
       _notes.where((note) => note.id == _selectedNoteId).firstOrNull;
@@ -107,11 +118,14 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           notes: _notes,
           folders: widget.folders,
           selectedFolderId: _folderId,
+          labels: _labels,
+          selectedLabel: _label,
           selectedId: _selectedNoteId,
           openOnTap: !wide,
           onQueryChanged: (value) => setState(() => _query = value),
           onSectionChanged: (value) => setState(() => _section = value),
           onFolderChanged: (value) => setState(() => _folderId = value),
+          onLabelChanged: (value) => setState(() => _label = value),
           onNewNote: widget.onNewNote,
           onNewChecklist: widget.onNewChecklist,
           onNewImage: widget.onNewImage,
@@ -154,11 +168,14 @@ class _NotesGrid extends StatelessWidget {
     required this.notes,
     required this.folders,
     required this.selectedFolderId,
+    required this.labels,
+    required this.selectedLabel,
     required this.selectedId,
     required this.openOnTap,
     required this.onQueryChanged,
     required this.onSectionChanged,
     required this.onFolderChanged,
+    required this.onLabelChanged,
     required this.onNewNote,
     required this.onNewChecklist,
     required this.onNewImage,
@@ -178,11 +195,14 @@ class _NotesGrid extends StatelessWidget {
   final List<NoteItem> notes;
   final List<NoteFolder> folders;
   final String? selectedFolderId;
+  final List<String> labels;
+  final String? selectedLabel;
   final String? selectedId;
   final bool openOnTap;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<_NoteSection> onSectionChanged;
   final ValueChanged<String?> onFolderChanged;
+  final ValueChanged<String?> onLabelChanged;
   final NewRemasterNote onNewNote;
   final NewRemasterNote? onNewChecklist;
   final NewRemasterNote? onNewImage;
@@ -250,6 +270,14 @@ class _NotesGrid extends StatelessWidget {
                 onRename: onRenameFolder,
                 onDelete: onDeleteFolder,
               ),
+              if (labels.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _LabelStrip(
+                  labels: labels,
+                  selectedLabel: selectedLabel,
+                  onSelected: onLabelChanged,
+                ),
+              ],
             ],
           ),
         ),
@@ -499,6 +527,38 @@ class _FolderStrip extends StatelessWidget {
 }
 
 enum _FolderMenuAction { rename, delete }
+
+class _LabelStrip extends StatelessWidget {
+  const _LabelStrip({
+    required this.labels,
+    required this.selectedLabel,
+    required this.onSelected,
+  });
+
+  final List<String> labels;
+  final String? selectedLabel;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      ChoiceChip(
+        label: const Text('Wszystkie etykiety'),
+        selected: selectedLabel == null,
+        onSelected: (_) => onSelected(null),
+      ),
+      ...labels.map(
+        (label) => FilterChip(
+          label: Text(label),
+          selected: selectedLabel == label,
+          onSelected: (selected) => onSelected(selected ? label : null),
+        ),
+      ),
+    ],
+  );
+}
 
 typedef _FolderDraft = ({String name, NoteColorKey colorKey});
 
