@@ -2,7 +2,27 @@
 
 Od wersji `1.1.1` aplikacja sprawdza plik `update.json` dołączony do najnowszego GitHub Release. Android pobiera paczkę ZIP, a następnie otwiera systemowy instalator zawartego APK.
 
-## Każde kolejne wydanie
+## Automatyczne wydania przez GitHub Actions
+
+Od teraz nie trzeba ręcznie budować paczek ani tworzyć Release. Po jednorazowym
+dodaniu sekretów GitHub Actions zrobi to po każdym tagu `vX.Y.Z`:
+
+1. Wejdź w repozytorium → **Settings → Secrets and variables → Actions**.
+2. Dodaj jednorazowo następujące **Repository secrets** (wartości pozostają
+   niewidoczne w logach):
+   - `SUPABASE_URL`
+   - `SUPABASE_PUBLISHABLE_KEY`
+   - `ANDROID_KEYSTORE_BASE64`
+   - `ANDROID_STORE_PASSWORD`
+   - `ANDROID_KEY_PASSWORD`
+   - `ANDROID_KEY_ALIAS`
+3. Utwórz i wypchnij tag `vX.Y.Z`. Workflow zbuduje podpisany APK, paczkę
+   Windows oraz `update.json`, a następnie opublikuje je jako GitHub Release.
+
+Ręczne uruchomienie jest też dostępne w zakładce **Actions → Build and publish
+release → Run workflow**. Wtedy wpisz istniejący tag, np. `v1.1.3`.
+
+## Awaryjne ręczne wydanie
 
 1. Zwiększ numer w `pubspec.yaml`, na przykład do `1.1.2+4`.
 2. Zbuduj APK oraz pakiet Windows z tym samym numerem wersji.
@@ -17,3 +37,8 @@ Aplikacja porównuje tylko stabilne numery w formacie `X.Y.Z`. Android otwiera s
 ## Ważne o podpisie Androida
 
 Zachowaj ten sam klucz podpisu dla każdego wydania. Zmiana klucza uniemożliwia Androidowi aktualizację istniejącej instalacji bez odinstalowania aplikacji.
+
+## Ważne o sekretach
+
+Nie commituj `.env`, `android/key.properties` ani pliku keystore. GitHub
+Actions tworzy je wyłącznie tymczasowo podczas budowania paczek.

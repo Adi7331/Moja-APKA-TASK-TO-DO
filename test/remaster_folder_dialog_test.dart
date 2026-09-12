@@ -69,7 +69,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Opcje folderu'));
+    await tester.tap(find.byTooltip('Opcje folderu: Samochód'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Zmień nazwę folderu'));
     await tester.pumpAndSettle();
@@ -81,6 +81,35 @@ void main() {
     expect(renamedFolder!.id, 'car');
     expect(renamedFolder!.name, 'Auto');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('folder menu is contained in the same aligned chip as its name', (
+    tester,
+  ) async {
+    final folder = NoteFolder(id: 'car', name: 'Samochód');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RemasterNotesScreen(
+            notes: const <NoteItem>[],
+            folders: <NoteFolder>[folder],
+            onNewNote: ({String? folderId}) {},
+            onOpenNote: (_) {},
+            onSave: (_) async {},
+            onDelete: (_) async {},
+            onRenameFolder: (_) async {},
+          ),
+        ),
+      ),
+    );
+
+    final chip = tester.getRect(find.byKey(const ValueKey('folder-chip-car')));
+    final label = tester.getRect(find.text(folder.name));
+    final menu = tester.getRect(find.byTooltip('Opcje folderu: Samochód'));
+
+    expect(chip.contains(label.center), isTrue);
+    expect(chip.contains(menu.center), isTrue);
+    expect(menu.center.dy, closeTo(label.center.dy, 1));
   });
 
   testWidgets('folder controls stay within a 390 pixel phone viewport', (

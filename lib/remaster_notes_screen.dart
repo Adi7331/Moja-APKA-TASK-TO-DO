@@ -441,41 +441,14 @@ class _FolderStrip extends StatelessWidget {
         onSelected: (_) => onSelected(null),
       ),
       ...folders.map(
-        (folder) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            InputChip(
-              label: Text(folder.name),
-              selected: selectedFolderId == folder.id,
-              backgroundColor: _folderTint(context, folder.colorKey),
-              onPressed: () => onSelected(folder.id),
-            ),
-            if (onRename != null || onDelete != null)
-              PopupMenuButton<_FolderMenuAction>(
-                tooltip: 'Opcje folderu',
-                onSelected: (action) async {
-                  switch (action) {
-                    case _FolderMenuAction.rename:
-                      await _rename(context, folder);
-                    case _FolderMenuAction.delete:
-                      await _confirmDelete(context, folder);
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (onRename != null)
-                    const PopupMenuItem(
-                      value: _FolderMenuAction.rename,
-                      child: Text('Zmień nazwę folderu'),
-                    ),
-                  if (onDelete != null)
-                    const PopupMenuItem(
-                      value: _FolderMenuAction.delete,
-                      child: Text('Usuń folder'),
-                    ),
-                ],
-                icon: const Icon(Icons.more_horiz_rounded),
-              ),
-          ],
+        (folder) => _FolderChip(
+          folder: folder,
+          selected: selectedFolderId == folder.id,
+          onPressed: () => onSelected(folder.id),
+          onRename: onRename == null ? null : () => _rename(context, folder),
+          onDelete: onDelete == null
+              ? null
+              : () => _confirmDelete(context, folder),
         ),
       ),
       if (onCreate != null)
@@ -537,6 +510,96 @@ class _FolderStrip extends StatelessWidget {
 }
 
 enum _FolderMenuAction { rename, delete }
+
+/// A single shared surface prevents the label and its overflow control from
+/// visually drifting apart at different text scales or screen widths.
+class _FolderChip extends StatelessWidget {
+  const _FolderChip({
+    required this.folder,
+    required this.selected,
+    required this.onPressed,
+    this.onRename,
+    this.onDelete,
+  });
+
+  final NoteFolder folder;
+  final bool selected;
+  final VoidCallback onPressed;
+  final Future<void> Function()? onRename;
+  final Future<void> Function()? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasMenu = onRename != null || onDelete != null;
+    final tint = _folderTint(context, folder.colorKey);
+    final color = selected
+        ? scheme.secondaryContainer
+        : tint ?? scheme.surfaceContainerLow;
+    final foreground = selected
+        ? scheme.onSecondaryContainer
+        : scheme.onSurfaceVariant;
+
+    return Material(
+      key: ValueKey('folder-chip-${folder.id}'),
+      color: color,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: selected ? Colors.transparent : scheme.outlineVariant,
+        ),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260, minHeight: 48),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: onPressed,
+                child: Padding(
+                  padding: EdgeInsets.only(left: 16, right: hasMenu ? 4 : 16),
+                  child: Text(
+                    folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(color: foreground),
+                  ),
+                ),
+              ),
+            ),
+            if (hasMenu)
+              PopupMenuButton<_FolderMenuAction>(
+                tooltip: 'Opcje folderu: ${folder.name}',
+                onSelected: (action) async {
+                  switch (action) {
+                    case _FolderMenuAction.rename:
+                      await onRename?.call();
+                    case _FolderMenuAction.delete:
+                      await onDelete?.call();
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (onRename != null)
+                    const PopupMenuItem(
+                      value: _FolderMenuAction.rename,
+                      child: Text('Zmień nazwę folderu'),
+                    ),
+                  if (onDelete != null)
+                    const PopupMenuItem(
+                      value: _FolderMenuAction.delete,
+                      child: Text('Usuń folder'),
+                    ),
+                ],
+                icon: const Icon(Icons.more_horiz_rounded),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _LabelStrip extends StatelessWidget {
   const _LabelStrip({

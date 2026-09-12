@@ -281,6 +281,7 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final completedColor = scheme.onSurfaceVariant.withValues(alpha: .62);
     final actions = [
       _TaskStatusButton(
         tooltip: 'Oznacz jako do zrobienia',
@@ -325,7 +326,9 @@ class _TaskRow extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: task.isDone ? completedColor : null,
                 decoration: task.isDone ? TextDecoration.lineThrough : null,
+                decorationThickness: task.isDone ? 2 : null,
               ),
             ),
             const SizedBox(height: 3),
@@ -333,8 +336,9 @@ class _TaskRow extends StatelessWidget {
               _taskMeta(task),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: task.isDone ? completedColor : scheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
