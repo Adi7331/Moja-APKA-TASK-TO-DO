@@ -38,6 +38,14 @@ import 'note_folder.dart';
 import 'note_attachment_picker.dart';
 import 'notes_screen.dart';
 import 'note_sync_service.dart';
+import 'focus_session.dart';
+import 'focus_session_store.dart';
+import 'focus_session_sync_service.dart';
+import 'calendar_event.dart';
+import 'calendar_store.dart';
+import 'update_gate.dart';
+import 'update_service.dart';
+import 'google_calendar_service.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 
@@ -68,7 +76,11 @@ Future<void> main() async {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.remasterPreviewOverride});
+
+  /// Allows legacy UI regression tests to exercise the still-supported view.
+  final bool? remasterPreviewOverride;
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -78,6 +90,7 @@ class _MyAppState extends State<MyApp> {
   bool cloudMode = false;
   bool _notesCloudAvailable = false;
   bool _foldersCloudAvailable = false;
+  bool _focusSessionsCloudAvailable = false;
   bool _notesMode = false;
   bool _remasterPreview = true;
   String _syncStatus = 'Lokalnie';
@@ -95,10 +108,17 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _noteSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _folderSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _focusSessionSubscription;
   StreamSubscription<AuthState>? _authSubscription;
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
   LocalNoteStore? _localNoteStore;
+  FocusSessionStore? _focusSessionStore;
+  CalendarStore? _calendarStore;
+  DateTime? _calendarLastSyncedAt;
+  String? _calendarAccessToken;
+  bool _calendarAuthorizationPending = false;
+  List<GoogleCalendarInfo> _availableCalendars = const [];
   final tasks = <TaskItem>[
     const TaskItem(
       id: 'local-1',
@@ -121,8 +141,13 @@ class _MyAppState extends State<MyApp> {
   ];
   final notes = <NoteItem>[];
   final folders = <NoteFolder>[];
+  final calendarEvents = <CalendarEvent>[];
+  final focusSessions = <FocusSession>[];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
   late final NoteSyncService _noteSync = NoteSyncService(
+    Supabase.instance.client,
+  );
+  late final FocusSessionSyncService _focusSync = FocusSessionSyncService(
     Supabase.instance.client,
   );
 
@@ -141,6 +166,9 @@ class _MyAppState extends State<MyApp> {
         _enterCloudMode();
       }
       _authSubscription = auth.onAuthStateChange.listen((state) {
+        if (_calendarAuthorizationPending && state.session != null) {
+          unawaited(_finishCalendarConnection(state.session!.providerToken));
+        }
         if (state.session != null && !cloudMode) {
           _enterCloudMode();
         }
@@ -154,17 +182,32 @@ class _MyAppState extends State<MyApp> {
     final preferences = await SharedPreferences.getInstance();
     final store = LocalTaskStore(preferences);
     final storedTasks = await store.load();
+    final calendarStore = CalendarStore(preferences);
+    final calendarCache = await calendarStore.loadCache();
     if (!mounted) return;
     setState(() {
       _localStore = store;
+      _focusSessionStore = FocusSessionStore(preferences);
+      _calendarStore = calendarStore;
+      _calendarLastSyncedAt = calendarCache.lastSyncedAt;
+      calendarEvents
+        ..clear()
+        ..addAll(calendarCache.events);
       _themeMode = _themeModeFromStorage(preferences.getString('theme_mode'));
-      _remasterPreview = true;
+      _remasterPreview = widget.remasterPreviewOverride ?? true;
       if (storedTasks.isNotEmpty) {
         tasks
           ..clear()
           ..addAll(storedTasks);
         _nextLocalTaskId = tasks.length + 1;
       }
+    });
+    final sessions = await _focusSessionStore!.load();
+    if (!mounted) return;
+    setState(() {
+      focusSessions
+        ..clear()
+        ..addAll(sessions);
     });
   }
 
@@ -197,6 +240,219 @@ class _MyAppState extends State<MyApp> {
     // Folder schema deployment is deliberately opt-in. Until it is applied in
     // Supabase, local folders stay available without risking existing notes.
     await _localNoteStore?.saveFolders(folders);
+  }
+
+  Future<void> _saveFocusSession(FocusSession session) async {
+    var store = _focusSessionStore;
+    if (store == null) {
+      store = FocusSessionStore(await SharedPreferences.getInstance());
+      _focusSessionStore = store;
+    }
+    await store.add(session);
+    if (mounted) {
+      setState(() {
+        focusSessions.removeWhere((item) => item.id == session.id);
+        focusSessions.insert(0, session);
+      });
+    }
+    if (cloudMode && _focusSessionsCloudAvailable) {
+      try {
+        await _focusSync.save(session);
+      } catch (_) {
+        if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
+      }
+    }
+  }
+
+  Future<CalendarStore> _calendarStoreOrCreate() async {
+    final existing = _calendarStore;
+    if (existing != null) return existing;
+    final store = CalendarStore(await SharedPreferences.getInstance());
+    _calendarStore = store;
+    return store;
+  }
+
+  Future<void> _startCalendarConnection() async {
+    if (!cloudMode) {
+      _showSuccessNotice('Zaloguj się, aby połączyć Google Calendar.');
+      return;
+    }
+    _calendarAuthorizationPending = true;
+    try {
+      await SupabaseCalendarConnectionAction(Supabase.instance.client).start();
+    } catch (_) {
+      _calendarAuthorizationPending = false;
+      _showSuccessNotice(
+        'Nie udało się otworzyć połączenia z Google Calendar.',
+      );
+    }
+  }
+
+  Future<void> _finishCalendarConnection(String? providerToken) async {
+    _calendarAuthorizationPending = false;
+    if (providerToken == null || providerToken.isEmpty) {
+      _showSuccessNotice(
+        'Google nie przekazał dostępu do Kalendarza. Spróbuj ponownie.',
+      );
+      return;
+    }
+    try {
+      _calendarAccessToken = providerToken;
+      _availableCalendars = await GoogleCalendarService().loadCalendars(
+        providerToken,
+      );
+      if (!mounted) return;
+      await _chooseCalendars(_availableCalendars);
+    } catch (_) {
+      _calendarAccessToken = null;
+      _showSuccessNotice('Nie udało się pobrać listy kalendarzy.');
+    }
+  }
+
+  Future<void> _chooseCalendars(List<GoogleCalendarInfo> options) async {
+    if (options.isEmpty) {
+      _showSuccessNotice(
+        'Nie znaleziono kalendarzy dostępnych dla tego konta.',
+      );
+      return;
+    }
+    final store = await _calendarStoreOrCreate();
+    final initial = (await store.loadSelection()).toSet();
+    if (initial.isEmpty) {
+      initial.addAll(
+        options.where((item) => item.isPrimary).map((item) => item.id),
+      );
+    }
+    final selected = await showDialog<Set<String>>(
+      context: _navigatorKey.currentContext!,
+      builder: (context) {
+        final current = {...initial};
+        return StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+            title: const Text('Wybierz kalendarze'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final calendar in options)
+                      CheckboxListTile(
+                        value: current.contains(calendar.id),
+                        onChanged: (checked) => update(() {
+                          if (checked == true) {
+                            current.add(calendar.id);
+                          } else {
+                            current.remove(calendar.id);
+                          }
+                        }),
+                        title: Text(calendar.title),
+                        subtitle: calendar.isPrimary
+                            ? const Text('Główny kalendarz')
+                            : null,
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Anuluj'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, current),
+                child: const Text('Zapisz'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null) return;
+    await store.saveSelection(selected.toList());
+    await _refreshCalendar();
+  }
+
+  Future<void> _refreshCalendar() async {
+    final token = _calendarAccessToken;
+    if (token == null) {
+      _showSuccessNotice(
+        'Połącz Google Calendar ponownie, aby odświeżyć dane.',
+      );
+      return;
+    }
+    try {
+      final store = await _calendarStoreOrCreate();
+      var selected = await store.loadSelection();
+      if (selected.isEmpty) {
+        if (_availableCalendars.isEmpty) {
+          _availableCalendars = await GoogleCalendarService().loadCalendars(
+            token,
+          );
+        }
+        await _chooseCalendars(_availableCalendars);
+        selected = await store.loadSelection();
+        if (selected.isEmpty) return;
+      }
+      final now = DateTime.now();
+      final events = await GoogleCalendarService().loadEvents(
+        token,
+        calendarIds: selected,
+        from: DateTime(now.year, now.month, now.day),
+        until: DateTime(now.year, now.month, now.day + 30),
+      );
+      final syncedAt = DateTime.now();
+      await store.saveCache(events, syncedAt);
+      if (!mounted) return;
+      setState(() {
+        calendarEvents
+          ..clear()
+          ..addAll(events);
+        _calendarLastSyncedAt = syncedAt;
+      });
+      _showSuccessNotice('Kalendarz odświeżony');
+    } catch (_) {
+      _calendarAccessToken = null;
+      _showSuccessNotice(
+        'Nie udało się odświeżyć Calendar. Połącz go ponownie.',
+      );
+    }
+  }
+
+  Future<void> _editCalendarSelection() async {
+    final token = _calendarAccessToken;
+    if (token == null) {
+      _showSuccessNotice('Połącz Google Calendar ponownie, aby zmienić wybór.');
+      return;
+    }
+    try {
+      if (_availableCalendars.isEmpty) {
+        _availableCalendars = await GoogleCalendarService().loadCalendars(
+          token,
+        );
+      }
+      await _chooseCalendars(_availableCalendars);
+    } catch (_) {
+      _calendarAccessToken = null;
+      _showSuccessNotice(
+        'Nie udało się pobrać listy kalendarzy. Połącz go ponownie.',
+      );
+    }
+  }
+
+  Future<void> _disconnectCalendar() async {
+    final store = await _calendarStoreOrCreate();
+    await store.clear();
+    if (!mounted) return;
+    setState(() {
+      _calendarAccessToken = null;
+      _availableCalendars = const [];
+      _calendarLastSyncedAt = null;
+      calendarEvents.clear();
+    });
+    _showSuccessNotice('Google Calendar odłączony');
   }
 
   Future<void> _createFolder(String name, NoteColorKey colorKey) async {
@@ -350,6 +606,14 @@ class _MyAppState extends State<MyApp> {
           _foldersCloudAvailable = false;
         }
       }
+      try {
+        await _loadCloudFocusSessions();
+        _focusSessionsCloudAvailable = true;
+      } catch (_) {
+        // This is an additive migration. Focus remains fully usable locally
+        // until the owner enables focus_sessions.sql in Supabase.
+        _focusSessionsCloudAvailable = false;
+      }
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw StateError('Brak aktywnej sesji.');
       await _taskSubscription?.cancel();
@@ -379,6 +643,14 @@ class _MyAppState extends State<MyApp> {
             .stream(primaryKey: ['id'])
             .eq('user_id', user.id)
             .listen((_) => unawaited(_loadCloudFolders()));
+      }
+      if (_focusSessionsCloudAvailable) {
+        await _focusSessionSubscription?.cancel();
+        _focusSessionSubscription = Supabase.instance.client
+            .from('focus_sessions')
+            .stream(primaryKey: ['id'])
+            .eq('user_id', user.id)
+            .listen((_) => unawaited(_loadCloudFocusSessions()));
       }
       if (!mounted) return;
       setState(() {
@@ -420,6 +692,16 @@ class _MyAppState extends State<MyApp> {
     if (!mounted) return;
     setState(() {
       folders
+        ..clear()
+        ..addAll(loaded);
+    });
+  }
+
+  Future<void> _loadCloudFocusSessions() async {
+    final loaded = await _focusSync.load();
+    if (!mounted) return;
+    setState(() {
+      focusSessions
         ..clear()
         ..addAll(loaded);
     });
@@ -677,10 +959,12 @@ class _MyAppState extends State<MyApp> {
     await _subtaskSubscription?.cancel();
     await _noteSubscription?.cancel();
     await _folderSubscription?.cancel();
+    await _focusSessionSubscription?.cancel();
     _taskSubscription = null;
     _subtaskSubscription = null;
     _noteSubscription = null;
     _folderSubscription = null;
+    _focusSessionSubscription = null;
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (_) {
@@ -692,6 +976,7 @@ class _MyAppState extends State<MyApp> {
       cloudMode = false;
       _notesCloudAvailable = false;
       _foldersCloudAvailable = false;
+      _focusSessionsCloudAvailable = false;
       _notesMode = false;
       _syncStatus = 'Lokalnie';
     });
@@ -703,6 +988,7 @@ class _MyAppState extends State<MyApp> {
     _subtaskSubscription?.cancel();
     _noteSubscription?.cancel();
     _folderSubscription?.cancel();
+    _focusSessionSubscription?.cancel();
     _authSubscription?.cancel();
     _noticeTimer?.cancel();
     super.dispose();
@@ -828,8 +1114,9 @@ class _MyAppState extends State<MyApp> {
     _showSuccessNotice();
   }
 
-  void _openFocusTask(TaskItem task) {
-    _navigatorKey.currentState?.push(
+  Future<void> _openFocusTask(TaskItem task) async {
+    if (!mounted) return;
+    await _navigatorKey.currentState?.push(
       MaterialPageRoute<void>(
         builder: (routeContext) => _remasterPreview
             ? RemasterFocusModeScreen(
@@ -839,6 +1126,8 @@ class _MyAppState extends State<MyApp> {
                   if (routeContext.mounted) Navigator.of(routeContext).pop();
                 },
                 onPostpone: () => _postponeTask(task),
+                onSessionSaved: _saveFocusSession,
+                recentSessions: focusSessions,
               )
             : FocusModeScreen(
                 task: task,
@@ -1115,6 +1404,7 @@ class _MyAppState extends State<MyApp> {
           MaterialPageRoute(
             builder: (routeContext) => RemasterWeeklyCalendarScreen(
               tasks: tasks,
+              calendarEvents: calendarEvents,
               initialWeek: DateTime.now(),
               onOpenTask: (task) => _showTaskForm(routeContext, task: task),
               onMoveTask: _moveTaskToWeekDay,
@@ -1202,6 +1492,23 @@ class _MyAppState extends State<MyApp> {
         ? buildRemasterTheme(Brightness.dark)
         : buildDarkTheme(),
     themeMode: _themeMode,
+    builder: (context, child) => UpdateGate(
+      currentVersion: const String.fromEnvironment(
+        'APP_VERSION',
+        defaultValue: '1.0.0',
+      ),
+      checkForUpdate: () => const UpdateService().check(
+        const String.fromEnvironment(
+          'UPDATE_MANIFEST_URL',
+          defaultValue: 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/latest/download/update.json',
+        ),
+        currentVersion: const String.fromEnvironment(
+          'APP_VERSION',
+          defaultValue: '1.0.0',
+        ),
+      ),
+      child: child ?? const SizedBox.shrink(),
+    ),
     home: Builder(
       builder: (context) {
         if (!localMode) {
@@ -1224,6 +1531,7 @@ class _MyAppState extends State<MyApp> {
           return RemasterShell(
             tasks: tasks,
             notes: notes,
+            calendarEvents: calendarEvents,
             tasksContent: Builder(
               builder: (context) => _tasksWorkspace(context),
             ),
@@ -1244,6 +1552,13 @@ class _MyAppState extends State<MyApp> {
             name: _profileValue('full_name'),
             avatarUrl: _profileValue('avatar_url'),
             onSignOut: cloudMode ? _signOut : null,
+            calendarConnected: _calendarAccessToken != null,
+            calendarCachedEventCount: calendarEvents.length,
+            calendarLastSyncedAt: _calendarLastSyncedAt,
+            onConnectCalendar: () => unawaited(_startCalendarConnection()),
+            onChooseCalendars: () => unawaited(_editCalendarSelection()),
+            onRefreshCalendar: () => unawaited(_refreshCalendar()),
+            onDisconnectCalendar: () => unawaited(_disconnectCalendar()),
           );
         }
         return Stack(

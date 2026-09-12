@@ -10,6 +10,13 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.name,
     this.avatarUrl,
     this.onSignOut,
+    this.calendarConnected = false,
+    this.calendarCachedEventCount = 0,
+    this.calendarLastSyncedAt,
+    this.onConnectCalendar,
+    this.onChooseCalendars,
+    this.onRefreshCalendar,
+    this.onDisconnectCalendar,
   });
 
   final String syncStatus;
@@ -18,6 +25,13 @@ class RemasterSettingsScreen extends StatelessWidget {
   final VoidCallback onLegacy;
   final String? name, avatarUrl;
   final VoidCallback? onSignOut;
+  final bool calendarConnected;
+  final int calendarCachedEventCount;
+  final DateTime? calendarLastSyncedAt;
+  final VoidCallback? onConnectCalendar,
+      onChooseCalendars,
+      onRefreshCalendar,
+      onDisconnectCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +87,89 @@ class RemasterSettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+                Text(
+                  'Google Calendar',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              calendarConnected
+                                  ? Icons.event_available_rounded
+                                  : Icons.event_outlined,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                calendarConnected
+                                    ? 'Kalendarz połączony'
+                                    : 'Kalendarz nie jest połączony',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          calendarConnected
+                              ? 'Wydarzenia są widoczne jako blokady czasu w widoku Tydzień.'
+                              : calendarCachedEventCount > 0
+                              ? 'Masz $calendarCachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
+                              : 'Połącz tylko do odczytu — aplikacja nie zmieni wydarzeń w Google.',
+                        ),
+                        if (calendarLastSyncedAt != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Ostatnia synchronizacja: ${_calendarSyncLabel(calendarLastSyncedAt!)}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (!calendarConnected)
+                              FilledButton.icon(
+                                onPressed: onConnectCalendar,
+                                icon: const Icon(Icons.link_rounded),
+                                label: const Text('Połącz Google Calendar'),
+                              ),
+                            if (calendarConnected)
+                              OutlinedButton.icon(
+                                onPressed: onChooseCalendars,
+                                icon: const Icon(
+                                  Icons.calendar_view_month_rounded,
+                                ),
+                                label: const Text('Wybierz kalendarze'),
+                              ),
+                            if (calendarConnected)
+                              OutlinedButton.icon(
+                                onPressed: onRefreshCalendar,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Odśwież'),
+                              ),
+                            if (calendarConnected)
+                              TextButton.icon(
+                                onPressed: onDisconnectCalendar,
+                                icon: const Icon(Icons.link_off_rounded),
+                                label: const Text('Odłącz'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 Text('Wygląd', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Card(
@@ -95,17 +192,11 @@ class RemasterSettingsScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 if (onSignOut != null) ...[
                   const SizedBox(height: 24),
-                  Text(
-                    'Konto',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text('Konto', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Card(
                     child: ListTile(
-                      leading: Icon(
-                        Icons.logout_rounded,
-                        color: scheme.error,
-                      ),
+                      leading: Icon(Icons.logout_rounded, color: scheme.error),
                       title: Text(
                         'Wyloguj się',
                         style: TextStyle(color: scheme.error),
@@ -128,6 +219,9 @@ String _themeLabel(ThemeMode mode) => switch (mode) {
   ThemeMode.light => 'Jasny',
   ThemeMode.dark => 'Ciemny',
 };
+
+String _calendarSyncLabel(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 
 class _Avatar extends StatelessWidget {
   const _Avatar({this.name, this.avatarUrl});

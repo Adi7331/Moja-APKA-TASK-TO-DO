@@ -5,6 +5,8 @@ import 'note_item.dart';
 import 'task_item.dart';
 import 'remaster_theme.dart';
 import 'remaster_settings_screen.dart';
+import 'suggestion_engine.dart';
+import 'calendar_event.dart';
 
 enum AppSpace { start, tasks, notes }
 
@@ -16,6 +18,7 @@ class RemasterShell extends StatefulWidget {
     super.key,
     required this.tasks,
     required this.notes,
+    this.calendarEvents = const [],
     required this.tasksContent,
     required this.notesContent,
     required this.onAddTask,
@@ -31,9 +34,17 @@ class RemasterShell extends StatefulWidget {
     this.name,
     this.avatarUrl,
     this.onSignOut,
+    this.calendarConnected = false,
+    this.calendarCachedEventCount = 0,
+    this.calendarLastSyncedAt,
+    this.onConnectCalendar,
+    this.onChooseCalendars,
+    this.onRefreshCalendar,
+    this.onDisconnectCalendar,
   });
   final List<TaskItem> tasks;
   final List<NoteItem> notes;
+  final List<CalendarEvent> calendarEvents;
   final Widget tasksContent;
   final Widget notesContent;
   final VoidCallback onAddTask, onAddNote, onLegacy;
@@ -45,6 +56,13 @@ class RemasterShell extends StatefulWidget {
   final String syncStatus;
   final String? name, avatarUrl;
   final VoidCallback? onSignOut;
+  final bool calendarConnected;
+  final int calendarCachedEventCount;
+  final DateTime? calendarLastSyncedAt;
+  final VoidCallback? onConnectCalendar,
+      onChooseCalendars,
+      onRefreshCalendar,
+      onDisconnectCalendar;
   @override
   State<RemasterShell> createState() => _RemasterShellState();
 }
@@ -119,9 +137,61 @@ class _RemasterShellState extends State<RemasterShell> {
         onThemeMode: widget.onThemeMode,
         onLegacy: widget.onLegacy,
         onSignOut: widget.onSignOut,
+        calendarConnected: widget.calendarConnected,
+        calendarCachedEventCount: widget.calendarCachedEventCount,
+        calendarLastSyncedAt: widget.calendarLastSyncedAt,
+        onConnectCalendar: widget.onConnectCalendar,
+        onChooseCalendars: widget.onChooseCalendars,
+        onRefreshCalendar: widget.onRefreshCalendar,
+        onDisconnectCalendar: widget.onDisconnectCalendar,
       ),
     ),
   );
+
+  void _showSuggestions() {
+    final suggestions = const SuggestionEngine().build(
+      widget.tasks,
+      DateTime.now(),
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Podpowiedzi',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'To są lokalne wskazówki — nic nie jest wysyłane do AI.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              if (suggestions.isEmpty)
+                const ListTile(
+                  leading: Icon(Icons.check_circle_outline_rounded),
+                  title: Text('Plan wygląda spokojnie'),
+                  subtitle: Text('Nie widzę teraz żadnej ważnej podpowiedzi.'),
+                )
+              else
+                for (final suggestion in suggestions)
+                  ListTile(
+                    leading: const Icon(Icons.lightbulb_outline_rounded),
+                    title: Text(suggestion.title),
+                    subtitle: Text(suggestion.description),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +348,13 @@ class _RemasterShellState extends State<RemasterShell> {
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
+                                  tooltip: 'Podpowiedzi',
+                                  onPressed: _showSuggestions,
+                                  icon: const Icon(
+                                    Icons.lightbulb_outline_rounded,
+                                  ),
+                                ),
+                                IconButton(
                                   tooltip: 'Konto i wygląd',
                                   onPressed: _account,
                                   icon: _Avatar(
@@ -380,6 +457,12 @@ class _RemasterShellState extends State<RemasterShell> {
                 : b.updatedAt.compareTo(a.updatedAt),
           );
     final focus = active.firstOrNull;
+    final upcomingCalendarEvents =
+        widget.calendarEvents
+            .where((event) => !event.cancelled && event.endsAt.isAfter(now))
+            .toList()
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    final nextCalendarEvent = upcomingCalendarEvents.firstOrNull;
     return LayoutBuilder(
       builder: (context, box) {
         final columns =
@@ -461,7 +544,7 @@ class _RemasterShellState extends State<RemasterShell> {
                     color: remasterNoteColor(context, i),
                     borderRadius: BorderRadius.circular(18),
                     clipBehavior: Clip.antiAlias,
-                          child: InkWell(
+                    child: InkWell(
                       onTap: () => widget.onOpenNote(recent[i]),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -577,7 +660,7 @@ class _RemasterShellState extends State<RemasterShell> {
                         ),
                         child: InkWell(
                           key: const ValueKey('remaster-now'),
-                            onTap: focus == null
+                          onTap: focus == null
                               ? widget.onAddTask
                               : () => widget.onOpenFocus(focus),
                           child: Padding(
@@ -654,6 +737,10 @@ class _RemasterShellState extends State<RemasterShell> {
                         ),
                       ],
                     ),
+                    if (nextCalendarEvent != null) ...[
+                      const SizedBox(height: 16),
+                      _NextCalendarEvent(event: nextCalendarEvent),
+                    ],
                     const SizedBox(height: 32),
                   ],
                   if (columns)
@@ -676,6 +763,57 @@ class _RemasterShellState extends State<RemasterShell> {
           ),
         );
       },
+    );
+  }
+}
+
+class _NextCalendarEvent extends StatelessWidget {
+  const _NextCalendarEvent({required this.event});
+  final CalendarEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final time = event.isAllDay
+        ? 'Cały dzień'
+        : '${event.startsAt.hour.toString().padLeft(2, '0')}:${event.startsAt.minute.toString().padLeft(2, '0')}–${event.endsAt.hour.toString().padLeft(2, '0')}:${event.endsAt.minute.toString().padLeft(2, '0')}';
+    return Semantics(
+      label: 'Następne wydarzenie: ${event.title}, $time',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.secondaryContainer.withValues(alpha: .55),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.event_rounded, color: scheme.onSecondaryContainer),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Następne wydarzenie',
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: scheme.onSecondaryContainer),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      event.title,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(color: scheme.onSecondaryContainer),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(time, style: TextStyle(color: scheme.onSecondaryContainer)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

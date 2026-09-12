@@ -316,7 +316,7 @@ void main() {
   testWidgets('opens the focus route from the local daily plan', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -424,17 +424,17 @@ void main() {
   testWidgets('shows the compact Today task list instead of a counter', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
 
     expect(find.text('Zaloguj się'), findsOneWidget);
     expect(find.text('Kontynuuj z Google'), findsOneWidget);
-    expect(find.text('Adres e-mail'), findsOneWidget);
+    expect(find.text('Tryb lokalny'), findsOneWidget);
   });
 
   testWidgets('marks a task as completed from the compact list', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
     await tester.tap(find.byIcon(Icons.circle_outlined).first);
@@ -636,7 +636,7 @@ void main() {
   testWidgets('restores a locally deleted task from the undo action', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -657,7 +657,7 @@ void main() {
   testWidgets('restores a completed local task from the undo action', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -673,7 +673,7 @@ void main() {
   testWidgets('postpones a local task from its direct task action', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -688,7 +688,7 @@ void main() {
   testWidgets('filters local tasks by the search phrase', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
 
@@ -705,7 +705,7 @@ void main() {
   testWidgets('shows only completed tasks after selecting that filter', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
     await tester.tap(find.byIcon(Icons.circle_outlined).first);
@@ -721,10 +721,12 @@ void main() {
   testWidgets('opens an edit sheet after tapping a task title', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pump();
 
+    await tester.drag(find.byType(ListView), const Offset(0, -360));
+    await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
 
@@ -734,7 +736,7 @@ void main() {
   testWidgets('adds a task from the quick daily action', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -757,7 +759,7 @@ void main() {
   testWidgets('adds a locally parsed quick task from the daily plan', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -777,8 +779,10 @@ void main() {
   testWidgets('expands additional task editor options', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
+    await tester.pump();
+    await tester.drag(find.byType(ListView), const Offset(0, -360));
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
@@ -799,8 +803,10 @@ void main() {
   testWidgets('adds a local checklist step and shows its progress', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
+    await tester.pump();
+    await tester.drag(find.byType(ListView), const Offset(0, -360));
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
@@ -824,8 +830,10 @@ void main() {
   testWidgets('marks a checklist step as completed', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
+    await tester.pump();
+    await tester.drag(find.byType(ListView), const Offset(0, -360));
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
@@ -993,7 +1001,7 @@ void main() {
         },
       ]),
     });
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
@@ -1012,7 +1020,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1100, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
@@ -1066,7 +1074,7 @@ void main() {
         },
       ]),
     });
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
@@ -1101,7 +1109,7 @@ void main() {
   testWidgets('opens weekly review from desktop navigation', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Przegląd tygodnia'));

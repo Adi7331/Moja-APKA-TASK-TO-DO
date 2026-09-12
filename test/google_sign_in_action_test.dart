@@ -17,4 +17,19 @@ void main() {
   test('publishes the callback URI used by Google OAuth', () {
     expect(googleLoginRedirectUrl, 'dzienpodniu://login-callback/');
   });
+
+  test('calendar connection requests read-only Calendar scopes', () async {
+    String? scopes;
+    Map<String, String>? params;
+    final action = CalendarConnectionAction.forTesting((requestedScopes, queryParams) async {
+      scopes = requestedScopes;
+      params = queryParams;
+    });
+
+    await action.start();
+
+    expect(scopes, contains('calendar.events.readonly'));
+    expect(scopes, contains('calendar.calendarlist.readonly'));
+    expect(params?['access_type'], 'offline');
+  });
 }
