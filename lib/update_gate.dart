@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'android_zip_update_installer.dart';
 import 'update_service.dart';
 
 class UpdateGate extends StatefulWidget {
@@ -14,6 +15,7 @@ class UpdateGate extends StatefulWidget {
     super.key,
     UpdatePlatform? platform,
     Future<bool> Function(Uri url)? openDownload,
+    this.startUpdate,
   }) : platform = platform ?? _devicePlatform,
        openDownload = openDownload ?? _openInBrowser;
 
@@ -22,6 +24,8 @@ class UpdateGate extends StatefulWidget {
   final Future<ReleaseInfo?> Function() checkForUpdate;
   final UpdatePlatform platform;
   final Future<bool> Function(Uri url) openDownload;
+  final Future<bool> Function(ReleaseInfo release, UpdatePlatform platform)?
+  startUpdate;
 
   @override
   State<UpdateGate> createState() => _UpdateGateState();
@@ -30,6 +34,7 @@ class UpdateGate extends StatefulWidget {
 class _UpdateGateState extends State<UpdateGate> {
   ReleaseInfo? _release;
   bool _dismissed = false;
+  bool _downloading = false;
 
   @override
   void initState() {
@@ -73,11 +78,34 @@ class _UpdateGateState extends State<UpdateGate> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () async {
-                            final url = release.downloadUrlFor(widget.platform);
-                            if (url != null) await widget.openDownload(url);
-                          },
-                          child: const Text('Pobierz'),
+                          onPressed: _downloading
+                              ? null
+                              : () async {
+                                  setState(() => _downloading = true);
+                                  final started =
+                                      await (widget.startUpdate?.call(
+                                            release,
+                                            widget.platform,
+                                          ) ??
+                                          _startDefaultUpdate(
+                                            release,
+                                            widget.platform,
+                                            widget.openDownload,
+                                          ));
+                                  if (!mounted) return;
+                                  setState(() => _downloading = false);
+                                  if (!started) {
+                                    ScaffoldMessenger.of(this.context)
+                                        .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Nie udało się rozpocząć aktualizacji. Spróbuj ponownie.',
+                                            ),
+                                          ),
+                                        );
+                                  }
+                                },
+                          child: Text(_downloading ? 'Pobieranie…' : 'Pobierz'),
                         ),
                         IconButton(
                           tooltip: 'Zamknij informację o aktualizacji',
@@ -105,3 +133,16 @@ UpdatePlatform get _devicePlatform {
 
 Future<bool> _openInBrowser(Uri url) =>
     launchUrl(url, mode: LaunchMode.externalApplication);
+
+Future<bool> _startDefaultUpdate(
+  ReleaseInfo release,
+  UpdatePlatform platform,
+  Future<bool> Function(Uri url) openDownload,
+) async {
+  if (platform == UpdatePlatform.android &&
+      release.androidPackage == UpdatePackage.zip) {
+    return AndroidZipUpdateInstaller().start(release.androidUrl);
+  }
+  final url = release.downloadUrlFor(platform);
+  return url == null ? false : openDownload(url);
+}

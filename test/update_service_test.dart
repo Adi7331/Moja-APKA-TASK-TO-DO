@@ -46,4 +46,13 @@ void main() {
     expect(release.downloadUrlFor(UpdatePlatform.windows), release.windowsUrl);
     expect(release.downloadUrlFor(UpdatePlatform.other), isNull);
   });
+
+  test('identifies a ZIP Android asset for in-app installation', () {
+    final release = ReleaseInfo.fromJson({
+      'version': '1.1.1',
+      'androidUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/dzien-po-dniu-v1.1.1.zip',
+    });
+
+    expect(release.androidPackage, UpdatePackage.zip);
+  });
 }

@@ -6,6 +6,8 @@ const _githubReleasePrefix =
 
 enum UpdatePlatform { android, windows, other }
 
+enum UpdatePackage { zip, other }
+
 class ReleaseInfo {
   const ReleaseInfo({
     required this.version,
@@ -37,6 +39,11 @@ class ReleaseInfo {
   final Uri androidUrl;
   final Uri? windowsUrl;
   final String notes;
+
+  UpdatePackage get androidPackage =>
+      androidUrl.path.toLowerCase().endsWith('.zip')
+      ? UpdatePackage.zip
+      : UpdatePackage.other;
 
   bool isNewerThan(String currentVersion) {
     if (!_stableVersion.hasMatch(currentVersion)) return false;

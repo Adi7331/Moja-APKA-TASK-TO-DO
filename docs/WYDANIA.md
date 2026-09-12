@@ -1,15 +1,15 @@
 # Wydania aplikacji
 
-Od wersji `1.1.0` aplikacja sprawdza plik `update.json` dołączony do najnowszego GitHub Release.
+Od wersji `1.1.1` aplikacja sprawdza plik `update.json` dołączony do najnowszego GitHub Release. Android pobiera paczkę ZIP, a następnie otwiera systemowy instalator zawartego APK.
 
 ## Każde kolejne wydanie
 
 1. Zwiększ numer w `pubspec.yaml`, na przykład do `1.1.1+3`.
 2. Zbuduj APK o tej samej nazwie co w manifeście:
    `flutter build apk --release --build-name=1.1.1 --build-number=3 --dart-define=APP_VERSION=1.1.1`
-3. Zmień `release/update.json`: numer wersji, link APK i opis zmian.
+3. Zmień `release/update.json`: numer wersji, link do paczki Android ZIP i opis zmian.
 4. Na GitHub utwórz Release z tagiem `v1.1.1` i dołącz dokładnie dwa pliki jako assets:
-   - `dzien-po-dniu-v1.1.1.apk`
+   - `dzien-po-dniu-vX.Y.Z.zip` (w środku wyłącznie plik APK)
    - `update.json`
 
 Aplikacja porównuje tylko stabilne numery w formacie `X.Y.Z`. Aktualizacja otwiera systemowy instalator — Android i Windows zawsze wymagają końcowego potwierdzenia użytkownika.

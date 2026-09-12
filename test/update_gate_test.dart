@@ -52,4 +52,33 @@ void main() {
 
     expect(find.textContaining('Dostępna aktualizacja'), findsNothing);
   });
+
+  testWidgets('starts an Android ZIP update from the notice', (tester) async {
+    var started = false;
+    final zipRelease = ReleaseInfo.fromJson({
+      'version': '1.1.1',
+      'androidUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/dzien-po-dniu-v1.1.1.zip',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpdateGate(
+          currentVersion: '1.1.0',
+          platform: UpdatePlatform.android,
+          checkForUpdate: () async => zipRelease,
+          startUpdate: (_, _) async {
+            started = true;
+            return true;
+          },
+          child: const Scaffold(body: Text('Aplikacja')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Pobierz'));
+    await tester.pump();
+
+    expect(started, isTrue);
+  });
 }
