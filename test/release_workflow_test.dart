@@ -15,6 +15,10 @@ void main() {
       expect(workflow, contains('secrets.SUPABASE_PUBLISHABLE_KEY'));
       expect(workflow, contains('secrets.ANDROID_KEYSTORE_BASE64'));
       expect(workflow, contains('flutter build apk --release'));
+      expect(workflow, contains(r'[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'));
+      expect(workflow, contains(r'ANDROID_BUILD_NUMBER=$((major * 1000000 + minor * 1000 + patch))'));
+      expect(workflow, contains(r'--build-number "$ANDROID_BUILD_NUMBER"'));
+      expect(workflow, isNot(contains(r'--build-number "$GITHUB_RUN_NUMBER"')));
       expect(workflow, contains('flutter build windows --release'));
       expect(workflow, contains(r'dzien-po-dniu-android-v${VERSION}.zip'));
       expect(workflow, contains(r'dzien-po-dniu-windows-v$version.zip'));
