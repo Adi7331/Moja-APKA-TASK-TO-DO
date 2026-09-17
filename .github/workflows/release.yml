@@ -50,6 +50,9 @@ jobs:
           fi
           VERSION="${TAG#v}"
           IFS='.' read -r major minor patch <<< "$VERSION"
+          major=$((10#$major))
+          minor=$((10#$minor))
+          patch=$((10#$patch))
           ANDROID_BUILD_NUMBER=$((major * 1000000 + minor * 1000 + patch))
           flutter pub get
           flutter build apk --release --build-name "$VERSION" --build-number "$ANDROID_BUILD_NUMBER" --dart-define=APP_VERSION="$VERSION"

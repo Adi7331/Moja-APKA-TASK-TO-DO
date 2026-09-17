@@ -17,6 +17,9 @@ void main() {
       expect(workflow, contains('flutter build apk --release'));
       expect(workflow, contains(r'[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'));
       expect(workflow, contains(r'ANDROID_BUILD_NUMBER=$((major * 1000000 + minor * 1000 + patch))'));
+      expect(workflow, contains(r'major=$((10#$major))'));
+      expect(workflow, contains(r'minor=$((10#$minor))'));
+      expect(workflow, contains(r'patch=$((10#$patch))'));
       expect(workflow, contains(r'--build-number "$ANDROID_BUILD_NUMBER"'));
       expect(workflow, isNot(contains(r'--build-number "$GITHUB_RUN_NUMBER"')));
       expect(workflow, contains('flutter build windows --release'));
