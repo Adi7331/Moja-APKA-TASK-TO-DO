@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
@@ -172,8 +173,15 @@ class WindowsZipUpdateInstaller {
 
   static Future<void> _writeHelperToDisk(File file, String script) async {
     await file.parent.create(recursive: true);
-    await file.writeAsString(script, flush: true);
+    await file.writeAsBytes(encodePowerShellScript(script), flush: true);
   }
+
+  static List<int> encodePowerShellScript(String script) => <int>[
+    0xef,
+    0xbb,
+    0xbf,
+    ...utf8.encode(script),
+  ];
 
   static Future<void> _launchDetachedPowerShell(
     String executable,
@@ -225,7 +233,7 @@ try {
     throw 'Istnieje poprzednia kopia aktualizacji wymagająca sprawdzenia.'
   }
 
-  New-Item -ItemType Directory -LiteralPath $stagingPath -ErrorAction Stop | Out-Null
+  [System.IO.Directory]::CreateDirectory($stagingPath) | Out-Null
   $stagingCreated = $true
   Expand-Archive -LiteralPath $zipPath -DestinationPath $stagingPath -Force
   $stagedExe = Join-Path -Path $stagingPath -ChildPath $exeName

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dzien_po_dniu/windows_zip_update_installer.dart';
@@ -98,7 +99,7 @@ void main() {
       expect(script, contains('Expand-Archive'));
       expect(script, contains('Move-Item'));
       final createStaging = script.indexOf(
-        r'New-Item -ItemType Directory -LiteralPath $stagingPath',
+        r'[System.IO.Directory]::CreateDirectory($stagingPath) | Out-Null',
       );
       expect(createStaging, greaterThanOrEqualTo(0));
       expect(createStaging, lessThan(script.indexOf('Expand-Archive')));
@@ -151,5 +152,14 @@ void main() {
     expect(result.started, isFalse);
     expect(result.message, contains('Nieprawidłowy identyfikator procesu'));
     expect(helperPrepared, isFalse);
+  });
+
+  test('encodes a PowerShell helper with a BOM and Polish text intact', () {
+    const script = "throw 'Nieprawidłowy identyfikator procesu.'";
+
+    final bytes = WindowsZipUpdateInstaller.encodePowerShellScript(script);
+
+    expect(bytes.sublist(0, 3), <int>[0xef, 0xbb, 0xbf]);
+    expect(utf8.decode(bytes.sublist(3)), script);
   });
 }
