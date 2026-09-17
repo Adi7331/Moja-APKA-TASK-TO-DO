@@ -63,9 +63,45 @@ void main() {
       expect(downloadPath, endsWith(r'updates\dzien-po-dniu-update.zip'));
       expect(helperPath, endsWith(r'updates\apply-windows-update.ps1'));
       expect(launchedExecutable, 'powershell.exe');
-      expect(launchedArguments, containsAll(<String>['--parent-pid', '4812']));
-      expect(helperScript, contains('Expand-Archive'));
-      expect(helperScript, contains('Move-Item'));
+      expect(launchedArguments, <String>[
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        helperPath!,
+        '--parent-pid',
+        '4812',
+        '--zip',
+        downloadPath!,
+        '--install-dir',
+        installDirectory.path,
+        '--exe-name',
+        'dzien_po_dniu.exe',
+      ]);
+      final script = helperScript!;
+      expect(script, contains('param()'));
+      expect(script, contains(r'[string[]]$args'));
+      expect(script, contains("Get-RequiredArgument '--parent-pid'"));
+      expect(script, contains("Get-RequiredArgument '--zip'"));
+      expect(script, contains("Get-RequiredArgument '--install-dir'"));
+      expect(script, contains("Get-RequiredArgument '--exe-name'"));
+      expect(
+        script,
+        contains(r'[int]::TryParse($parentPidValue, [ref]$parsedParentPid)'),
+      );
+      expect(
+        script,
+        contains(
+          r'$parentPath = [System.IO.Directory]::GetParent($installPath).FullName',
+        ),
+      );
+      expect(script, contains('Expand-Archive'));
+      expect(script, contains('Move-Item'));
+      final createStaging = script.indexOf(
+        r'New-Item -ItemType Directory -LiteralPath $stagingPath',
+      );
+      expect(createStaging, greaterThanOrEqualTo(0));
+      expect(createStaging, lessThan(script.indexOf('Expand-Archive')));
     },
   );
 
@@ -93,4 +129,27 @@ void main() {
       expect(launched, isFalse);
     },
   );
+
+  test('rejects a nonpositive parent PID before preparing a helper', () async {
+    var helperPrepared = false;
+    final installer = WindowsZipUpdateInstaller(
+      fileExists: (_) async => true,
+      directoryWritable: (_) async => true,
+      applicationSupportDirectory: () async {
+        helperPrepared = true;
+        throw StateError('must not prepare helper');
+      },
+    );
+
+    final result = await installer.start(
+      releaseUrl,
+      parentPid: 0,
+      executablePath: r'C:\Apps\DzienPoDniu\dzien_po_dniu.exe',
+      isWindows: true,
+    );
+
+    expect(result.started, isFalse);
+    expect(result.message, contains('Nieprawidłowy identyfikator procesu'));
+    expect(helperPrepared, isFalse);
+  });
 }

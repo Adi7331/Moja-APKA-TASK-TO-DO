@@ -54,6 +54,11 @@ class WindowsZipUpdateInstaller {
         'Aktualizacja musi być plikiem ZIP z GitHub Releases.',
       );
     }
+    if (parentPid <= 0) {
+      return const WindowsUpdateStartResult.failed(
+        'Nieprawidłowy identyfikator procesu.',
+      );
+    }
     if (!executablePath.toLowerCase().endsWith('dzien_po_dniu.exe')) {
       return const WindowsUpdateStartResult.failed(
         'Nie znaleziono oczekiwanego pliku dzien_po_dniu.exe.',
@@ -177,17 +182,30 @@ class WindowsZipUpdateInstaller {
     await Process.start(executable, arguments, mode: ProcessStartMode.detached);
   }
 
-  static const _replacementScript = r'''param(
-  [Parameter(Mandatory = $true)][int]$parentPid,
-  [Parameter(Mandatory = $true)][string]$zip,
-  [Parameter(Mandatory = $true)][string]$installDir,
-  [Parameter(Mandatory = $true)][string]$exeName
-)
+  static const _replacementScript = r'''param()
 
 $ErrorActionPreference = 'Stop'
+$helperArguments = [string[]]$args
+function Get-RequiredArgument([string]$name) {
+  $index = [Array]::IndexOf($helperArguments, $name)
+  if ($index -lt 0 -or $index -ge ($helperArguments.Count - 1)) {
+    throw "Brak wymaganego argumentu $name."
+  }
+  return [string]$helperArguments[$index + 1]
+}
+
+$parentPidValue = Get-RequiredArgument '--parent-pid'
+$parsedParentPid = 0
+if (![int]::TryParse($parentPidValue, [ref]$parsedParentPid) -or $parsedParentPid -le 0) {
+  throw 'Nieprawidłowy identyfikator procesu.'
+}
+$parentPid = $parsedParentPid
+$zip = Get-RequiredArgument '--zip'
+$installDir = Get-RequiredArgument '--install-dir'
+$exeName = Get-RequiredArgument '--exe-name'
 $zipPath = [System.IO.Path]::GetFullPath($zip)
 $installPath = [System.IO.Path]::GetFullPath($installDir)
-$parentPath = Split-Path -LiteralPath $installPath -Parent
+$parentPath = [System.IO.Directory]::GetParent($installPath).FullName
 $stagingPath = Join-Path -Path $parentPath -ChildPath ('.dzien-po-dniu-staging-' + [Guid]::NewGuid().ToString('N'))
 $backupPath = $installPath + '-previous'
 $stagingCreated = $false
@@ -207,8 +225,9 @@ try {
     throw 'Istnieje poprzednia kopia aktualizacji wymagająca sprawdzenia.'
   }
 
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $stagingPath -Force
+  New-Item -ItemType Directory -LiteralPath $stagingPath -ErrorAction Stop | Out-Null
   $stagingCreated = $true
+  Expand-Archive -LiteralPath $zipPath -DestinationPath $stagingPath -Force
   $stagedExe = Join-Path -Path $stagingPath -ChildPath $exeName
   if (!(Test-Path -LiteralPath $stagedExe -PathType Leaf)) {
     throw 'Archiwum aktualizacji nie zawiera pliku wykonywalnego.'
