@@ -165,4 +165,178 @@ void main() {
       expect(browserOpens, 0);
     },
   );
+
+  testWidgets('keeps the close control disabled while an update starts', (
+    tester,
+  ) async {
+    final pendingStart = Completer<WindowsUpdateStartResult>();
+    final windowsRelease = ReleaseInfo.fromJson({
+      'version': '1.1.1',
+      'androidUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/app.apk',
+      'windowsUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/dzien-po-dniu-v1.1.1.zip',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpdateGate(
+          currentVersion: '1.1.0',
+          platform: UpdatePlatform.windows,
+          checkForUpdate: () async => windowsRelease,
+          startUpdate: (_, _) => pendingStart.future,
+          child: const Scaffold(body: Text('Aplikacja')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Aktualizuj teraz'));
+    await tester.pump();
+
+    final close = tester.widget<IconButton>(find.byType(IconButton));
+    expect(close.onPressed, isNull);
+    expect(find.text('Dostępna aktualizacja 1.1.1'), findsOneWidget);
+  });
+
+  testWidgets(
+    'keeps manual download retryable and reports a failed manual launch',
+    (tester) async {
+      var manualAttempts = 0;
+      final windowsRelease = ReleaseInfo.fromJson({
+        'version': '1.1.1',
+        'androidUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/app.apk',
+        'windowsUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/dzien-po-dniu-v1.1.1.zip',
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UpdateGate(
+            currentVersion: '1.1.0',
+            platform: UpdatePlatform.windows,
+            checkForUpdate: () async => windowsRelease,
+            startUpdate: (_, _) async =>
+                const WindowsUpdateStartResult.failed('Automatyczna porażka'),
+            openDownload: (_) async {
+              manualAttempts++;
+              if (manualAttempts == 1) throw StateError('Brak przeglądarki');
+              return false;
+            },
+            child: const Scaffold(body: Text('Aplikacja')),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Aktualizuj teraz'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pobierz ręcznie'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(manualAttempts, 1);
+
+      expect(
+        find.text('Nie udało się otworzyć ręcznego pobierania.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Pobierz ręcznie'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      await tester.tap(find.text('Pobierz ręcznie'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(manualAttempts, 2);
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Pobierz ręcznie'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets('shows Windows manual fallback when starting an update throws', (
+    tester,
+  ) async {
+    final windowsRelease = ReleaseInfo.fromJson({
+      'version': '1.1.1',
+      'androidUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/app.apk',
+      'windowsUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/dzien-po-dniu-v1.1.1.zip',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpdateGate(
+          currentVersion: '1.1.0',
+          platform: UpdatePlatform.windows,
+          checkForUpdate: () async => windowsRelease,
+          startUpdate: (_, _) async => throw StateError('Preflight failed'),
+          child: const Scaffold(body: Text('Aplikacja')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Aktualizuj teraz'));
+    await tester.pump();
+
+    expect(find.text('Nie udało się rozpocząć aktualizacji.'), findsOneWidget);
+    expect(find.text('Pobierz ręcznie'), findsOneWidget);
+    expect(find.text('Aktualizuj teraz'), findsOneWidget);
+  });
+
+  testWidgets('exits after a successful Windows start even after unmounting', (
+    tester,
+  ) async {
+    final pendingStart = Completer<WindowsUpdateStartResult>();
+    var helperStarted = 0;
+    var exits = 0;
+    var showGate = true;
+    StateSetter? setHostState;
+    final windowsRelease = ReleaseInfo.fromJson({
+      'version': '1.1.1',
+      'androidUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/app.apk',
+      'windowsUrl': 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/download/v1.1.1/dzien-po-dniu-v1.1.1.zip',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            setHostState = setState;
+            return showGate
+                ? UpdateGate(
+                    currentVersion: '1.1.0',
+                    platform: UpdatePlatform.windows,
+                    checkForUpdate: () async => windowsRelease,
+                    startUpdate: (_, _) => pendingStart.future,
+                    onWindowsHelperStarted: () => helperStarted++,
+                    exitApplication: (_) => exits++,
+                    child: const Scaffold(body: Text('Aplikacja')),
+                  )
+                : const Scaffold(body: Text('Następny ekran'));
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Aktualizuj teraz'));
+    await tester.pump();
+    setHostState!(() => showGate = false);
+    await tester.pump();
+    pendingStart.complete(const WindowsUpdateStartResult.started());
+    await tester.pump();
+
+    expect(helperStarted, 1);
+    expect(exits, 1);
+  });
 }

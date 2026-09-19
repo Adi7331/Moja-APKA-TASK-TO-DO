@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import 'note_item.dart';
 import 'task_item.dart';
@@ -31,9 +32,12 @@ class RemasterShell extends StatefulWidget {
     required this.themeMode,
     required this.onThemeMode,
     required this.syncStatus,
+    this.appVersion = '1.0.0',
     this.name,
     this.avatarUrl,
     this.onSignOut,
+    this.onCheckForUpdate,
+    this.updateCheckStatus,
     this.calendarConnected = false,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
@@ -54,8 +58,11 @@ class RemasterShell extends StatefulWidget {
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeMode;
   final String syncStatus;
+  final String appVersion;
   final String? name, avatarUrl;
   final VoidCallback? onSignOut;
+  final Future<void> Function()? onCheckForUpdate;
+  final ValueListenable<String>? updateCheckStatus;
   final bool calendarConnected;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
@@ -132,11 +139,14 @@ class _RemasterShellState extends State<RemasterShell> {
       builder: (_) => RemasterSettingsScreen(
         name: widget.name,
         avatarUrl: widget.avatarUrl,
+        appVersion: widget.appVersion,
         syncStatus: widget.syncStatus,
         themeMode: widget.themeMode,
         onThemeMode: widget.onThemeMode,
         onLegacy: widget.onLegacy,
         onSignOut: widget.onSignOut,
+        onCheckForUpdate: widget.onCheckForUpdate,
+        updateCheckStatus: widget.updateCheckStatus,
         calendarConnected: widget.calendarConnected,
         calendarCachedEventCount: widget.calendarCachedEventCount,
         calendarLastSyncedAt: widget.calendarLastSyncedAt,

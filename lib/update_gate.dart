@@ -43,10 +43,10 @@ class UpdateGate extends StatefulWidget {
   final String executablePath;
 
   @override
-  State<UpdateGate> createState() => _UpdateGateState();
+  State<UpdateGate> createState() => UpdateGateState();
 }
 
-class _UpdateGateState extends State<UpdateGate> {
+class UpdateGateState extends State<UpdateGate> {
   ReleaseInfo? _release;
   bool _dismissed = false;
   bool _downloading = false;
@@ -55,13 +55,85 @@ class _UpdateGateState extends State<UpdateGate> {
   @override
   void initState() {
     super.initState();
-    unawaited(_check());
+    unawaited(checkNow());
   }
 
-  Future<void> _check() async {
+  Future<ReleaseInfo?> checkNow() async {
     final release = await widget.checkForUpdate();
-    if (!mounted || release?.downloadUrlFor(widget.platform) == null) return;
+    if (release == null || release.downloadUrlFor(widget.platform) == null) {
+      return null;
+    }
+    if (!mounted) return release;
     setState(() => _release = release);
+    return release;
+  }
+
+  Future<void> _startUpdate(ReleaseInfo release) async {
+    final platform = widget.platform;
+    final startUpdate = widget.startUpdate;
+    final openDownload = widget.openDownload;
+    final parentPid = widget.parentPid;
+    final executablePath = widget.executablePath;
+    final onWindowsHelperStarted = widget.onWindowsHelperStarted;
+    final exitApplication = widget.exitApplication;
+    setState(() => _downloading = true);
+
+    WindowsUpdateStartResult result;
+    try {
+      result =
+          await (startUpdate?.call(release, platform) ??
+              _startDefaultUpdate(
+                release,
+                platform,
+                openDownload,
+                parentPid: parentPid,
+                executablePath: executablePath,
+              ));
+    } on Object {
+      result = const WindowsUpdateStartResult.failed(
+        'Nie udało się rozpocząć aktualizacji.',
+      );
+    }
+
+    if (result.started && platform == UpdatePlatform.windows) {
+      onWindowsHelperStarted?.call();
+      exitApplication(0);
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _downloading = false;
+      _windowsUpdateFailed =
+          platform == UpdatePlatform.windows && !result.started;
+    });
+    if (!result.started) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result.message)));
+    }
+  }
+
+  Future<void> _openManualDownload(ReleaseInfo release) async {
+    final openDownload = widget.openDownload;
+    setState(() => _downloading = true);
+    var failed = false;
+    try {
+      failed = !await openDownload(release.windowsUrl!);
+    } on Object {
+      failed = true;
+    } finally {
+      if (mounted) {
+        setState(() => _downloading = false);
+        if (failed) {
+          final messenger = ScaffoldMessenger.of(context);
+          messenger.removeCurrentSnackBar();
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Nie udało się otworzyć ręcznego pobierania.'),
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -100,42 +172,7 @@ class _UpdateGateState extends State<UpdateGate> {
                             TextButton(
                               onPressed: _downloading
                                   ? null
-                                  : () async {
-                                      setState(() => _downloading = true);
-                                      final result =
-                                          await (widget.startUpdate?.call(
-                                                release,
-                                                widget.platform,
-                                              ) ??
-                                              _startDefaultUpdate(
-                                                release,
-                                                widget.platform,
-                                                widget.openDownload,
-                                                parentPid: widget.parentPid,
-                                                executablePath:
-                                                    widget.executablePath,
-                                              ));
-                                      if (!mounted) return;
-                                      setState(() {
-                                        _downloading = false;
-                                        _windowsUpdateFailed =
-                                            widget.platform ==
-                                                UpdatePlatform.windows &&
-                                            !result.started;
-                                      });
-                                      if (!result.started) {
-                                        ScaffoldMessenger.of(this.context)
-                                            .showSnackBar(
-                                              SnackBar(
-                                                content: Text(result.message),
-                                              ),
-                                            );
-                                      } else if (widget.platform ==
-                                          UpdatePlatform.windows) {
-                                        widget.onWindowsHelperStarted?.call();
-                                        widget.exitApplication(0);
-                                      }
-                                    },
+                                  : () => _startUpdate(release),
                               child: Text(
                                 _downloading
                                     ? 'Pobieranie…'
@@ -144,8 +181,9 @@ class _UpdateGateState extends State<UpdateGate> {
                             ),
                             IconButton(
                               tooltip: 'Zamknij informację o aktualizacji',
-                              onPressed: () =>
-                                  setState(() => _dismissed = true),
+                              onPressed: _downloading
+                                  ? null
+                                  : () => setState(() => _dismissed = true),
                               icon: const Icon(Icons.close_rounded),
                             ),
                           ],
@@ -157,14 +195,7 @@ class _UpdateGateState extends State<UpdateGate> {
                             child: TextButton(
                               onPressed: _downloading
                                   ? null
-                                  : () async {
-                                      setState(() => _downloading = true);
-                                      await widget.openDownload(
-                                        release.windowsUrl!,
-                                      );
-                                      if (!mounted) return;
-                                      setState(() => _downloading = false);
-                                    },
+                                  : () => _openManualDownload(release),
                               child: const Text('Pobierz ręcznie'),
                             ),
                           ),

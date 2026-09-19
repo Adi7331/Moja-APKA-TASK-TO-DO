@@ -32,7 +32,20 @@ release → Run workflow**. Wtedy wpisz istniejący tag, np. `v1.1.3`.
    - `dzien-po-dniu-windows-vX.Y.Z.zip` (w środku cały folder wydania Windows)
    - `update.json`
 
-Aplikacja porównuje tylko stabilne numery w formacie `X.Y.Z`. Android otwiera systemowy instalator. Windows otwiera pobranie paczki ZIP; po rozpakowaniu należy uruchomić `dzien_po_dniu.exe`.
+Aplikacja porównuje tylko stabilne numery w formacie `X.Y.Z`. Android otwiera systemowy instalator. Windows w wersji `1.1.4` i nowszych pobiera paczkę, podmienia pliki i uruchamia nową wersję automatycznie; starsze wydania wymagają ręcznego rozpakowania paczki ZIP i uruchomienia `dzien_po_dniu.exe`.
+
+## Wydanie 1.1.4 — jednorazowa migracja aktualizatora
+
+Wersja `1.1.4` naprawia numer instalacyjny Androida, więc aktualizacja z
+wcześniejszej wersji może zostać przyjęta bez odinstalowywania aplikacji.
+Android pobiera paczkę z banera, a następnie wymaga potwierdzenia w systemowym
+instalatorze.
+
+Na Windowsie wersję `1.1.4` trzeba zainstalować ręcznie po raz ostatni. Od
+wersji `1.1.4` kolejne wydania pobierają paczkę po kliknięciu **Aktualizuj
+teraz**, zamykają aplikację i uruchamiają nową wersję automatycznie. Jeśli
+katalog instalacji Windows nie pozwala na zapis, aplikacja pozostaje otwarta i
+pokazuje przycisk **Pobierz ręcznie** zamiast wykonywać nieudaną próbę podmiany.
 
 ## Ważne o podpisie Androida
 

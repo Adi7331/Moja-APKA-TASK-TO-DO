@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class RemasterSettingsScreen extends StatelessWidget {
   const RemasterSettingsScreen({
     super.key,
+    required this.appVersion,
     required this.syncStatus,
     required this.themeMode,
     required this.onThemeMode,
@@ -10,6 +12,8 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.name,
     this.avatarUrl,
     this.onSignOut,
+    this.onCheckForUpdate,
+    this.updateCheckStatus,
     this.calendarConnected = false,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
@@ -19,12 +23,15 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.onDisconnectCalendar,
   });
 
+  final String appVersion;
   final String syncStatus;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeMode;
   final VoidCallback onLegacy;
   final String? name, avatarUrl;
   final VoidCallback? onSignOut;
+  final Future<void> Function()? onCheckForUpdate;
+  final ValueListenable<String>? updateCheckStatus;
   final bool calendarConnected;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
@@ -85,6 +92,17 @@ class RemasterSettingsScreen extends StatelessWidget {
                           : 'Dane są gotowe na pozostałych urządzeniach.',
                     ),
                   ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Aktualizacje',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                _UpdateSettingsCard(
+                  appVersion: appVersion,
+                  onCheckForUpdate: onCheckForUpdate,
+                  status: updateCheckStatus,
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -238,6 +256,100 @@ class _Avatar extends StatelessWidget {
           ? null
           : NetworkImage(avatarUrl!),
       child: Text(initial),
+    );
+  }
+}
+
+class _UpdateSettingsCard extends StatefulWidget {
+  const _UpdateSettingsCard({
+    required this.appVersion,
+    required this.onCheckForUpdate,
+    required this.status,
+  });
+
+  final String appVersion;
+  final Future<void> Function()? onCheckForUpdate;
+  final ValueListenable<String>? status;
+
+  @override
+  State<_UpdateSettingsCard> createState() => _UpdateSettingsCardState();
+}
+
+class _UpdateSettingsCardState extends State<_UpdateSettingsCard> {
+  bool _checking = false;
+
+  Future<void> _check() async {
+    final callback = widget.onCheckForUpdate;
+    if (callback == null || _checking) return;
+    setState(() => _checking = true);
+    try {
+      await callback();
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.system_update_alt_rounded),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Wersja aplikacji',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(widget.appVersion),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _StatusText(status: widget.status),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: widget.onCheckForUpdate == null || _checking
+                ? null
+                : _check,
+            icon: _checking
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+            label: Text(_checking ? 'Sprawdzanie…' : 'Sprawdź aktualizacje'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _StatusText extends StatelessWidget {
+  const _StatusText({required this.status});
+
+  final ValueListenable<String>? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final listenable = status;
+    if (listenable == null) {
+      return Text(
+        'Sprawdź, czy masz najnowszą wersję.',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    return ValueListenableBuilder<String>(
+      valueListenable: listenable,
+      builder: (context, value, _) => Text(
+        value.isEmpty ? 'Sprawdź, czy masz najnowszą wersję.' : value,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
     );
   }
 }

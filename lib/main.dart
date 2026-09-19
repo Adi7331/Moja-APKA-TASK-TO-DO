@@ -86,6 +86,15 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  static const _appVersion = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: '1.0.0',
+  );
+  static const _updateManifestUrl = String.fromEnvironment(
+    'UPDATE_MANIFEST_URL',
+    defaultValue: 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/latest/download/update.json',
+  );
+  final _updateGateKey = GlobalKey<UpdateGateState>();
   bool localMode = false;
   bool cloudMode = false;
   bool _notesCloudAvailable = false;
@@ -94,6 +103,7 @@ class _MyAppState extends State<MyApp> {
   bool _notesMode = false;
   bool _remasterPreview = true;
   String _syncStatus = 'Lokalnie';
+  final _updateCheckStatus = ValueNotifier<String>('');
   late Future<void> _localRestoreFuture;
   late Future<void> _localNotesRestoreFuture;
   bool _cloudTransitionInProgress = false;
@@ -991,7 +1001,29 @@ class _MyAppState extends State<MyApp> {
     _focusSessionSubscription?.cancel();
     _authSubscription?.cancel();
     _noticeTimer?.cancel();
+    _updateCheckStatus.dispose();
     super.dispose();
+  }
+
+  Future<ReleaseInfo?> _checkForUpdate() => const UpdateService().check(
+    _updateManifestUrl,
+    currentVersion: _appVersion,
+  );
+
+  Future<void> _checkForUpdateFromSettings() async {
+    _updateCheckStatus.value = 'Sprawdzanie…';
+    try {
+      final release =
+          await (_updateGateKey.currentState?.checkNow() ?? _checkForUpdate());
+      if (!mounted) return;
+      _updateCheckStatus.value = release == null
+          ? 'Masz najnowszą wersję.'
+          : 'Dostępna aktualizacja ${release.version}. Baner jest gotowy.';
+    } catch (_) {
+      if (mounted) {
+        _updateCheckStatus.value = 'Nie udało się sprawdzić aktualizacji.';
+      }
+    }
   }
 
   Future<void> _changeTaskStatus(TaskItem task, String status) async {
@@ -1493,20 +1525,9 @@ class _MyAppState extends State<MyApp> {
         : buildDarkTheme(),
     themeMode: _themeMode,
     builder: (context, child) => UpdateGate(
-      currentVersion: const String.fromEnvironment(
-        'APP_VERSION',
-        defaultValue: '1.0.0',
-      ),
-      checkForUpdate: () => const UpdateService().check(
-        const String.fromEnvironment(
-          'UPDATE_MANIFEST_URL',
-          defaultValue: 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/latest/download/update.json',
-        ),
-        currentVersion: const String.fromEnvironment(
-          'APP_VERSION',
-          defaultValue: '1.0.0',
-        ),
-      ),
+      key: _updateGateKey,
+      currentVersion: _appVersion,
+      checkForUpdate: _checkForUpdate,
       child: child ?? const SizedBox.shrink(),
     ),
     home: Builder(
@@ -1549,6 +1570,9 @@ class _MyAppState extends State<MyApp> {
             themeMode: _themeMode,
             onThemeMode: _changeThemeMode,
             syncStatus: _syncStatus,
+            appVersion: _appVersion,
+            onCheckForUpdate: _checkForUpdateFromSettings,
+            updateCheckStatus: _updateCheckStatus,
             name: _profileValue('full_name'),
             avatarUrl: _profileValue('avatar_url'),
             onSignOut: cloudMode ? _signOut : null,
