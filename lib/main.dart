@@ -90,7 +90,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const _appVersion = String.fromEnvironment(
     'APP_VERSION',
     defaultValue: '1.0.0',
@@ -174,6 +174,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _localRestoreFuture = _restoreLocalTasks();
     _localNotesRestoreFuture = _restoreLocalNotes();
     _restoreCloudSession();
@@ -186,7 +187,8 @@ class _MyAppState extends State<MyApp> {
         _enterCloudMode();
       }
       _authSubscription = auth.onAuthStateChange.listen((state) {
-        if (_calendarAuthorizationPending && state.session != null) {
+        if (_calendarAuthorizationPending &&
+            state.session?.providerToken?.isNotEmpty == true) {
           unawaited(_finishCalendarConnection(state.session!.providerToken));
         }
         if (state.session != null && !cloudMode) {
@@ -195,6 +197,17 @@ class _MyAppState extends State<MyApp> {
       });
     } on AssertionError {
       // Widget tests intentionally construct MyApp without Supabase.initialize.
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_calendarAuthorizationPending) {
+      return;
+    }
+    final token = Supabase.instance.client.auth.currentSession?.providerToken;
+    if (token?.isNotEmpty == true) {
+      unawaited(_finishCalendarConnection(token));
     }
   }
 
@@ -1130,6 +1143,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _taskSubscription?.cancel();
     _taskCategorySubscription?.cancel();
     _subtaskSubscription?.cancel();
