@@ -21,6 +21,7 @@ class TaskSyncService {
     String title, {
     String note = '',
     String category = 'Skrzynka',
+    String? categoryId,
     String priority = 'medium',
     DateTime? dueAt,
     String? sourceNoteId,
@@ -36,6 +37,7 @@ class TaskSyncService {
           'title': title,
           'note': note,
           'category': category,
+          if (categoryId != null) 'category_id': categoryId,
           'priority': priority,
           'due_at': dueAt?.toUtc().toIso8601String(),
           'source_note_id': sourceNoteId,
@@ -84,6 +86,7 @@ class TaskSyncService {
     required String title,
     required String note,
     required String category,
+    String? categoryId,
     required String priority,
     required DateTime? dueAt,
   }) => _client
@@ -92,6 +95,7 @@ class TaskSyncService {
         'title': title,
         'note': note,
         'category': category,
+        'category_id': categoryId,
         'priority': priority,
         'due_at': dueAt?.toUtc().toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),

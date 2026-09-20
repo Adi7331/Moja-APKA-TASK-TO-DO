@@ -10,6 +10,7 @@ class TaskItem {
     required this.status,
     this.note = '',
     this.category = 'Skrzynka',
+    this.categoryId,
     this.priority = 'medium',
     this.dueAt,
     this.reminderAt,
@@ -26,6 +27,7 @@ class TaskItem {
         status: row['status'] as String? ?? 'todo',
         note: row['note'] as String? ?? '',
         category: row['category'] as String? ?? 'Skrzynka',
+        categoryId: row['category_id'] as String?,
         priority: row['priority'] as String? ?? 'medium',
         dueAt: row['due_at'] == null
             ? null
@@ -51,6 +53,7 @@ class TaskItem {
         status: stored['status'] as String? ?? 'todo',
         note: stored['note'] as String? ?? '',
         category: stored['category'] as String? ?? 'Skrzynka',
+        categoryId: stored['categoryId'] as String?,
         priority: stored['priority'] as String? ?? 'medium',
         dueAt: stored['dueAt'] == null
             ? null
@@ -75,6 +78,7 @@ class TaskItem {
   final String status;
   final String note;
   final String category;
+  final String? categoryId;
   final String priority;
   final DateTime? dueAt;
   final DateTime? reminderAt;
@@ -94,6 +98,7 @@ class TaskItem {
     String? status,
     String? note,
     String? category,
+    Object? categoryId = _unset,
     String? priority,
     Object? dueAt = _unset,
     Object? reminderAt = _unset,
@@ -108,6 +113,9 @@ class TaskItem {
         status: status ?? this.status,
         note: note ?? this.note,
         category: category ?? this.category,
+        categoryId: identical(categoryId, _unset)
+            ? this.categoryId
+            : categoryId as String?,
         priority: priority ?? this.priority,
         dueAt: identical(dueAt, _unset) ? this.dueAt : dueAt as DateTime?,
         reminderAt: identical(reminderAt, _unset)
@@ -132,6 +140,7 @@ class TaskItem {
         'status': status,
         'note': note,
         'category': category,
+        'categoryId': categoryId,
         'priority': priority,
         'dueAt': dueAt?.toIso8601String(),
         'reminderAt': reminderAt?.toIso8601String(),
@@ -147,6 +156,7 @@ class TaskItem {
         'status': status,
         'note': note,
         'category': category,
+        if (categoryId != null) 'category_id': categoryId,
         'priority': priority,
         'due_at': dueAt?.toUtc().toIso8601String(),
         'reminder_at': reminderAt?.toUtc().toIso8601String(),
