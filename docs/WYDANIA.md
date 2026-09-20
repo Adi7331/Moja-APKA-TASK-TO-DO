@@ -47,11 +47,13 @@ teraz**, zamykają aplikację i uruchamiają nową wersję automatycznie. Jeśli
 katalog instalacji Windows nie pozwala na zapis, aplikacja pozostaje otwarta i
 pokazuje przycisk **Pobierz ręcznie** zamiast wykonywać nieudaną próbę podmiany.
 
-## Wydanie 1.1.5 — poprawiona konfiguracja wydania
+## Wydanie 1.1.6 — poprawiona konfiguracja Supabase
 
-Wydanie `1.1.5` zawiera poprawne ustawienia połączenia z Supabase w paczkach
-Android i Windows. Jest to wydanie zastępujące `1.1.4`; trzeba je zainstalować,
-aby logowanie przez Google korzystało z właściwego projektu.
+Wydanie `1.1.6` zastępuje wcześniejsze paczki testowe `1.1.4` i `1.1.5`.
+Przed jego zbudowaniem sekret GitHub `SUPABASE_PUBLISHABLE_KEY` musi zawierać
+wyłącznie klucz klienta zaczynający się od `sb_publishable_`, nigdy
+`sb_secret_` ani `service_role`. Dopiero paczkę `1.1.6` należy instalować,
+aby logowanie Google korzystało z poprawnej i bezpiecznej konfiguracji.
 
 ## Ważne o podpisie Androida
 
