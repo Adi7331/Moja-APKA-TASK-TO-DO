@@ -11,6 +11,7 @@ class NotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
   var _isInitialized = false;
   void Function(NotificationResponse response)? onResponse;
+  NotificationResponse? _launchResponse;
 
   Future<void> initialize() async {
     tz.initializeTimeZones();
@@ -25,11 +26,29 @@ class NotificationService {
           guid: 'b6ce9851-cad2-45c4-903a-c93e236173e6',
         ),
       ),
-      onDidReceiveNotificationResponse: (response) {
-        onResponse?.call(response);
-      },
+      onDidReceiveNotificationResponse: _dispatchResponse,
     );
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp == true) {
+      _launchResponse = launchDetails?.notificationResponse;
+    }
     _isInitialized = true;
+  }
+
+  /// Returns an action that launched a cold application exactly once.
+  Future<NotificationResponse?> consumeLaunchResponse() async {
+    final response = _launchResponse;
+    _launchResponse = null;
+    return response;
+  }
+
+  void _dispatchResponse(NotificationResponse response) {
+    final callback = onResponse;
+    if (callback == null) {
+      _launchResponse = response;
+    } else {
+      callback(response);
+    }
   }
 
   /// Requests notification permission only when the user has enabled a

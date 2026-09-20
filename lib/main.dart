@@ -189,7 +189,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationService.instance.onResponse = _handleNotificationResponse;
     _localRestoreFuture = _restoreLocalTasks();
     _localNotesRestoreFuture = _restoreLocalNotes();
+    unawaited(_consumeLaunchNotification());
     _restoreCloudSession();
+  }
+
+  Future<void> _consumeLaunchNotification() async {
+    final response = await NotificationService.instance.consumeLaunchResponse();
+    if (response == null) return;
+    await _localRestoreFuture;
+    await _localNotesRestoreFuture;
+    if (!mounted) return;
+    _handleNotificationResponse(response);
   }
 
   void _handleNotificationResponse(NotificationResponse response) {
