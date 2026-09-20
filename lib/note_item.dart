@@ -20,13 +20,13 @@ enum NoteTableMode { plain, checklist }
 enum NoteTrashRetention { never, sevenDays, thirtyDays }
 
 class NoteSettings {
-  const NoteSettings({this.trashRetention = NoteTrashRetention.never});
+  const NoteSettings({this.trashRetention = NoteTrashRetention.thirtyDays});
 
   factory NoteSettings.fromJson(Map<String, dynamic> json) => NoteSettings(
     trashRetention: switch (json['trashRetentionDays']) {
       7 => NoteTrashRetention.sevenDays,
       30 => NoteTrashRetention.thirtyDays,
-      _ => NoteTrashRetention.never,
+      _ => NoteTrashRetention.thirtyDays,
     },
   );
 

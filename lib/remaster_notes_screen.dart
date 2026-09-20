@@ -886,28 +886,13 @@ class _NoteCard extends StatelessWidget {
   final Future<void> Function(NoteItem)? onPermanentlyDelete;
 
   Future<void> _requestDelete(BuildContext context) async {
-    if (!note.isDeleted || onPermanentlyDelete == null) {
-      await onDelete(note);
+    if (note.isDeleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notatki w Koszu są czyszczone automatycznie po 30 dniach.')),
+      );
       return;
     }
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Usunąć notatkę trwale?'),
-        content: const Text('Tej operacji nie można cofnąć.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Anuluj'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Usuń trwale'),
-          ),
-        ],
-      ),
-    );
-    if (accepted == true) await onPermanentlyDelete!(note);
+    await onDelete(note);
   }
   final List<NoteFolder> folders;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
@@ -1131,9 +1116,9 @@ class _NoteCard extends StatelessWidget {
                         icon: const Icon(Icons.folder_outlined),
                       ),
                     IconButton(
-                      tooltip: note.isDeleted && onPermanentlyDelete != null
-                          ? 'Usuń notatkę trwale'
-                          : 'Usuń notatkę',
+                      tooltip: note.isDeleted
+                          ? 'Kosz czyści notatki po 30 dniach'
+                          : 'Przenieś notatkę do kosza',
                       onPressed: () => _requestDelete(context),
                       icon: const Icon(Icons.delete_outline_rounded),
                     ),

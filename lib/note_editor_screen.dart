@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'note_attachment_picker.dart';
 import 'note_item.dart';
+import 'serial_async_queue.dart';
 
 class NoteEditorScreen extends StatefulWidget {
   const NoteEditorScreen({
@@ -50,7 +51,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   Timer? _saveTimer;
-  bool _saving = false;
+  final _saveQueue = SerialAsyncQueue();
   String _saveStatus = 'Zapisano';
   bool _advancedOpen = false;
 
@@ -87,7 +88,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     if (!mounted) return;
     setState(() => _saveStatus = 'Oczekuje na zapis');
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 600), _save);
+    _saveTimer = Timer(
+      const Duration(milliseconds: 600),
+      () => unawaited(_save()),
+    );
   }
 
   NoteItem _draft() {
@@ -109,24 +113,25 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
-    _saving = true;
+  Future<bool> _save() async {
+    _saveTimer?.cancel();
     if (mounted) setState(() => _saveStatus = 'Zapisywanie…');
-    final draft = _draft();
     try {
-      await widget.onSave(draft);
-      _note = draft;
+      await _saveQueue.run(() async {
+        final draft = _draft();
+        await widget.onSave(draft);
+        _note = draft;
+      });
       if (mounted) setState(() => _saveStatus = 'Zapisano');
+      return true;
     } catch (_) {
       if (mounted) setState(() => _saveStatus = 'Błąd — spróbuj ponownie');
-    } finally {
-      _saving = false;
+      return false;
     }
   }
 
   Future<void> _close() async {
-    await _save();
+    if (!await _save()) return;
     if (!mounted) return;
     if (widget.embedded) return;
     Navigator.of(context).pop(_note);

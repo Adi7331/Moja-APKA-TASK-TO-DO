@@ -255,11 +255,11 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _saveLocalTasks() async {
-    if (!cloudMode) await _localStore?.save(tasks);
+    await _localStore?.save(tasks);
   }
 
   Future<void> _saveLocalNotes() async {
-    if (!cloudMode) await _localNoteStore?.save(notes);
+    await _localNoteStore?.save(notes);
   }
 
   Future<void> _saveLocalFolders() async {
@@ -701,6 +701,11 @@ class _MyAppState extends State<MyApp> {
           await _localNoteStore?.markCloudMigrationCompleted();
         }
         await _loadCloudNotes();
+        try {
+          await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
+        } catch (_) {
+          // Purging old trash must never make usable note sync unavailable.
+        }
         _notesCloudAvailable = true;
       } catch (_) {
         // The task workspace remains usable while the optional notes SQL is deployed.
@@ -839,9 +844,20 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _saveNote(NoteItem note) async {
+    final isNew = !notes.any((item) => item.id == note.id);
+    if (mounted) {
+      setState(() {
+        final index = notes.indexWhere((item) => item.id == note.id);
+        if (index == -1) {
+          notes.insert(0, note);
+        } else {
+          notes[index] = note;
+        }
+      });
+    }
+    await _saveLocalNotes();
     if (cloudMode && _notesCloudAvailable) {
       try {
-        final isNew = !notes.any((item) => item.id == note.id);
         await _noteSync.saveNote(
           note,
           expectedRevision: isNew ? null : note.revision - 1,
@@ -856,22 +872,23 @@ class _MyAppState extends State<MyApp> {
           });
         }
         return;
+      } catch (_) {
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+        throw StateError('Notatka jest zapisana lokalnie i czeka na synchronizację.');
       }
       await _loadCloudNotes();
+      try {
+        await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
+      } catch (_) {
+        // The current note was synchronized; cleanup can retry later.
+      }
       await _scheduleNoteReminder(note);
       return;
     }
-    if (mounted) {
-      setState(() {
-        final index = notes.indexWhere((item) => item.id == note.id);
-        if (index == -1) {
-          notes.insert(0, note);
-        } else {
-          notes[index] = note;
-        }
-      });
-    }
-    await _saveLocalNotes();
     await _scheduleNoteReminder(note);
   }
 
