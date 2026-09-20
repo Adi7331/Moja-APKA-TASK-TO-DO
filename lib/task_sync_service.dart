@@ -37,7 +37,7 @@ class TaskSyncService {
           'title': title,
           'note': note,
           'category': category,
-          if (categoryId != null) 'category_id': categoryId,
+          'category_id': ?categoryId,
           'priority': priority,
           'due_at': dueAt?.toUtc().toIso8601String(),
           'source_note_id': sourceNoteId,
@@ -106,6 +106,7 @@ class TaskSyncService {
       .from('tasks')
       .update({
         ...task.toSupabasePayload(),
+        'category_id': task.categoryId,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       })
       .eq('id', task.id);

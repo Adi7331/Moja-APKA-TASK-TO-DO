@@ -45,6 +45,7 @@ class RemasterShell extends StatefulWidget {
     this.onChooseCalendars,
     this.onRefreshCalendar,
     this.onDisconnectCalendar,
+    this.onManageTaskCategories,
   });
   final List<TaskItem> tasks;
   final List<NoteItem> notes;
@@ -70,6 +71,7 @@ class RemasterShell extends StatefulWidget {
       onChooseCalendars,
       onRefreshCalendar,
       onDisconnectCalendar;
+  final VoidCallback? onManageTaskCategories;
   @override
   State<RemasterShell> createState() => _RemasterShellState();
 }
@@ -154,6 +156,7 @@ class _RemasterShellState extends State<RemasterShell> {
         onChooseCalendars: widget.onChooseCalendars,
         onRefreshCalendar: widget.onRefreshCalendar,
         onDisconnectCalendar: widget.onDisconnectCalendar,
+        onManageTaskCategories: widget.onManageTaskCategories,
       ),
     ),
   );

@@ -439,7 +439,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byIcon(Icons.circle_outlined).first);
     await tester.pump();
-    expect(find.byIcon(Icons.check_circle), findsWidgets);
+    expect(find.text('Wykosić trawnik'), findsNothing);
   });
 
   testWidgets(
@@ -711,7 +711,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.circle_outlined).first);
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Gotowe'));
+    await tester.tap(find.text('Ukończone').first);
     await tester.pump();
 
     expect(find.text('Wykosić trawnik'), findsOneWidget);
@@ -740,12 +740,14 @@ void main() {
     await tester.tap(find.text('Tryb lokalny'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(const ValueKey('quick-add-task')));
     await tester.tap(find.byKey(const ValueKey('quick-add-task')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('task-title-input')),
       'Nowe zadanie',
     );
+    await tester.ensureVisible(find.text('Dodaj zadanie'));
     await tester.tap(find.text('Dodaj zadanie'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -790,7 +792,7 @@ void main() {
     expect(find.text('Edytuj zadanie'), findsOneWidget);
     expect(find.text('Termin'), findsOneWidget);
     expect(find.text('Więcej opcji'), findsOneWidget);
-    expect(find.text('Opis (opcjonalnie)'), findsNothing);
+    expect(find.text('Opis (opcjonalnie)'), findsOneWidget);
 
     await tester.tap(find.text('Więcej opcji'));
     await tester.pumpAndSettle();
@@ -798,6 +800,7 @@ void main() {
     expect(find.text('Opis (opcjonalnie)'), findsOneWidget);
     expect(find.text('Kategoria'), findsOneWidget);
     expect(find.text('Priorytet'), findsOneWidget);
+    expect(find.text('Lista kroków'), findsOneWidget);
   });
 
   testWidgets('adds a local checklist step and shows its progress', (
@@ -809,6 +812,8 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -360));
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Więcej opcji'));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -837,13 +842,17 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Poprawić grafikę'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Więcej opcji'));
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const ValueKey('subtask-input')),
       'Przygotować baner',
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('add-subtask')));
     await tester.tap(find.byKey(const ValueKey('add-subtask')));
     await tester.pump();
+    await tester.ensureVisible(find.byType(Checkbox).first);
     await tester.tap(find.byType(Checkbox).first);
     await tester.ensureVisible(find.text('Zapisz zmiany'));
     await tester.tap(find.text('Zapisz zmiany'));

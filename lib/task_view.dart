@@ -13,7 +13,9 @@ List<TaskItem> tasksForView(List<TaskItem> tasks, TaskView view, DateTime now) {
     TaskView.today =>
       tasks
           .where(
-            (task) => task.dueAt == null || task.dueAt!.isBefore(endOfToday),
+            (task) =>
+                !task.isDone &&
+                (task.dueAt == null || task.dueAt!.isBefore(endOfToday)),
           )
           .toList(),
     TaskView.inbox =>

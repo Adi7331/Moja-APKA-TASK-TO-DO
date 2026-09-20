@@ -21,6 +21,7 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.onChooseCalendars,
     this.onRefreshCalendar,
     this.onDisconnectCalendar,
+    this.onManageTaskCategories,
   });
 
   final String appVersion;
@@ -39,6 +40,7 @@ class RemasterSettingsScreen extends StatelessWidget {
       onChooseCalendars,
       onRefreshCalendar,
       onDisconnectCalendar;
+  final VoidCallback? onManageTaskCategories;
 
   @override
   Widget build(BuildContext context) {
@@ -185,6 +187,18 @@ class RemasterSettingsScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('Zadania', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.category_outlined),
+                    title: const Text('Kategorie zadań'),
+                    subtitle: const Text('Twórz własne kategorie, kolory i emoji.'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: onManageTaskCategories,
                   ),
                 ),
                 const SizedBox(height: 24),

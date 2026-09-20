@@ -1,14 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'local_task_store.dart';
+import 'local_task_category_store.dart';
 import 'local_note_store.dart';
 import 'cloud_migration.dart';
 import 'task_sync_service.dart';
+import 'task_category.dart';
+import 'task_category_sync_service.dart';
+import 'task_categories_screen.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
 import 'task_occurrence.dart';
@@ -115,6 +120,7 @@ class _MyAppState extends State<MyApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   Timer? _noticeTimer;
   StreamSubscription<List<Map<String, dynamic>>>? _taskSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _taskCategorySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _noteSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _folderSubscription;
@@ -122,6 +128,7 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription<AuthState>? _authSubscription;
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
+  LocalTaskCategoryStore? _localTaskCategoryStore;
   LocalNoteStore? _localNoteStore;
   FocusSessionStore? _focusSessionStore;
   CalendarStore? _calendarStore;
@@ -149,11 +156,14 @@ class _MyAppState extends State<MyApp> {
       category: 'Praca',
     ),
   ];
+  final taskCategories = <TaskCategory>[];
   final notes = <NoteItem>[];
   final folders = <NoteFolder>[];
   final calendarEvents = <CalendarEvent>[];
   final focusSessions = <FocusSession>[];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
+  late final TaskCategorySyncService _categorySync =
+      TaskCategorySyncService(Supabase.instance.client);
   late final NoteSyncService _noteSync = NoteSyncService(
     Supabase.instance.client,
   );
@@ -192,11 +202,14 @@ class _MyAppState extends State<MyApp> {
     final preferences = await SharedPreferences.getInstance();
     final store = LocalTaskStore(preferences);
     final storedTasks = await store.load();
+    final categoryStore = LocalTaskCategoryStore(preferences);
+    final storedCategories = await categoryStore.load();
     final calendarStore = CalendarStore(preferences);
     final calendarCache = await calendarStore.loadCache();
     if (!mounted) return;
     setState(() {
       _localStore = store;
+      _localTaskCategoryStore = categoryStore;
       _focusSessionStore = FocusSessionStore(preferences);
       _calendarStore = calendarStore;
       _calendarLastSyncedAt = calendarCache.lastSyncedAt;
@@ -211,6 +224,9 @@ class _MyAppState extends State<MyApp> {
           ..addAll(storedTasks);
         _nextLocalTaskId = tasks.length + 1;
       }
+      taskCategories
+        ..clear()
+        ..addAll(storedCategories);
     });
     final sessions = await _focusSessionStore!.load();
     if (!mounted) return;
@@ -558,6 +574,90 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future<void> _loadCloudTaskCategories() async {
+    final loaded = await _categorySync.loadCategories();
+    if (!mounted) return;
+    setState(() {
+      taskCategories
+        ..clear()
+        ..addAll(loaded);
+    });
+    await _localTaskCategoryStore?.save(taskCategories);
+  }
+
+  Future<void> _saveTaskCategory(TaskCategory category) async {
+    setState(() {
+      final index = taskCategories.indexWhere((item) => item.id == category.id);
+      if (index == -1) {
+        taskCategories.add(category);
+      } else {
+        taskCategories[index] = category;
+      }
+    });
+    await _localTaskCategoryStore?.save(taskCategories);
+    if (!cloudMode) return;
+    try {
+      final synced = await _categorySync.save(category);
+      if (!mounted) return;
+      setState(() {
+        final index = taskCategories.indexWhere((item) => item.id == synced.id);
+        if (index == -1) {
+          taskCategories.add(synced);
+        } else {
+          taskCategories[index] = synced;
+        }
+        _syncStatus = 'Zsynchronizowano';
+      });
+      await _localTaskCategoryStore?.save(taskCategories);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+      }
+    }
+  }
+
+  Future<void> _deleteTaskCategory(TaskCategory category) async {
+    final changedTasks = tasks
+        .where((task) => task.categoryId == category.id)
+        .map((task) => task.copyWith(categoryId: null))
+        .toList();
+    setState(() {
+      for (final task in changedTasks) {
+        final index = tasks.indexWhere((item) => item.id == task.id);
+        if (index != -1) tasks[index] = task;
+      }
+      taskCategories.removeWhere((item) => item.id == category.id);
+    });
+    await _saveLocalTasks();
+    await _localTaskCategoryStore?.save(taskCategories);
+    if (!cloudMode) return;
+    try {
+      for (final task in changedTasks) {
+        await _sync.updateOrganizerTask(task);
+      }
+      await _categorySync.delete(category.id);
+      if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+    } catch (_) {
+      if (mounted) {
+        setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+      }
+    }
+  }
+
+  Future<void> _openTaskCategories() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'local-user';
+    await _navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => TaskCategoriesScreen(
+          categories: List<TaskCategory>.from(taskCategories),
+          userId: userId,
+          onSave: _saveTaskCategory,
+          onDelete: _deleteTaskCategory,
+        ),
+      ),
+    );
+  }
+
   Future<void> _enterCloudMode() async {
     if (_cloudTransitionInProgress || cloudMode) return;
     _cloudTransitionInProgress = true;
@@ -583,6 +683,12 @@ class _MyAppState extends State<MyApp> {
         await store?.markCloudMigrationCompleted();
       }
       await _loadCloudTasks();
+      try {
+        await _loadCloudTaskCategories();
+      } catch (_) {
+        // Categories remain available from the local cache until their
+        // additive migration is enabled in Supabase.
+      }
       try {
         final localNotes = await _localNoteStore?.load() ?? const <NoteItem>[];
         final cloudNotes = await _noteSync.loadNotes();
@@ -638,6 +744,12 @@ class _MyAppState extends State<MyApp> {
           .stream(primaryKey: ['id'])
           .eq('user_id', user.id)
           .listen((_) => unawaited(_refreshCloudTasks()));
+      await _taskCategorySubscription?.cancel();
+      _taskCategorySubscription = Supabase.instance.client
+          .from('task_categories')
+          .stream(primaryKey: ['id'])
+          .eq('user_id', user.id)
+          .listen((_) => unawaited(_loadCloudTaskCategories()));
       if (_notesCloudAvailable) {
         await _noteSubscription?.cancel();
         _noteSubscription = Supabase.instance.client
@@ -858,6 +970,7 @@ class _MyAppState extends State<MyApp> {
     await showTaskEditor(
       modalContext,
       task: task,
+      categories: taskCategories,
       remastered: _remasterPreview,
       onSave: (draft) async {
         late final String taskId;
@@ -869,6 +982,7 @@ class _MyAppState extends State<MyApp> {
               title: draft.title,
               note: draft.note,
               category: draft.category,
+              categoryId: draft.categoryId,
               priority: draft.priority,
               dueAt: draft.dueAt,
             );
@@ -899,6 +1013,7 @@ class _MyAppState extends State<MyApp> {
                 title: draft.title,
                 note: draft.note,
                 category: draft.category,
+                categoryId: draft.categoryId,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
                 reminderAt: draft.reminderAt,
@@ -913,6 +1028,7 @@ class _MyAppState extends State<MyApp> {
             draft.title,
             note: draft.note,
             category: draft.category,
+            categoryId: draft.categoryId,
             priority: draft.priority,
             dueAt: draft.dueAt,
           );
@@ -931,6 +1047,7 @@ class _MyAppState extends State<MyApp> {
                 status: 'todo',
                 note: draft.note,
                 category: draft.category,
+                categoryId: draft.categoryId,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
                 reminderAt: draft.reminderAt,
@@ -966,11 +1083,13 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _signOut() async {
     await _taskSubscription?.cancel();
+    await _taskCategorySubscription?.cancel();
     await _subtaskSubscription?.cancel();
     await _noteSubscription?.cancel();
     await _folderSubscription?.cancel();
     await _focusSessionSubscription?.cancel();
     _taskSubscription = null;
+    _taskCategorySubscription = null;
     _subtaskSubscription = null;
     _noteSubscription = null;
     _folderSubscription = null;
@@ -995,6 +1114,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     _taskSubscription?.cancel();
+    _taskCategorySubscription?.cancel();
     _subtaskSubscription?.cancel();
     _noteSubscription?.cancel();
     _folderSubscription?.cancel();
@@ -1516,6 +1636,9 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
+    locale: const Locale('pl', 'PL'),
+    supportedLocales: const [Locale('pl', 'PL')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
     navigatorKey: _navigatorKey,
     theme: _remasterPreview
         ? buildRemasterTheme(Brightness.light)
@@ -1583,6 +1706,7 @@ class _MyAppState extends State<MyApp> {
             onChooseCalendars: () => unawaited(_editCalendarSelection()),
             onRefreshCalendar: () => unawaited(_refreshCalendar()),
             onDisconnectCalendar: () => unawaited(_disconnectCalendar()),
+            onManageTaskCategories: () => unawaited(_openTaskCategories()),
           );
         }
         return Stack(

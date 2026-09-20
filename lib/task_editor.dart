@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'subtask_item.dart';
 import 'repeat_rule.dart';
+import 'task_category.dart';
 import 'task_item.dart';
 
 class TaskDraft {
@@ -9,6 +10,7 @@ class TaskDraft {
     required this.title,
     required this.note,
     required this.category,
+    required this.categoryId,
     required this.priority,
     required this.dueAt,
     required this.reminderAt,
@@ -19,6 +21,7 @@ class TaskDraft {
   final String title;
   final String note;
   final String category;
+  final String? categoryId;
   final String priority;
   final DateTime? dueAt;
   final DateTime? reminderAt;
@@ -29,11 +32,13 @@ class TaskDraft {
 Future<void> showTaskEditor(
   BuildContext context, {
   TaskItem? task,
+  List<TaskCategory> categories = const [],
   bool remastered = false,
   required Future<void> Function(TaskDraft draft) onSave,
 }) {
   final form = _TaskEditorForm(
     task: task,
+    categories: categories,
     onSave: onSave,
     remastered: remastered,
   );
@@ -64,10 +69,12 @@ Future<void> showTaskEditor(
 class _TaskEditorForm extends StatefulWidget {
   const _TaskEditorForm({
     required this.task,
+    required this.categories,
     required this.onSave,
     required this.remastered,
   });
   final TaskItem? task;
+  final List<TaskCategory> categories;
   final Future<void> Function(TaskDraft draft) onSave;
   final bool remastered;
 
@@ -80,6 +87,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
   late final TextEditingController _note;
   final _newStep = TextEditingController();
   late String _category;
+  String? _categoryId;
   late String _priority;
   late DateTime? _dueAt;
   late DateTime? _reminderAt;
@@ -95,6 +103,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
     _title = TextEditingController(text: widget.task?.title ?? '');
     _note = TextEditingController(text: widget.task?.note ?? '');
     _category = widget.task?.category ?? 'Skrzynka';
+    _categoryId = widget.task?.categoryId;
     _priority = widget.task?.priority ?? 'medium';
     _dueAt = widget.task?.dueAt;
     _reminderAt = widget.task?.reminderAt;
@@ -177,6 +186,15 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                 decoration: const InputDecoration(labelText: 'Tytuł'),
               ),
               const SizedBox(height: 14),
+              TextField(
+                key: const ValueKey('task-description-input'),
+                controller: _note,
+                minLines: 5,
+                maxLines: 8,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Opis (opcjonalnie)'),
+              ),
+              const SizedBox(height: 20),
               Text('Termin', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 6),
               OutlinedButton.icon(
@@ -209,28 +227,6 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              Text('Małe kroki', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              ..._subtasks.map(_stepRow),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    key: const ValueKey('subtask-input'),
-                    controller: _newStep,
-                    decoration: const InputDecoration(hintText: 'Dodaj krok'),
-                    onSubmitted: (_) => _addStep(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  key: const ValueKey('add-subtask'),
-                  tooltip: 'Dodaj krok',
-                  onPressed: _saving ? null : _addStep,
-                  icon: const Icon(Icons.add),
-                ),
-              ]),
-              const SizedBox(height: 10),
               TextButton.icon(
                 onPressed: _saving ? null : () => setState(() => _showMore = !_showMore),
                 icon: Icon(_showMore ? Icons.expand_less : Icons.expand_more),
@@ -239,21 +235,33 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
               if (_showMore) ...[
                 Column(children: [
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: _note,
-                    maxLines: 2,
-                    decoration: const InputDecoration(labelText: 'Opis (opcjonalnie)'),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: _category,
+                  DropdownButtonFormField<String?>(
+                    initialValue: _categoryId,
                     decoration: const InputDecoration(labelText: 'Kategoria'),
-                    items: const [
-                      DropdownMenuItem(value: 'Skrzynka', child: Text('Skrzynka')),
-                      DropdownMenuItem(value: 'Praca', child: Text('Praca')),
-                      DropdownMenuItem(value: 'Dom', child: Text('Dom')),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Bez kategorii'),
+                      ),
+                      ...widget.categories.map(
+                        (category) => DropdownMenuItem<String?>(
+                          value: category.id,
+                          child: Text(
+                            [if (category.emoji?.isNotEmpty ?? false) category.emoji!, category.name].join(' '),
+                          ),
+                        ),
+                      ),
                     ],
-                    onChanged: _saving ? null : (value) => setState(() => _category = value!),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() {
+                            _categoryId = value;
+                            _category = widget.categories
+                                    .where((category) => category.id == value)
+                                    .firstOrNull
+                                    ?.name ??
+                                'Skrzynka';
+                          }),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -281,6 +289,27 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                   Wrap(spacing: 8, runSpacing: 6, children: [
                     ChoiceChip(key: const ValueKey('reminder-none'), label: const Text('Brak'), selected: _reminderAt == null, onSelected: _saving ? null : (_) => setState(() => _reminderAt = null)),
                     ChoiceChip(key: const ValueKey('reminder-due'), label: const Text('W terminie'), selected: _reminderAt != null && _reminderAt == _dueAt, onSelected: _saving ? null : (_) => setState(() => _reminderAt = _dueAt)),
+                  ]),
+                  const SizedBox(height: 20),
+                  Text('Lista kroków', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  ..._subtasks.map(_stepRow),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('subtask-input'),
+                        controller: _newStep,
+                        decoration: const InputDecoration(hintText: 'Dodaj krok'),
+                        onSubmitted: (_) => _addStep(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      key: const ValueKey('add-subtask'),
+                      tooltip: 'Dodaj krok',
+                      onPressed: _saving ? null : _addStep,
+                      icon: const Icon(Icons.add),
+                    ),
                   ]),
                 ]),
               ],
@@ -385,6 +414,7 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
         title: _title.text.trim(),
         note: _note.text.trim(),
         category: _category,
+        categoryId: _categoryId,
         priority: _priority,
         dueAt: _dueAt,
         reminderAt: _reminderAt,

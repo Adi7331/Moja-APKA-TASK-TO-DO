@@ -28,6 +28,13 @@ void main() {
 
     expect(find.byKey(const ValueKey('remaster-task-editor')), findsOneWidget);
     expect(find.text('Następny krok'), findsOneWidget);
+    expect(find.text('Opis (opcjonalnie)'), findsOneWidget);
     expect(find.text('Termin'), findsOneWidget);
+    expect(find.text('Lista kroków'), findsNothing);
+
+    await tester.tap(find.text('Więcej opcji'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lista kroków'), findsOneWidget);
   });
 }

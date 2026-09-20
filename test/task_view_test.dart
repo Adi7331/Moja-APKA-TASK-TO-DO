@@ -17,7 +17,7 @@ void main() {
   });
 
   test(
-    'keeps completed tasks due today available to the today status filter',
+    'hides completed tasks due today outside the completed view',
     () {
       final doneToday = TaskItem(
         id: 'done-today',
@@ -26,9 +26,10 @@ void main() {
         dueAt: DateTime(2026, 9, 1, 16),
       );
 
-      expect(tasksForView([doneToday], TaskView.today, DateTime(2026, 9, 1)), [
-        doneToday,
-      ]);
+      expect(
+        tasksForView([doneToday], TaskView.today, DateTime(2026, 9, 1)),
+        isEmpty,
+      );
     },
   );
 
