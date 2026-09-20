@@ -32,6 +32,7 @@ class RemasterNotesScreen extends StatefulWidget {
     this.onCreateFolder,
     this.onRenameFolder,
     this.onDeleteFolder,
+    this.onSetWidgetNote,
   });
 
   final List<NoteItem> notes;
@@ -48,6 +49,7 @@ class RemasterNotesScreen extends StatefulWidget {
   final SaveRemasterFolder? onCreateFolder;
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
+  final Future<void> Function(NoteItem? note)? onSetWidgetNote;
 
   @override
   State<RemasterNotesScreen> createState() => _RemasterNotesScreenState();
@@ -141,6 +143,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           onCreateFolder: widget.onCreateFolder,
           onRenameFolder: widget.onRenameFolder,
           onDeleteFolder: widget.onDeleteFolder,
+          onSetWidgetNote: widget.onSetWidgetNote,
         );
         if (!wide) return content;
         return Row(
@@ -192,6 +195,7 @@ class _NotesGrid extends StatelessWidget {
     this.onCreateFolder,
     this.onRenameFolder,
     this.onDeleteFolder,
+    this.onSetWidgetNote,
   });
   final TextEditingController search;
   final String query;
@@ -220,6 +224,7 @@ class _NotesGrid extends StatelessWidget {
   final SaveRemasterFolder? onCreateFolder;
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
+  final Future<void> Function(NoteItem? note)? onSetWidgetNote;
 
   @override
   Widget build(BuildContext context) => CustomScrollView(
@@ -316,6 +321,7 @@ class _NotesGrid extends StatelessWidget {
             onDelete: onDelete,
             onPermanentlyDelete: onPermanentlyDelete,
             onMoveToFolder: onMoveToFolder,
+            onSetWidgetNote: onSetWidgetNote,
           ),
         ],
         if (notes.any((note) => !note.pinned)) ...[
@@ -341,6 +347,7 @@ class _NotesGrid extends StatelessWidget {
             onDelete: onDelete,
             onPermanentlyDelete: onPermanentlyDelete,
             onMoveToFolder: onMoveToFolder,
+            onSetWidgetNote: onSetWidgetNote,
           ),
         ],
       ],
@@ -360,6 +367,7 @@ class _NoteCards extends StatelessWidget {
     required this.onDelete,
     this.onPermanentlyDelete,
     this.onMoveToFolder,
+    this.onSetWidgetNote,
   });
 
   final List<NoteItem> notes;
@@ -372,6 +380,7 @@ class _NoteCards extends StatelessWidget {
   final Future<void> Function(NoteItem) onDelete;
   final Future<void> Function(NoteItem)? onPermanentlyDelete;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
+  final Future<void> Function(NoteItem? note)? onSetWidgetNote;
 
   @override
   Widget build(BuildContext context) => SliverPadding(
@@ -403,6 +412,7 @@ class _NoteCards extends StatelessWidget {
                       onPermanentlyDelete: onPermanentlyDelete,
                       folders: folders,
                       onMoveToFolder: onMoveToFolder,
+                      onSetWidgetNote: onSetWidgetNote,
                     ),
                   ),
                 )
@@ -875,6 +885,7 @@ class _NoteCard extends StatelessWidget {
     this.onPermanentlyDelete,
     required this.folders,
     this.onMoveToFolder,
+    this.onSetWidgetNote,
   });
   final NoteItem note;
   final bool selected;
@@ -896,6 +907,7 @@ class _NoteCard extends StatelessWidget {
   }
   final List<NoteFolder> folders;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
+  final Future<void> Function(NoteItem? note)? onSetWidgetNote;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1114,6 +1126,12 @@ class _NoteCard extends StatelessWidget {
                           ),
                         ],
                         icon: const Icon(Icons.folder_outlined),
+                      ),
+                    if (onSetWidgetNote != null && !note.isDeleted)
+                      IconButton(
+                        tooltip: 'Ustaw tę notatkę w widżecie',
+                        onPressed: () => onSetWidgetNote!(note),
+                        icon: const Icon(Icons.widgets_outlined),
                       ),
                     IconButton(
                       tooltip: note.isDeleted

@@ -146,6 +146,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   String? _calendarAccessToken;
   bool _calendarAuthorizationPending = false;
   final _androidWidgetBridge = AndroidWidgetBridge();
+  String? _selectedAndroidWidgetNoteId;
   List<GoogleCalendarInfo> _availableCalendars = const [];
   final tasks = <TaskItem>[
     const TaskItem(
@@ -295,6 +296,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(calendarCache.events);
       _themeMode = _themeModeFromStorage(preferences.getString('theme_mode'));
+      _selectedAndroidWidgetNoteId = preferences.getString(
+        'android_widget_selected_note_id',
+      );
       _remasterPreview = widget.remasterPreviewOverride ?? true;
       if (storedTasks.isNotEmpty) {
         tasks
@@ -338,7 +342,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _refreshAndroidWidgets({bool clear = false}) {
     final selectedNote = clear
         ? null
-        : notes.where((note) => !note.isDeleted && note.pinned).firstOrNull ??
+        : notes
+                  .where(
+                    (note) =>
+                        !note.isDeleted &&
+                        note.id == _selectedAndroidWidgetNoteId,
+                  )
+                  .firstOrNull ??
+            notes.where((note) => !note.isDeleted && note.pinned).firstOrNull ??
             notes.where((note) => !note.isDeleted).firstOrNull;
     final snapshot = AndroidWidgetSnapshot.fromData(
       tasks: clear
@@ -361,6 +372,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             ),
     );
     unawaited(_androidWidgetBridge.update(snapshot));
+  }
+
+  Future<void> _setAndroidWidgetNote(NoteItem? note) async {
+    final preferences = await SharedPreferences.getInstance();
+    _selectedAndroidWidgetNoteId = note?.id;
+    if (note == null) {
+      await preferences.remove('android_widget_selected_note_id');
+    } else {
+      await preferences.setString('android_widget_selected_note_id', note.id);
+    }
+    _refreshAndroidWidgets();
+    _showSuccessNotice(
+      note == null
+          ? 'Widżet pokaże przypiętą notatkę'
+          : 'Ustawiono notatkę dla widżetu',
+    );
   }
 
   Future<void> _saveLocalTasks() async {
@@ -1409,7 +1436,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _focusSessionsCloudAvailable = false;
       _notesMode = false;
       _syncStatus = 'Lokalnie';
+      _selectedAndroidWidgetNoteId = null;
     });
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove('android_widget_selected_note_id');
     _refreshAndroidWidgets(clear: true);
   }
 
@@ -1926,6 +1956,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         onCreateFolder: _createFolder,
         onRenameFolder: _renameFolder,
         onDeleteFolder: _deleteFolder,
+        onSetWidgetNote: _setAndroidWidgetNote,
       );
     }
     return NotesScreen(
