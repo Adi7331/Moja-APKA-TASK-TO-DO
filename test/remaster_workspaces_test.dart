@@ -318,7 +318,7 @@ void main() {
     expect(saved?.isDeleted, isFalse);
   });
 
-  testWidgets('a trashed note requires confirmation before permanent deletion', (
+  testWidgets('a trashed note explains automatic 30-day cleanup', (
     tester,
   ) async {
     var permanentlyDeleted = false;
@@ -343,14 +343,11 @@ void main() {
 
     await tester.tap(find.text('Kosz'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Usuń notatkę trwale'));
-    await tester.pumpAndSettle();
-    expect(find.text('Usunąć notatkę trwale?'), findsOneWidget);
-
-    await tester.tap(find.text('Usuń trwale'));
+    await tester.tap(find.byTooltip('Kosz czyści notatki po 30 dniach'));
     await tester.pumpAndSettle();
 
-    expect(permanentlyDeleted, isTrue);
+    expect(find.text('Notatki w Koszu są czyszczone automatycznie po 30 dniach.'), findsOneWidget);
+    expect(permanentlyDeleted, isFalse);
   });
 
   testWidgets('a note card makes its reminder visible before opening', (

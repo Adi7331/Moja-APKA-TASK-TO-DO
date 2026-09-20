@@ -8,6 +8,7 @@ import 'remaster_theme.dart';
 import 'remaster_settings_screen.dart';
 import 'suggestion_engine.dart';
 import 'calendar_event.dart';
+import 'organizer_settings.dart';
 
 enum AppSpace { start, tasks, notes }
 
@@ -46,6 +47,9 @@ class RemasterShell extends StatefulWidget {
     this.onRefreshCalendar,
     this.onDisconnectCalendar,
     this.onManageTaskCategories,
+    this.organizerSettings = const OrganizerSettings(),
+    this.onOrganizerSettings,
+    this.onTestReminder,
   });
   final List<TaskItem> tasks;
   final List<NoteItem> notes;
@@ -72,6 +76,9 @@ class RemasterShell extends StatefulWidget {
       onRefreshCalendar,
       onDisconnectCalendar;
   final VoidCallback? onManageTaskCategories;
+  final OrganizerSettings organizerSettings;
+  final ValueChanged<OrganizerSettings>? onOrganizerSettings;
+  final VoidCallback? onTestReminder;
   @override
   State<RemasterShell> createState() => _RemasterShellState();
 }
@@ -157,6 +164,9 @@ class _RemasterShellState extends State<RemasterShell> {
         onRefreshCalendar: widget.onRefreshCalendar,
         onDisconnectCalendar: widget.onDisconnectCalendar,
         onManageTaskCategories: widget.onManageTaskCategories,
+        organizerSettings: widget.organizerSettings,
+        onOrganizerSettings: widget.onOrganizerSettings,
+        onTestReminder: widget.onTestReminder,
       ),
     ),
   );

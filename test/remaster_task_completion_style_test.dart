@@ -25,7 +25,7 @@ void main() {
             height: 800,
             child: RemasterTasksScreen(
               tasks: const [task],
-              selectedView: TaskView.today,
+              selectedView: TaskView.completed,
               onViewChanged: (_) {},
               onOpenTask: (_) {},
               onStatusSelected: (_, _) {},

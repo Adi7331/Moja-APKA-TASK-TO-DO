@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -43,6 +44,7 @@ import 'note_folder.dart';
 import 'note_attachment_picker.dart';
 import 'notes_screen.dart';
 import 'note_sync_service.dart';
+import 'note_sync_outbox.dart';
 import 'focus_session.dart';
 import 'focus_session_store.dart';
 import 'focus_session_sync_service.dart';
@@ -51,6 +53,7 @@ import 'calendar_store.dart';
 import 'update_gate.dart';
 import 'update_service.dart';
 import 'google_calendar_service.dart';
+import 'organizer_settings.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 
@@ -116,6 +119,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   String _statusFilter = 'all';
   TaskView _selectedView = TaskView.today;
   ThemeMode _themeMode = ThemeMode.system;
+  OrganizerSettings _organizerSettings = const OrganizerSettings();
+  OrganizerSettingsStore? _organizerSettingsStore;
   String? _successNotice;
   final _navigatorKey = GlobalKey<NavigatorState>();
   Timer? _noticeTimer;
@@ -130,6 +135,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   LocalTaskStore? _localStore;
   LocalTaskCategoryStore? _localTaskCategoryStore;
   LocalNoteStore? _localNoteStore;
+  NoteSyncOutbox? _noteSyncOutbox;
   FocusSessionStore? _focusSessionStore;
   CalendarStore? _calendarStore;
   DateTime? _calendarLastSyncedAt;
@@ -175,9 +181,45 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    NotificationService.instance.onResponse = _handleNotificationResponse;
     _localRestoreFuture = _restoreLocalTasks();
     _localNotesRestoreFuture = _restoreLocalNotes();
     _restoreCloudSession();
+  }
+
+  void _handleNotificationResponse(NotificationResponse response) {
+    final taskId = response.payload;
+    if (taskId == null || taskId.isEmpty || taskId.startsWith('note:')) return;
+    final task = tasks.where((item) => item.id == taskId).firstOrNull;
+    if (task == null) return;
+    switch (response.actionId) {
+      case 'done':
+        unawaited(_changeTaskStatus(task, 'done'));
+      case 'snooze':
+        unawaited(_snoozeTaskFromNotification(task));
+    }
+  }
+
+  Future<void> _snoozeTaskFromNotification(TaskItem task) async {
+    final updated = task.copyWith(
+      reminderAt: DateTime.now().add(const Duration(minutes: 15)),
+    );
+    if (cloudMode) {
+      await _sync.updateOrganizerTask(updated);
+      await _loadCloudTasks();
+    } else {
+      final index = tasks.indexWhere((item) => item.id == task.id);
+      if (index == -1) return;
+      setState(() => tasks[index] = updated);
+      await _saveLocalTasks();
+    }
+    await NotificationService.instance.cancel(task.id);
+    await NotificationService.instance.scheduleTaskReminder(
+      taskId: updated.id,
+      title: updated.title,
+      when: updated.reminderAt!,
+    );
+    _showSuccessNotice('Zadanie odłożone o 15 minut');
   }
 
   void _restoreCloudSession() {
@@ -218,6 +260,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final categoryStore = LocalTaskCategoryStore(preferences);
     final storedCategories = await categoryStore.load();
     final calendarStore = CalendarStore(preferences);
+    final organizerSettingsStore = OrganizerSettingsStore(preferences);
+    final organizerSettings = await organizerSettingsStore.load();
+    final noteSyncOutbox = NoteSyncOutbox(preferences);
     final calendarCache = await calendarStore.loadCache();
     if (!mounted) return;
     setState(() {
@@ -225,6 +270,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _localTaskCategoryStore = categoryStore;
       _focusSessionStore = FocusSessionStore(preferences);
       _calendarStore = calendarStore;
+      _organizerSettingsStore = organizerSettingsStore;
+      _organizerSettings = organizerSettings;
+      _noteSyncOutbox = noteSyncOutbox;
       _calendarLastSyncedAt = calendarCache.lastSyncedAt;
       calendarEvents
         ..clear()
@@ -248,6 +296,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(sessions);
     });
+    await _refreshDailyPlanNotification();
   }
 
   Future<void> _restoreLocalNotes() async {
@@ -270,6 +319,45 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _saveLocalTasks() async {
     await _localStore?.save(tasks);
   }
+
+  Future<void> _changeOrganizerSettings(OrganizerSettings settings) async {
+    setState(() => _organizerSettings = settings);
+    await _organizerSettingsStore?.save(settings);
+    if (settings.dailyPlanEnabled || settings.overdueReminderIntervalMinutes > 0) {
+      final permission = await NotificationService.instance.requestPermissions();
+      if (!permission && mounted) {
+        _showSuccessNotice('Włącz powiadomienia systemowe, aby dostawać przypomnienia.');
+      }
+    }
+    await NotificationService.instance.scheduleDailyPlan(
+      enabled: settings.dailyPlanEnabled,
+      hour: settings.dailyPlanHour,
+      minute: settings.dailyPlanMinute,
+      pendingTaskCount: tasks.where((task) => !task.isDone).length,
+    );
+  }
+
+  Future<void> _sendReminderTest() async {
+    try {
+      final allowed = await NotificationService.instance.requestPermissions();
+      if (!allowed) {
+        _showSuccessNotice('Powiadomienia są wyłączone w ustawieniach systemu.');
+        return;
+      }
+      await NotificationService.instance.showTestNotification();
+      _showSuccessNotice('Wysłano testowe powiadomienie.');
+    } catch (_) {
+      _showSuccessNotice('Nie udało się wysłać testowego powiadomienia.');
+    }
+  }
+
+  Future<void> _refreshDailyPlanNotification() =>
+      NotificationService.instance.scheduleDailyPlan(
+        enabled: _organizerSettings.dailyPlanEnabled,
+        hour: _organizerSettings.dailyPlanHour,
+        minute: _organizerSettings.dailyPlanMinute,
+        pendingTaskCount: tasks.where((task) => !task.isDone).length,
+      );
 
   Future<void> _saveLocalNotes() async {
     await _localNoteStore?.save(notes);
@@ -714,6 +802,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           await _localNoteStore?.markCloudMigrationCompleted();
         }
         await _loadCloudNotes();
+        await _retryPendingNoteSync();
         try {
           await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
         } catch (_) {
@@ -827,6 +916,37 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _retryPendingNoteSync() async {
+    final outbox = _noteSyncOutbox;
+    if (outbox == null) return;
+    final pending = await outbox.load();
+    for (final operation in pending) {
+      try {
+        await _noteSync.saveNote(
+          operation.note,
+          expectedRevision: operation.expectedRevision,
+          includeFolderId: operation.includeFolderId,
+        );
+        await outbox.remove(operation.id);
+      } on NoteConflictException {
+        final conflict = await _noteSync.createConflictCopy(operation.note);
+        await outbox.remove(operation.id);
+        if (!mounted) continue;
+        setState(() {
+          notes.removeWhere((item) => item.id == operation.note.id);
+          notes.add(conflict);
+        });
+      } catch (_) {
+        // Keep the operation for the next successful sign-in/resume.
+        break;
+      }
+    }
+    if (pending.isNotEmpty) {
+      await _loadCloudNotes();
+      await _saveLocalNotes();
+    }
+  }
+
   Future<void> _loadCloudFolders() async {
     final loaded = await _noteSync.loadFolders();
     if (!mounted) return;
@@ -884,8 +1004,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             notes.add(conflict);
           });
         }
+        await _noteSyncOutbox?.remove(note.id);
         return;
       } catch (_) {
+        await _noteSyncOutbox?.enqueue(
+          note,
+          expectedRevision: isNew ? null : note.revision - 1,
+          includeFolderId: _foldersCloudAvailable,
+        );
         if (mounted) {
           setState(
             () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
@@ -893,6 +1019,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
         throw StateError('Notatka jest zapisana lokalnie i czeka na synchronizację.');
       }
+      await _noteSyncOutbox?.remove(note.id);
       await _loadCloudNotes();
       try {
         await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
@@ -1097,6 +1224,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             when: reminderTime,
           );
         }
+        await _refreshDailyPlanNotification();
         saved = true;
       },
     );
@@ -1203,6 +1331,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _saveLocalTasks();
     }
     if (status == 'done') await NotificationService.instance.cancel(task.id);
+    await _refreshDailyPlanNotification();
     if (status == 'done' && task.repeatRule == null) {
       _showUndoSnackBar(
         'Zadanie oznaczone jako gotowe',
@@ -1229,6 +1358,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         when: reminderTime,
       );
     }
+    await _refreshDailyPlanNotification();
   }
 
   Future<void> _postponeTask(TaskItem task) async {
@@ -1294,6 +1424,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         when: parsed.dueAt!,
       );
     }
+    await _refreshDailyPlanNotification();
     _showSuccessNotice();
   }
 
@@ -1391,6 +1522,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _saveLocalTasks();
     }
     await NotificationService.instance.cancel(task.id);
+    await _refreshDailyPlanNotification();
     _showUndoSnackBar(
       'Zadanie usunięte',
       () => _restoreDeletedTask(task, localIndex),
@@ -1415,6 +1547,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         when: reminderTime,
       );
     }
+    await _refreshDailyPlanNotification();
   }
 
   void _showUndoSnackBar(String message, Future<void> Function() onUndo) {
@@ -1738,6 +1871,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             onRefreshCalendar: () => unawaited(_refreshCalendar()),
             onDisconnectCalendar: () => unawaited(_disconnectCalendar()),
             onManageTaskCategories: () => unawaited(_openTaskCategories()),
+            organizerSettings: _organizerSettings,
+            onOrganizerSettings: (settings) =>
+                unawaited(_changeOrganizerSettings(settings)),
+            onTestReminder: () => unawaited(_sendReminderTest()),
           );
         }
         return Stack(

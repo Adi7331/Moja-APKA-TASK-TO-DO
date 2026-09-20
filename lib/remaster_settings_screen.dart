@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'organizer_settings.dart';
+
 class RemasterSettingsScreen extends StatelessWidget {
   const RemasterSettingsScreen({
     super.key,
@@ -22,6 +24,9 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.onRefreshCalendar,
     this.onDisconnectCalendar,
     this.onManageTaskCategories,
+    this.organizerSettings = const OrganizerSettings(),
+    this.onOrganizerSettings,
+    this.onTestReminder,
   });
 
   final String appVersion;
@@ -41,6 +46,9 @@ class RemasterSettingsScreen extends StatelessWidget {
       onRefreshCalendar,
       onDisconnectCalendar;
   final VoidCallback? onManageTaskCategories;
+  final OrganizerSettings organizerSettings;
+  final ValueChanged<OrganizerSettings>? onOrganizerSettings;
+  final VoidCallback? onTestReminder;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +113,17 @@ class RemasterSettingsScreen extends StatelessWidget {
                   appVersion: appVersion,
                   onCheckForUpdate: onCheckForUpdate,
                   status: updateCheckStatus,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Przypomnienia',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                _ReminderSettingsCard(
+                  settings: organizerSettings,
+                  onChanged: onOrganizerSettings,
+                  onTest: onTestReminder,
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -240,6 +259,121 @@ class RemasterSettingsScreen extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReminderSettingsCard extends StatelessWidget {
+  const _ReminderSettingsCard({
+    required this.settings,
+    this.onChanged,
+    this.onTest,
+  });
+
+  final OrganizerSettings settings;
+  final ValueChanged<OrganizerSettings>? onChanged;
+  final VoidCallback? onTest;
+
+  Future<void> _pickTime(BuildContext context) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: settings.dailyPlanHour,
+        minute: settings.dailyPlanMinute,
+      ),
+      helpText: 'Godzina planu dnia',
+      cancelText: 'Anuluj',
+      confirmText: 'Ustaw',
+    );
+    if (picked == null) return;
+    onChanged?.call(_copy(dailyPlanHour: picked.hour, dailyPlanMinute: picked.minute));
+  }
+
+  OrganizerSettings _copy({
+    bool? dailyPlanEnabled,
+    int? dailyPlanHour,
+    int? dailyPlanMinute,
+    int? overdueReminderIntervalMinutes,
+  }) => OrganizerSettings(
+    defaultReminderMinutes: settings.defaultReminderMinutes,
+    defaultSnoozeMinutes: settings.defaultSnoozeMinutes,
+    weeklyReviewHour: settings.weeklyReviewHour,
+    weeklyReviewMinute: settings.weeklyReviewMinute,
+    dailyPlanEnabled: dailyPlanEnabled ?? settings.dailyPlanEnabled,
+    dailyPlanHour: dailyPlanHour ?? settings.dailyPlanHour,
+    dailyPlanMinute: dailyPlanMinute ?? settings.dailyPlanMinute,
+    overdueReminderIntervalMinutes:
+        overdueReminderIntervalMinutes ?? settings.overdueReminderIntervalMinutes,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = settings.dailyPlanEnabled;
+    final time =
+        '${settings.dailyPlanHour.toString().padLeft(2, '0')}:${settings.dailyPlanMinute.toString().padLeft(2, '0')}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Dzienny plan'),
+              subtitle: Text(
+                enabled
+                    ? 'Przypomnę o planie o $time'
+                    : 'Wyłączone domyślnie — włącz, gdy tego potrzebujesz.',
+              ),
+              value: enabled,
+              onChanged: onChanged == null
+                  ? null
+                  : (value) => onChanged!(_copy(dailyPlanEnabled: value)),
+            ),
+            if (enabled)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule_rounded),
+                title: const Text('Godzina przypomnienia'),
+                trailing: TextButton(
+                  onPressed: onChanged == null ? null : () => _pickTime(context),
+                  child: Text(time),
+                ),
+              ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.notifications_active_outlined),
+              title: const Text('Zaległe zadania'),
+              subtitle: const Text('Jak często ponawiać przypomnienie'),
+              trailing: DropdownButton<int>(
+                value: settings.overdueReminderIntervalMinutes,
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('Wyłączone')),
+                  DropdownMenuItem(value: 30, child: Text('30 min')),
+                  DropdownMenuItem(value: 60, child: Text('1 godz.')),
+                  DropdownMenuItem(value: 120, child: Text('2 godz.')),
+                ],
+                onChanged: onChanged == null
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          onChanged!(_copy(
+                            overdueReminderIntervalMinutes: value,
+                          ));
+                        }
+                      },
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onTest,
+                icon: const Icon(Icons.send_outlined),
+                label: const Text('Wyślij test'),
+              ),
+            ),
+          ],
         ),
       ),
     );

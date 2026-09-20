@@ -3,11 +3,14 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'reminder_schedule.dart';
+
 class NotificationService {
   NotificationService._();
   static final instance = NotificationService._();
   final _plugin = FlutterLocalNotificationsPlugin();
   var _isInitialized = false;
+  void Function(NotificationResponse response)? onResponse;
 
   Future<void> initialize() async {
     tz.initializeTimeZones();
@@ -22,8 +25,86 @@ class NotificationService {
           guid: 'b6ce9851-cad2-45c4-903a-c93e236173e6',
         ),
       ),
+      onDidReceiveNotificationResponse: (response) {
+        onResponse?.call(response);
+      },
     );
     _isInitialized = true;
+  }
+
+  /// Requests notification permission only when the user has enabled a
+  /// reminder setting. Android 14 exact alarms remain optional; all regular
+  /// reminders use the safe inexact fallback.
+  Future<bool> requestPermissions({bool exactAlarm = false}) async {
+    if (!_isInitialized) return false;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return true;
+    final notifications = await android.requestNotificationsPermission() ??
+        false;
+    if (!notifications) return false;
+    if (exactAlarm) {
+      await android.requestExactAlarmsPermission();
+    }
+    return true;
+  }
+
+  Future<void> showTestNotification() async {
+    if (!_isInitialized) return;
+    await _plugin.show(
+      id: 'test'.hashCode,
+      title: 'Przypomnienia działają',
+      body: 'To jest testowe powiadomienie z Dzień po dniu.',
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'task_reminders',
+          'Przypomnienia o zadaniach',
+          channelDescription: 'Przypomnienia o zaplanowanych zadaniach',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+    );
+  }
+
+  Future<void> scheduleDailyPlan({
+    required bool enabled,
+    required int hour,
+    required int minute,
+    required int pendingTaskCount,
+  }) async {
+    await cancelDailyPlan();
+    if (!_isInitialized || pendingTaskCount == 0) return;
+    final when = nextDailyPlanAt(
+      now: DateTime.now(),
+      enabled: enabled,
+      hour: hour,
+      minute: minute,
+    );
+    if (when == null) return;
+    await _plugin.zonedSchedule(
+      id: dailyPlanNotificationId,
+      title: 'Plan na dziś',
+      body: pendingTaskCount == 1
+          ? 'Masz 1 niewykonane zadanie.'
+          : 'Masz $pendingTaskCount niewykonanych zadań.',
+      scheduledDate: tz.TZDateTime.from(when, tz.local),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_plan',
+          'Plan dnia',
+          channelDescription: 'Poranne przypomnienie o zadaniach',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'daily-plan',
+    );
+  }
+
+  Future<void> cancelDailyPlan() async {
+    if (_isInitialized) await _plugin.cancel(id: dailyPlanNotificationId);
   }
 
   Future<void> scheduleTaskReminder({
@@ -46,8 +127,16 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
           actions: [
-            AndroidNotificationAction('done', 'Zrobione'),
-            AndroidNotificationAction('snooze', 'Odłóż'),
+            AndroidNotificationAction(
+              'done',
+              'Zrobione',
+              showsUserInterface: true,
+            ),
+            AndroidNotificationAction(
+              'snooze',
+              'Odłóż',
+              showsUserInterface: true,
+            ),
           ],
         ),
       ),
@@ -129,3 +218,4 @@ class NotificationService {
 
 int _noteNotificationId(String noteId) => noteId.hashCode ^ 0x4e4f5445;
 int focusNotificationId(String taskId) => taskId.hashCode ^ 0x464f4355;
+const dailyPlanNotificationId = 0x4441494c;
