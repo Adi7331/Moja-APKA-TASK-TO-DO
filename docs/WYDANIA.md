@@ -47,6 +47,12 @@ teraz**, zamykają aplikację i uruchamiają nową wersję automatycznie. Jeśli
 katalog instalacji Windows nie pozwala na zapis, aplikacja pozostaje otwarta i
 pokazuje przycisk **Pobierz ręcznie** zamiast wykonywać nieudaną próbę podmiany.
 
+## Wydanie 1.1.5 — poprawiona konfiguracja wydania
+
+Wydanie `1.1.5` zawiera poprawne ustawienia połączenia z Supabase w paczkach
+Android i Windows. Jest to wydanie zastępujące `1.1.4`; trzeba je zainstalować,
+aby logowanie przez Google korzystało z właściwego projektu.
+
 ## Ważne o podpisie Androida
 
 Zachowaj ten sam klucz podpisu dla każdego wydania. Zmiana klucza uniemożliwia Androidowi aktualizację istniejącej instalacji bez odinstalowania aplikacji.
