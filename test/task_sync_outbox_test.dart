@@ -21,4 +21,19 @@ void main() {
     await store.remove('task-1');
     expect(await store.load(), isEmpty);
   });
+
+  test('task outbox persists update and delete operations', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = TaskSyncOutbox(preferences);
+    const task = TaskItem(id: 'task-2', title: 'Do poprawy', status: 'todo');
+
+    await store.enqueueUpdate(task);
+    await store.enqueueDelete(task);
+
+    final pending = await store.load();
+    expect(pending, hasLength(1));
+    expect(pending.single.kind, TaskSyncOperationKind.delete);
+    expect(pending.single.task.id, 'task-2');
+  });
 }

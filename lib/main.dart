@@ -731,19 +731,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     for (final operation in pending) {
       try {
         final task = operation.task;
-        await _sync.addTask(
-          task.title,
-          id: task.id,
-          note: task.note,
-          category: task.category,
-          categoryId: task.categoryId,
-          priority: task.priority,
-          dueAt: task.dueAt,
-          reminderAt: task.reminderAt,
-          sourceNoteId: task.sourceNoteId,
-        );
-        for (final step in task.subtasks) {
-          await _sync.addSubtask(task.id, step.title, step.position);
+        switch (operation.kind) {
+          case TaskSyncOperationKind.create:
+            await _sync.addTask(
+              task.title,
+              id: task.id,
+              note: task.note,
+              category: task.category,
+              categoryId: task.categoryId,
+              priority: task.priority,
+              dueAt: task.dueAt,
+              reminderAt: task.reminderAt,
+              sourceNoteId: task.sourceNoteId,
+            );
+            for (final step in task.subtasks) {
+              await _sync.addSubtask(task.id, step.title, step.position);
+            }
+          case TaskSyncOperationKind.update:
+            await _sync.updateOrganizerTask(task);
+          case TaskSyncOperationKind.delete:
+            await _sync.deleteTask(task.id);
         }
         await outbox.remove(operation.id);
         changed = true;
@@ -1216,50 +1223,65 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         late final String taskId;
         if (task != null) {
           taskId = task.id;
+          final updatedTask = task.copyWith(
+            title: draft.title,
+            note: draft.note,
+            category: draft.category,
+            categoryId: draft.categoryId,
+            priority: draft.priority,
+            dueAt: draft.dueAt,
+            reminderAt: draft.reminderAt,
+            repeatRule: draft.repeatRule,
+            subtasks: draft.subtasks,
+          );
           if (cloudMode) {
-            await _sync.updateTask(
-              taskId,
-              title: draft.title,
-              note: draft.note,
-              category: draft.category,
-              categoryId: draft.categoryId,
-              priority: draft.priority,
-              dueAt: draft.dueAt,
-            );
-            final originalSteps = {
-              for (final item in task.subtasks) item.id: item,
-            };
-            final editedSteps = {
-              for (final item in draft.subtasks) item.id: item,
-            };
-            for (final removed in originalSteps.keys.where(
-              (id) => !editedSteps.containsKey(id),
-            )) {
-              await _sync.deleteSubtask(removed);
-            }
-            for (final step in draft.subtasks) {
-              final original = originalSteps[step.id];
-              if (original == null) {
-                await _sync.addSubtask(taskId, step.title, step.position);
-              } else if (original.isDone != step.isDone) {
-                await _sync.setSubtaskDone(step.id, step.isDone);
-              }
-            }
-            await _loadCloudTasks();
-          } else {
-            setState(() {
-              final index = tasks.indexOf(task);
-              tasks[index] = task.copyWith(
+            try {
+              await _sync.updateTask(
+                taskId,
                 title: draft.title,
                 note: draft.note,
                 category: draft.category,
                 categoryId: draft.categoryId,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
-                reminderAt: draft.reminderAt,
-                repeatRule: draft.repeatRule,
-                subtasks: draft.subtasks,
               );
+              final originalSteps = {
+                for (final item in task.subtasks) item.id: item,
+              };
+              final editedSteps = {
+                for (final item in draft.subtasks) item.id: item,
+              };
+              for (final removed in originalSteps.keys.where(
+                (id) => !editedSteps.containsKey(id),
+              )) {
+                await _sync.deleteSubtask(removed);
+              }
+              for (final step in draft.subtasks) {
+                final original = originalSteps[step.id];
+                if (original == null) {
+                  await _sync.addSubtask(taskId, step.title, step.position);
+                } else if (original.isDone != step.isDone) {
+                  await _sync.setSubtaskDone(step.id, step.isDone);
+                }
+              }
+              await _loadCloudTasks();
+            } catch (_) {
+              setState(() {
+                final index = tasks.indexWhere((item) => item.id == task.id);
+                if (index != -1) tasks[index] = updatedTask;
+              });
+              await _saveLocalTasks();
+              await _taskSyncOutbox?.enqueueUpdate(updatedTask);
+              if (mounted) {
+                setState(
+                  () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+                );
+              }
+            }
+          } else {
+            setState(() {
+              final index = tasks.indexOf(task);
+              tasks[index] = updatedTask;
             });
             await _saveLocalTasks();
           }
@@ -1432,8 +1454,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           )
         : null;
     if (cloudMode) {
-      await _sync.completeAndCreateNext(updated, next);
-      await _loadCloudTasks();
+      try {
+        await _sync.completeAndCreateNext(updated, next);
+        await _loadCloudTasks();
+      } catch (_) {
+        setState(() {
+          final index = tasks.indexWhere((item) => item.id == task.id);
+          if (index != -1) tasks[index] = updated;
+          if (next != null) tasks.add(next);
+        });
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueueUpdate(updated);
+        if (next != null) await _taskSyncOutbox?.enqueue(next);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       setState(() {
         final index = tasks.indexOf(task);
@@ -1455,8 +1493,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _restoreTaskState(TaskItem task) async {
     if (cloudMode) {
-      await _sync.updateOrganizerTask(task);
-      await _loadCloudTasks();
+      try {
+        await _sync.updateOrganizerTask(task);
+        await _loadCloudTasks();
+      } catch (_) {
+        final index = tasks.indexWhere((item) => item.id == task.id);
+        if (index != -1) {
+          setState(() => tasks[index] = task);
+          await _saveLocalTasks();
+          await _taskSyncOutbox?.enqueueUpdate(task);
+        }
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       final index = tasks.indexWhere((item) => item.id == task.id);
       if (index == -1) return;
@@ -1482,8 +1534,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (option == null) return;
     final plan = planTaskPostponement(task, DateTime.now(), option);
     if (cloudMode) {
-      await _sync.updateOrganizerTask(plan.updatedTask);
-      await _loadCloudTasks();
+      try {
+        await _sync.updateOrganizerTask(plan.updatedTask);
+        await _loadCloudTasks();
+      } catch (_) {
+        final index = tasks.indexWhere((item) => item.id == task.id);
+        if (index != -1) {
+          setState(() => tasks[index] = plan.updatedTask);
+          await _saveLocalTasks();
+          await _taskSyncOutbox?.enqueueUpdate(plan.updatedTask);
+        }
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       final index = tasks.indexWhere((item) => item.id == task.id);
       if (index == -1) return;
@@ -1578,8 +1644,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     final updated = task.copyWith(pinnedToday: !task.pinnedToday);
     if (cloudMode) {
-      await _sync.updateOrganizerTask(updated);
-      await _loadCloudTasks();
+      try {
+        await _sync.updateOrganizerTask(updated);
+        await _loadCloudTasks();
+      } catch (_) {
+        setState(() => tasks[tasks.indexOf(task)] = updated);
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueueUpdate(updated);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       setState(() => tasks[tasks.indexOf(task)] = updated);
       await _saveLocalTasks();
@@ -1591,8 +1668,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final plan = planTaskMoveToWeekDay(task, day);
     final updated = plan.updatedTask;
     if (cloudMode) {
-      await _sync.updateOrganizerTask(updated);
-      await _loadCloudTasks();
+      try {
+        await _sync.updateOrganizerTask(updated);
+        await _loadCloudTasks();
+      } catch (_) {
+        final index = tasks.indexWhere((item) => item.id == task.id);
+        if (index != -1) {
+          setState(() => tasks[index] = updated);
+          await _saveLocalTasks();
+          await _taskSyncOutbox?.enqueueUpdate(updated);
+        }
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       setState(() {
         final index = tasks.indexWhere((item) => item.id == task.id);
@@ -1633,8 +1724,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (accepted != true) return;
     final localIndex = tasks.indexOf(task);
     if (cloudMode) {
-      await _sync.deleteTask(task.id);
-      await _loadCloudTasks();
+      try {
+        await _sync.deleteTask(task.id);
+        await _loadCloudTasks();
+      } catch (_) {
+        setState(() => tasks.removeWhere((item) => item.id == task.id));
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueueDelete(task);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Usunięto lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       setState(() => tasks.remove(task));
       await _saveLocalTasks();
@@ -1650,8 +1752,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _restoreDeletedTask(TaskItem task, int localIndex) async {
     if (cloudMode) {
-      await _sync.restoreTask(task.id);
-      await _loadCloudTasks();
+      try {
+        await _sync.restoreTask(task.id);
+        await _loadCloudTasks();
+      } catch (_) {
+        final restoreIndex = localIndex.clamp(0, tasks.length).toInt();
+        setState(() => tasks.insert(restoreIndex, task));
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueueUpdate(task);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       if (tasks.any((item) => item.id == task.id)) return;
       final restoreIndex = localIndex.clamp(0, tasks.length).toInt();

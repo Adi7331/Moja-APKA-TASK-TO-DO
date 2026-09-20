@@ -4,17 +4,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'task_item.dart';
 
+enum TaskSyncOperationKind { create, update, delete }
+
 class PendingTaskSync {
-  const PendingTaskSync({required this.id, required this.task});
+  const PendingTaskSync({
+    required this.id,
+    required this.task,
+    this.kind = TaskSyncOperationKind.create,
+  });
 
   final String id;
   final TaskItem task;
+  final TaskSyncOperationKind kind;
 
-  Map<String, dynamic> toJson() => {'id': id, 'task': task.toStorage()};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind.name,
+        'task': task.toStorage(),
+      };
 
   factory PendingTaskSync.fromJson(Map<String, dynamic> json) =>
       PendingTaskSync(
         id: json['id'] as String,
+        kind: TaskSyncOperationKind.values.firstWhere(
+          (value) => value.name == json['kind'],
+          orElse: () => TaskSyncOperationKind.create,
+        ),
         task: TaskItem.fromStorage(
           Map<String, dynamic>.from(json['task'] as Map),
         ),
@@ -40,8 +55,20 @@ class TaskSyncOutbox {
   }
 
   Future<void> enqueue(TaskItem task) async {
+    await _enqueue(task, TaskSyncOperationKind.create);
+  }
+
+  Future<void> enqueueUpdate(TaskItem task) async {
+    await _enqueue(task, TaskSyncOperationKind.update);
+  }
+
+  Future<void> enqueueDelete(TaskItem task) async {
+    await _enqueue(task, TaskSyncOperationKind.delete);
+  }
+
+  Future<void> _enqueue(TaskItem task, TaskSyncOperationKind kind) async {
     final items = await load();
-    final pending = PendingTaskSync(id: task.id, task: task);
+    final pending = PendingTaskSync(id: task.id, task: task, kind: kind);
     final index = items.indexWhere((item) => item.id == task.id);
     if (index == -1) {
       items.add(pending);
