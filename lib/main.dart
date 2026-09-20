@@ -12,6 +12,7 @@ import 'local_task_category_store.dart';
 import 'local_note_store.dart';
 import 'cloud_migration.dart';
 import 'task_sync_service.dart';
+import 'task_sync_outbox.dart';
 import 'task_category.dart';
 import 'task_category_sync_service.dart';
 import 'task_categories_screen.dart';
@@ -134,6 +135,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
   LocalTaskCategoryStore? _localTaskCategoryStore;
+  TaskSyncOutbox? _taskSyncOutbox;
   LocalNoteStore? _localNoteStore;
   NoteSyncOutbox? _noteSyncOutbox;
   FocusSessionStore? _focusSessionStore;
@@ -244,9 +246,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || !_calendarAuthorizationPending) {
-      return;
-    }
+    if (state != AppLifecycleState.resumed) return;
+    if (cloudMode) unawaited(_retryPendingTaskSync());
+    if (!_calendarAuthorizationPending) return;
     final token = Supabase.instance.client.auth.currentSession?.providerToken;
     if (token?.isNotEmpty == true) {
       unawaited(_finishCalendarConnection(token));
@@ -263,6 +265,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final organizerSettingsStore = OrganizerSettingsStore(preferences);
     final organizerSettings = await organizerSettingsStore.load();
     final noteSyncOutbox = NoteSyncOutbox(preferences);
+    final taskSyncOutbox = TaskSyncOutbox(preferences);
     final calendarCache = await calendarStore.loadCache();
     if (!mounted) return;
     setState(() {
@@ -273,6 +276,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _organizerSettingsStore = organizerSettingsStore;
       _organizerSettings = organizerSettings;
       _noteSyncOutbox = noteSyncOutbox;
+      _taskSyncOutbox = taskSyncOutbox;
       _calendarLastSyncedAt = calendarCache.lastSyncedAt;
       calendarEvents
         ..clear()
@@ -667,12 +671,53 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return TaskItem.fromRow({...row, 'subtasks': subtasks});
       }),
     );
+    final pending = await _taskSyncOutbox?.load() ?? const <PendingTaskSync>[];
+    final mergedTasks = [...cloudTasks];
+    for (final operation in pending) {
+      final index = mergedTasks.indexWhere((task) => task.id == operation.id);
+      if (index == -1) {
+        mergedTasks.insert(0, operation.task);
+      } else {
+        mergedTasks[index] = operation.task;
+      }
+    }
     if (!mounted) return;
     setState(() {
       tasks
         ..clear()
-        ..addAll(cloudTasks);
+        ..addAll(mergedTasks);
     });
+  }
+
+  Future<void> _retryPendingTaskSync() async {
+    final outbox = _taskSyncOutbox;
+    if (outbox == null) return;
+    final pending = await outbox.load();
+    var changed = false;
+    for (final operation in pending) {
+      try {
+        final task = operation.task;
+        await _sync.addTask(
+          task.title,
+          id: task.id,
+          note: task.note,
+          category: task.category,
+          categoryId: task.categoryId,
+          priority: task.priority,
+          dueAt: task.dueAt,
+          reminderAt: task.reminderAt,
+          sourceNoteId: task.sourceNoteId,
+        );
+        for (final step in task.subtasks) {
+          await _sync.addSubtask(task.id, step.title, step.position);
+        }
+        await outbox.remove(operation.id);
+        changed = true;
+      } catch (_) {
+        break;
+      }
+    }
+    if (changed) await _loadCloudTasks();
   }
 
   Future<void> _loadCloudTaskCategories() async {
@@ -784,6 +829,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await store?.markCloudMigrationCompleted();
       }
       await _loadCloudTasks();
+      await _retryPendingTaskSync();
       try {
         await _loadCloudTaskCategories();
       } catch (_) {
@@ -1181,19 +1227,46 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             await _saveLocalTasks();
           }
         } else if (cloudMode) {
-          final row = await _sync.addTask(
-            draft.title,
-            note: draft.note,
-            category: draft.category,
-            categoryId: draft.categoryId,
-            priority: draft.priority,
-            dueAt: draft.dueAt,
-          );
-          taskId = row['id'] as String;
-          for (final step in draft.subtasks) {
-            await _sync.addSubtask(taskId, step.title, step.position);
+          final provisionalId = newNoteId();
+          try {
+            final row = await _sync.addTask(
+              draft.title,
+              note: draft.note,
+              category: draft.category,
+              categoryId: draft.categoryId,
+              priority: draft.priority,
+              dueAt: draft.dueAt,
+              reminderAt: draft.reminderAt,
+            );
+            taskId = row['id'] as String;
+            for (final step in draft.subtasks) {
+              await _sync.addSubtask(taskId, step.title, step.position);
+            }
+            await _loadCloudTasks();
+          } catch (_) {
+            final pendingTask = TaskItem(
+              id: provisionalId,
+              title: draft.title,
+              status: 'todo',
+              note: draft.note,
+              category: draft.category,
+              categoryId: draft.categoryId,
+              priority: draft.priority,
+              dueAt: draft.dueAt,
+              reminderAt: draft.reminderAt,
+              repeatRule: draft.repeatRule,
+              subtasks: draft.subtasks,
+            );
+            setState(() => tasks.insert(0, pendingTask));
+            await _saveLocalTasks();
+            await _taskSyncOutbox?.enqueue(pendingTask);
+            if (mounted) {
+              setState(
+                () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+              );
+            }
+            taskId = provisionalId;
           }
-          await _loadCloudTasks();
         } else {
           taskId = 'local-${_nextLocalTaskId++}';
           setState(

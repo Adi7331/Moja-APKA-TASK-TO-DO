@@ -19,11 +19,13 @@ class TaskSyncService {
 
   Future<Map<String, dynamic>> addTask(
     String title, {
+    String? id,
     String note = '',
     String category = 'Skrzynka',
     String? categoryId,
     String priority = 'medium',
     DateTime? dueAt,
+    DateTime? reminderAt,
     String? sourceNoteId,
   }) async {
     final user = _client.auth.currentUser;
@@ -33,6 +35,7 @@ class TaskSyncService {
     final row = await _client
         .from('tasks')
         .insert({
+          'id': ?id,
           'user_id': user.id,
           'title': title,
           'note': note,
@@ -40,6 +43,7 @@ class TaskSyncService {
           'category_id': ?categoryId,
           'priority': priority,
           'due_at': dueAt?.toUtc().toIso8601String(),
+          'reminder_at': reminderAt?.toUtc().toIso8601String(),
           'source_note_id': sourceNoteId,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         })
