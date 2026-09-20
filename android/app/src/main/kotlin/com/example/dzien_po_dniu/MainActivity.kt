@@ -1,10 +1,15 @@
 package com.example.dzien_po_dniu
 
 import android.content.Intent
+import android.content.Context
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -33,6 +38,48 @@ class MainActivity : FlutterActivity() {
                     result.error("install_failed", error.message, null)
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WIDGETS_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "updateWidgets") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                try {
+                    updateWidgetSnapshot(call.arguments as? Map<*, *>)
+                    result.success(null)
+                } catch (error: Exception) {
+                    result.error("widgets_update_failed", error.message, null)
+                }
+            }
+    }
+
+    private fun updateWidgetSnapshot(arguments: Map<*, *>?) {
+        val payload = arguments ?: emptyMap<Any, Any>()
+        val tasks = payload["tasks"] as? List<*> ?: emptyList<Any>()
+        val tasksJson = JSONArray().apply {
+            tasks.forEach { rawTask ->
+                val task = rawTask as? Map<*, *> ?: return@forEach
+                put(
+                    JSONObject().apply {
+                        put("id", task["id"]?.toString() ?: "")
+                        put("title", task["title"]?.toString() ?: "")
+                    },
+                )
+            }
+        }.toString()
+        val note = payload["selectedNote"] as? Map<*, *>
+        getSharedPreferences(WIDGETS_PREFERENCES, Context.MODE_PRIVATE)
+            .edit()
+            .putInt("remainingTaskCount", (payload["remainingTaskCount"] as? Number)?.toInt() ?: 0)
+            .putString("tasksJson", tasksJson)
+            .putString("noteId", note?.get("id")?.toString().orEmpty())
+            .putString("noteTitle", note?.get("title")?.toString().orEmpty())
+            .putString("notePreview", note?.get("preview")?.toString().orEmpty())
+            .apply()
+
+        TodayWidgetProvider.updateAll(this)
+        SelectedNoteWidgetProvider.updateAll(this)
     }
 
     private fun extractApk(zipFile: File): File {
@@ -80,8 +127,10 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    private companion object {
+    companion object {
         const val UPDATE_CHANNEL = "dzien_po_dniu/update"
+        const val WIDGETS_CHANNEL = "dzien_po_dniu/widgets"
+        const val WIDGETS_PREFERENCES = "android_widgets"
         const val BUFFER_SIZE = 8192
         const val MAX_APK_BYTES = 200L * 1024L * 1024L
     }

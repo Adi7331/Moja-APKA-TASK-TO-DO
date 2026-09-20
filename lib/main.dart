@@ -55,6 +55,8 @@ import 'update_gate.dart';
 import 'update_service.dart';
 import 'google_calendar_service.dart';
 import 'organizer_settings.dart';
+import 'android_widget_bridge.dart';
+import 'android_widget_snapshot.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 
@@ -143,6 +145,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   DateTime? _calendarLastSyncedAt;
   String? _calendarAccessToken;
   bool _calendarAuthorizationPending = false;
+  final _androidWidgetBridge = AndroidWidgetBridge();
   List<GoogleCalendarInfo> _availableCalendars = const [];
   final tasks = <TaskItem>[
     const TaskItem(
@@ -301,6 +304,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..addAll(sessions);
     });
     await _refreshDailyPlanNotification();
+    _refreshAndroidWidgets();
   }
 
   Future<void> _restoreLocalNotes() async {
@@ -318,6 +322,35 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(storedFolders);
     });
+    _refreshAndroidWidgets();
+  }
+
+  void _refreshAndroidWidgets({bool clear = false}) {
+    final selectedNote = clear
+        ? null
+        : notes.where((note) => !note.isDeleted && note.pinned).firstOrNull ??
+            notes.where((note) => !note.isDeleted).firstOrNull;
+    final snapshot = AndroidWidgetSnapshot.fromData(
+      tasks: clear
+          ? const []
+          : tasks
+              .map(
+                (task) => WidgetTaskData(
+                  id: task.id,
+                  title: task.title,
+                  isDone: task.isDone,
+                ),
+              )
+              .toList(growable: false),
+      selectedNote: selectedNote == null
+          ? null
+          : WidgetNoteData(
+              id: selectedNote.id,
+              title: selectedNote.title.isEmpty ? 'Notatka' : selectedNote.title,
+              preview: selectedNote.previewText,
+            ),
+    );
+    unawaited(_androidWidgetBridge.update(snapshot));
   }
 
   Future<void> _saveLocalTasks() async {
@@ -687,6 +720,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(mergedTasks);
     });
+    _refreshAndroidWidgets();
   }
 
   Future<void> _retryPendingTaskSync() async {
@@ -960,6 +994,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(loaded);
     });
+    _refreshAndroidWidgets();
   }
 
   Future<void> _retryPendingNoteSync() async {
@@ -1073,9 +1108,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // The current note was synchronized; cleanup can retry later.
       }
       await _scheduleNoteReminder(note);
+      _refreshAndroidWidgets();
       return;
     }
     await _scheduleNoteReminder(note);
+    _refreshAndroidWidgets();
   }
 
   Future<NoteAttachment> _attachNoteFile(
@@ -1298,6 +1335,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           );
         }
         await _refreshDailyPlanNotification();
+        _refreshAndroidWidgets();
         saved = true;
       },
     );
@@ -1340,6 +1378,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _notesMode = false;
       _syncStatus = 'Lokalnie';
     });
+    _refreshAndroidWidgets(clear: true);
   }
 
   @override
@@ -1405,6 +1444,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     if (status == 'done') await NotificationService.instance.cancel(task.id);
     await _refreshDailyPlanNotification();
+    _refreshAndroidWidgets();
     if (status == 'done' && task.repeatRule == null) {
       _showUndoSnackBar(
         'Zadanie oznaczone jako gotowe',
@@ -1432,6 +1472,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
     }
     await _refreshDailyPlanNotification();
+    _refreshAndroidWidgets();
   }
 
   Future<void> _postponeTask(TaskItem task) async {
@@ -1458,6 +1499,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
     }
     _showSuccessNotice('Zadanie odłożone');
+    _refreshAndroidWidgets();
   }
 
   Future<void> _quickAddTask(String rawText, {String? sourceNoteId}) async {
@@ -1498,6 +1540,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
     }
     await _refreshDailyPlanNotification();
+    _refreshAndroidWidgets();
     _showSuccessNotice();
   }
 
@@ -1541,6 +1584,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() => tasks[tasks.indexOf(task)] = updated);
       await _saveLocalTasks();
     }
+    _refreshAndroidWidgets();
   }
 
   Future<void> _moveTaskToWeekDay(TaskItem task, DateTime day) async {
@@ -1564,6 +1608,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         when: plan.reminderTime!,
       );
     }
+    _refreshAndroidWidgets();
   }
 
   Future<void> _confirmDeleteTask(BuildContext context, TaskItem task) async {
@@ -1596,6 +1641,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     await NotificationService.instance.cancel(task.id);
     await _refreshDailyPlanNotification();
+    _refreshAndroidWidgets();
     _showUndoSnackBar(
       'Zadanie usunięte',
       () => _restoreDeletedTask(task, localIndex),
@@ -1621,6 +1667,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
     }
     await _refreshDailyPlanNotification();
+    _refreshAndroidWidgets();
   }
 
   void _showUndoSnackBar(String message, Future<void> Function() onUndo) {
