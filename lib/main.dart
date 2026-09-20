@@ -478,11 +478,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _showSuccessNotice('Zaloguj się, aby połączyć Google Calendar.');
       return;
     }
-    _calendarAuthorizationPending = true;
+    if (mounted) setState(() => _calendarAuthorizationPending = true);
     try {
       await SupabaseCalendarConnectionAction(Supabase.instance.client).start();
     } catch (_) {
-      _calendarAuthorizationPending = false;
+      if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
         'Nie udało się otworzyć połączenia z Google Calendar.',
       );
@@ -490,8 +490,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _finishCalendarConnection(String? providerToken) async {
-    _calendarAuthorizationPending = false;
     if (providerToken == null || providerToken.isEmpty) {
+      if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
         'Google nie przekazał dostępu do Kalendarza. Spróbuj ponownie.',
       );
@@ -504,8 +504,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
       if (!mounted) return;
       await _chooseCalendars(_availableCalendars);
+      if (mounted) setState(() => _calendarAuthorizationPending = false);
     } catch (_) {
       _calendarAccessToken = null;
+      if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice('Nie udało się pobrać listy kalendarzy.');
     }
   }
@@ -2139,6 +2141,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             avatarUrl: _profileValue('avatar_url'),
             onSignOut: cloudMode ? _signOut : null,
             calendarConnected: _calendarAccessToken != null,
+            calendarConnecting: _calendarAuthorizationPending,
             calendarCachedEventCount: calendarEvents.length,
             calendarLastSyncedAt: _calendarLastSyncedAt,
             onConnectCalendar: () => unawaited(_startCalendarConnection()),

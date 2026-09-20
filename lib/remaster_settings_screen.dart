@@ -17,6 +17,7 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.onCheckForUpdate,
     this.updateCheckStatus,
     this.calendarConnected = false,
+    this.calendarConnecting = false,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
     this.onConnectCalendar,
@@ -39,6 +40,7 @@ class RemasterSettingsScreen extends StatelessWidget {
   final Future<void> Function()? onCheckForUpdate;
   final ValueListenable<String>? updateCheckStatus;
   final bool calendarConnected;
+  final bool calendarConnecting;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
   final VoidCallback? onConnectCalendar,
@@ -140,14 +142,18 @@ class RemasterSettingsScreen extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              calendarConnected
+                              calendarConnecting
+                                  ? Icons.sync_rounded
+                                  : calendarConnected
                                   ? Icons.event_available_rounded
                                   : Icons.event_outlined,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                calendarConnected
+                                calendarConnecting
+                                    ? 'Łączenie z Google Calendar…'
+                                    : calendarConnected
                                     ? 'Kalendarz połączony'
                                     : 'Kalendarz nie jest połączony',
                                 style: Theme.of(context).textTheme.titleSmall,
@@ -157,7 +163,9 @@ class RemasterSettingsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          calendarConnected
+                          calendarConnecting
+                              ? 'Po powrocie z Chrome aplikacja pobierze listę kalendarzy. Nie zamykaj jej w trakcie.'
+                              : calendarConnected
                               ? 'Wydarzenia są widoczne jako blokady czasu w widoku Tydzień.'
                               : calendarCachedEventCount > 0
                               ? 'Masz $calendarCachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
@@ -176,13 +184,13 @@ class RemasterSettingsScreen extends StatelessWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            if (!calendarConnected)
+                            if (!calendarConnected && !calendarConnecting)
                               FilledButton.icon(
                                 onPressed: onConnectCalendar,
                                 icon: const Icon(Icons.link_rounded),
                                 label: const Text('Połącz Google Calendar'),
                               ),
-                            if (calendarConnected)
+                            if (calendarConnected && !calendarConnecting)
                               OutlinedButton.icon(
                                 onPressed: onChooseCalendars,
                                 icon: const Icon(
