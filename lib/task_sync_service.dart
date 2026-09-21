@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'task_item.dart';
+import 'subtask_item.dart';
 
 class TaskSyncService {
   TaskSyncService(this._client);
@@ -93,6 +94,7 @@ class TaskSyncService {
     String? categoryId,
     required String priority,
     required DateTime? dueAt,
+    DateTime? reminderAt,
   }) => _client
       .from('tasks')
       .update({
@@ -102,6 +104,7 @@ class TaskSyncService {
         'category_id': categoryId,
         'priority': priority,
         'due_at': dueAt?.toUtc().toIso8601String(),
+        'reminder_at': reminderAt?.toUtc().toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       })
       .eq('id', id);
@@ -200,6 +203,52 @@ class TaskSyncService {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       })
       .eq('id', id);
+
+  Future<void> updateSubtask(
+    String id, {
+    required String title,
+    required int position,
+  }) => _client
+      .from('subtasks')
+      .update({
+        'title': title,
+        'position': position,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      })
+      .eq('id', id);
+
+  /// Reconciles subtasks only when the local edit actually changed them.
+  /// Keeping this opt-in avoids overwriting a newer remote subtask edit when
+  /// an unrelated task field was saved offline.
+  Future<void> syncSubtasks(String taskId, List<SubtaskItem> desired) async {
+    final remote = await loadSubtasks(taskId);
+    final remoteById = {
+      for (final row in remote)
+        row['id'] as String: SubtaskItem.fromRow(row),
+    };
+    final desiredIds = desired.map((item) => item.id).toSet();
+    for (final item in remoteById.values) {
+      if (!desiredIds.contains(item.id)) await deleteSubtask(item.id);
+    }
+    for (final item in desired) {
+      final existing = remoteById[item.id];
+      if (existing == null) {
+        final inserted = await addSubtask(taskId, item.title, item.position);
+        if (item.isDone) await setSubtaskDone(inserted['id'] as String, true);
+        continue;
+      }
+      if (existing.title != item.title || existing.position != item.position) {
+        await updateSubtask(
+          item.id,
+          title: item.title,
+          position: item.position,
+        );
+      }
+      if (existing.isDone != item.isDone) {
+        await setSubtaskDone(item.id, item.isDone);
+      }
+    }
+  }
 
   Future<void> deleteSubtask(String id) =>
       _client.from('subtasks').delete().eq('id', id);

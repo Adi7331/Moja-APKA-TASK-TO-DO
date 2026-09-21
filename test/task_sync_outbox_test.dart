@@ -36,4 +36,16 @@ void main() {
     expect(pending.single.kind, TaskSyncOperationKind.delete);
     expect(pending.single.task.id, 'task-2');
   });
+
+  test('task outbox remembers when an offline update changed subtasks', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = TaskSyncOutbox(preferences);
+    const task = TaskItem(id: 'task-3', title: 'Plan', status: 'todo');
+
+    await store.enqueueUpdate(task, syncSubtasks: true);
+
+    final pending = await store.load();
+    expect(pending.single.syncSubtasks, isTrue);
+  });
 }

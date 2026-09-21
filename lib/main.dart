@@ -18,6 +18,7 @@ import 'task_category_sync_service.dart';
 import 'task_categories_screen.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
+import 'subtask_item.dart';
 import 'task_occurrence.dart';
 import 'task_view.dart';
 import 'google_sign_in_action.dart';
@@ -464,6 +465,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         minute: _organizerSettings.dailyPlanMinute,
         pendingTaskCount: tasks.where((task) => !task.isDone).length,
       );
+
+  bool _subtasksChanged(
+    List<SubtaskItem> before,
+    List<SubtaskItem> after,
+  ) {
+    if (before.length != after.length) return true;
+    for (var index = 0; index < before.length; index++) {
+      final previous = before[index];
+      final next = after[index];
+      if (previous.id != next.id ||
+          previous.title != next.title ||
+          previous.isDone != next.isDone ||
+          previous.position != next.position) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   Future<void> _syncTaskNotifications(TaskItem task) async {
     await NotificationService.instance.cancel(task.id);
@@ -939,6 +958,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             }
           case TaskSyncOperationKind.update:
             await _sync.updateOrganizerTask(task);
+            if (operation.syncSubtasks) {
+              await _sync.syncSubtasks(task.id, task.subtasks);
+            }
           case TaskSyncOperationKind.delete:
             await _sync.deleteTask(task.id);
         }
@@ -1465,25 +1487,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 categoryId: draft.categoryId,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
+                reminderAt: draft.reminderAt,
               );
-              final originalSteps = {
-                for (final item in task.subtasks) item.id: item,
-              };
-              final editedSteps = {
-                for (final item in draft.subtasks) item.id: item,
-              };
-              for (final removed in originalSteps.keys.where(
-                (id) => !editedSteps.containsKey(id),
-              )) {
-                await _sync.deleteSubtask(removed);
-              }
-              for (final step in draft.subtasks) {
-                final original = originalSteps[step.id];
-                if (original == null) {
-                  await _sync.addSubtask(taskId, step.title, step.position);
-                } else if (original.isDone != step.isDone) {
-                  await _sync.setSubtaskDone(step.id, step.isDone);
-                }
+              if (_subtasksChanged(task.subtasks, draft.subtasks)) {
+                await _sync.syncSubtasks(taskId, draft.subtasks);
               }
               await _loadCloudTasks();
             } catch (_) {
@@ -1492,7 +1499,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 if (index != -1) tasks[index] = updatedTask;
               });
               await _saveLocalTasks();
-              await _taskSyncOutbox?.enqueueUpdate(updatedTask);
+              await _taskSyncOutbox?.enqueueUpdate(
+                updatedTask,
+                syncSubtasks: _subtasksChanged(
+                  task.subtasks,
+                  draft.subtasks,
+                ),
+              );
               if (mounted) {
                 setState(
                   () => _syncStatus =

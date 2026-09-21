@@ -11,15 +11,18 @@ class PendingTaskSync {
     required this.id,
     required this.task,
     this.kind = TaskSyncOperationKind.create,
+    this.syncSubtasks = false,
   });
 
   final String id;
   final TaskItem task;
   final TaskSyncOperationKind kind;
+  final bool syncSubtasks;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'kind': kind.name,
+        'syncSubtasks': syncSubtasks,
         'task': task.toStorage(),
       };
 
@@ -30,6 +33,7 @@ class PendingTaskSync {
           (value) => value.name == json['kind'],
           orElse: () => TaskSyncOperationKind.create,
         ),
+        syncSubtasks: json['syncSubtasks'] as bool? ?? false,
         task: TaskItem.fromStorage(
           Map<String, dynamic>.from(json['task'] as Map),
         ),
@@ -58,17 +62,33 @@ class TaskSyncOutbox {
     await _enqueue(task, TaskSyncOperationKind.create);
   }
 
-  Future<void> enqueueUpdate(TaskItem task) async {
-    await _enqueue(task, TaskSyncOperationKind.update);
+  Future<void> enqueueUpdate(
+    TaskItem task, {
+    bool syncSubtasks = false,
+  }) async {
+    await _enqueue(
+      task,
+      TaskSyncOperationKind.update,
+      syncSubtasks: syncSubtasks,
+    );
   }
 
   Future<void> enqueueDelete(TaskItem task) async {
     await _enqueue(task, TaskSyncOperationKind.delete);
   }
 
-  Future<void> _enqueue(TaskItem task, TaskSyncOperationKind kind) async {
+  Future<void> _enqueue(
+    TaskItem task,
+    TaskSyncOperationKind kind, {
+    bool syncSubtasks = false,
+  }) async {
     final items = await load();
-    final pending = PendingTaskSync(id: task.id, task: task, kind: kind);
+    final pending = PendingTaskSync(
+      id: task.id,
+      task: task,
+      kind: kind,
+      syncSubtasks: syncSubtasks,
+    );
     final index = items.indexWhere((item) => item.id == task.id);
     if (index == -1) {
       items.add(pending);
