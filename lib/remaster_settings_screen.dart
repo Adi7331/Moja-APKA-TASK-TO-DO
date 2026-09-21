@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'organizer_settings.dart';
+import 'calendar_store.dart';
 
 class RemasterSettingsScreen extends StatelessWidget {
   const RemasterSettingsScreen({
@@ -18,6 +19,7 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.updateCheckStatus,
     this.calendarConnected = false,
     this.calendarConnecting = false,
+    this.calendarStatus = CalendarConnectionStatus.disconnected,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
     this.onConnectCalendar,
@@ -41,6 +43,7 @@ class RemasterSettingsScreen extends StatelessWidget {
   final ValueListenable<String>? updateCheckStatus;
   final bool calendarConnected;
   final bool calendarConnecting;
+  final CalendarConnectionStatus calendarStatus;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
   final VoidCallback? onConnectCalendar,
@@ -142,20 +145,18 @@ class RemasterSettingsScreen extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              calendarConnecting
-                                  ? Icons.sync_rounded
-                                  : calendarConnected
-                                  ? Icons.event_available_rounded
-                                  : Icons.event_outlined,
+                              _calendarStatusIcon(
+                                calendarStatus,
+                                connecting: calendarConnecting,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                calendarConnecting
-                                    ? 'Łączenie z Google Calendar…'
-                                    : calendarConnected
-                                    ? 'Kalendarz połączony'
-                                    : 'Kalendarz nie jest połączony',
+                                _calendarStatusTitle(
+                                  calendarStatus,
+                                  connecting: calendarConnecting,
+                                ),
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
                             ),
@@ -163,13 +164,11 @@ class RemasterSettingsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          calendarConnecting
-                              ? 'Po powrocie z Chrome aplikacja pobierze listę kalendarzy. Nie zamykaj jej w trakcie.'
-                              : calendarConnected
-                              ? 'Wydarzenia są widoczne jako blokady czasu w widoku Tydzień.'
-                              : calendarCachedEventCount > 0
-                              ? 'Masz $calendarCachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
-                              : 'Połącz tylko do odczytu — aplikacja nie zmieni wydarzeń w Google.',
+                          _calendarStatusDescription(
+                            calendarStatus,
+                            connecting: calendarConnecting,
+                            cachedEventCount: calendarCachedEventCount,
+                          ),
                         ),
                         if (calendarLastSyncedAt != null) ...[
                           const SizedBox(height: 6),
@@ -188,7 +187,15 @@ class RemasterSettingsScreen extends StatelessWidget {
                               FilledButton.icon(
                                 onPressed: onConnectCalendar,
                                 icon: const Icon(Icons.link_rounded),
-                                label: const Text('Połącz Google Calendar'),
+                                label: Text(
+                                  calendarStatus ==
+                                              CalendarConnectionStatus
+                                                  .expired ||
+                                          calendarStatus ==
+                                              CalendarConnectionStatus.offline
+                                      ? 'Połącz ponownie'
+                                      : 'Połącz Google Calendar',
+                                ),
                               ),
                             if (calendarConnected && !calendarConnecting)
                               OutlinedButton.icon(
@@ -223,7 +230,9 @@ class RemasterSettingsScreen extends StatelessWidget {
                   child: ListTile(
                     leading: const Icon(Icons.category_outlined),
                     title: const Text('Kategorie zadań'),
-                    subtitle: const Text('Twórz własne kategorie, kolory i emoji.'),
+                    subtitle: const Text(
+                      'Twórz własne kategorie, kolory i emoji.',
+                    ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: onManageTaskCategories,
                   ),
@@ -296,7 +305,9 @@ class _ReminderSettingsCard extends StatelessWidget {
       confirmText: 'Ustaw',
     );
     if (picked == null) return;
-    onChanged?.call(_copy(dailyPlanHour: picked.hour, dailyPlanMinute: picked.minute));
+    onChanged?.call(
+      _copy(dailyPlanHour: picked.hour, dailyPlanMinute: picked.minute),
+    );
   }
 
   OrganizerSettings _copy({
@@ -313,7 +324,8 @@ class _ReminderSettingsCard extends StatelessWidget {
     dailyPlanHour: dailyPlanHour ?? settings.dailyPlanHour,
     dailyPlanMinute: dailyPlanMinute ?? settings.dailyPlanMinute,
     overdueReminderIntervalMinutes:
-        overdueReminderIntervalMinutes ?? settings.overdueReminderIntervalMinutes,
+        overdueReminderIntervalMinutes ??
+        settings.overdueReminderIntervalMinutes,
   );
 
   @override
@@ -345,7 +357,9 @@ class _ReminderSettingsCard extends StatelessWidget {
                 leading: const Icon(Icons.schedule_rounded),
                 title: const Text('Godzina przypomnienia'),
                 trailing: TextButton(
-                  onPressed: onChanged == null ? null : () => _pickTime(context),
+                  onPressed: onChanged == null
+                      ? null
+                      : () => _pickTime(context),
                   child: Text(time),
                 ),
               ),
@@ -366,9 +380,9 @@ class _ReminderSettingsCard extends StatelessWidget {
                     ? null
                     : (value) {
                         if (value != null) {
-                          onChanged!(_copy(
-                            overdueReminderIntervalMinutes: value,
-                          ));
+                          onChanged!(
+                            _copy(overdueReminderIntervalMinutes: value),
+                          );
                         }
                       },
               ),
@@ -393,6 +407,62 @@ String _themeLabel(ThemeMode mode) => switch (mode) {
   ThemeMode.light => 'Jasny',
   ThemeMode.dark => 'Ciemny',
 };
+
+IconData _calendarStatusIcon(
+  CalendarConnectionStatus status, {
+  required bool connecting,
+}) {
+  if (connecting || status == CalendarConnectionStatus.connecting) {
+    return Icons.sync_rounded;
+  }
+  return switch (status) {
+    CalendarConnectionStatus.connected => Icons.event_available_rounded,
+    CalendarConnectionStatus.offline => Icons.cloud_off_rounded,
+    CalendarConnectionStatus.expired => Icons.lock_clock_outlined,
+    CalendarConnectionStatus.disconnected => Icons.event_outlined,
+    CalendarConnectionStatus.connecting => Icons.sync_rounded,
+  };
+}
+
+String _calendarStatusTitle(
+  CalendarConnectionStatus status, {
+  required bool connecting,
+}) {
+  if (connecting || status == CalendarConnectionStatus.connecting) {
+    return 'Łączenie z Google Calendar…';
+  }
+  return switch (status) {
+    CalendarConnectionStatus.connected => 'Kalendarz połączony',
+    CalendarConnectionStatus.offline => 'Kalendarz offline',
+    CalendarConnectionStatus.expired => 'Połączenie z Calendar wygasło',
+    CalendarConnectionStatus.disconnected => 'Kalendarz nie jest połączony',
+    CalendarConnectionStatus.connecting => 'Łączenie z Google Calendar…',
+  };
+}
+
+String _calendarStatusDescription(
+  CalendarConnectionStatus status, {
+  required bool connecting,
+  required int cachedEventCount,
+}) {
+  if (connecting || status == CalendarConnectionStatus.connecting) {
+    return 'Po powrocie z Chrome aplikacja pobierze listę kalendarzy. Nie zamykaj jej w trakcie.';
+  }
+  return switch (status) {
+    CalendarConnectionStatus.connected =>
+      'Wydarzenia są widoczne jako blokady czasu w widoku Tydzień.',
+    CalendarConnectionStatus.offline =>
+      cachedEventCount > 0
+          ? 'Pokazuję $cachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
+          : 'Brak połączenia z Google. Połącz ponownie, aby pobrać wydarzenia.',
+    CalendarConnectionStatus.expired => 'Google wymaga ponownego połączenia. Zapisane wydarzenia pozostają na tym urządzeniu.',
+    CalendarConnectionStatus.disconnected =>
+      cachedEventCount > 0
+          ? 'Masz $cachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
+          : 'Połącz tylko do odczytu — aplikacja nie zmieni wydarzeń w Google.',
+    CalendarConnectionStatus.connecting => 'Po powrocie z Chrome aplikacja pobierze listę kalendarzy. Nie zamykaj jej w trakcie.',
+  };
+}
 
 String _calendarSyncLabel(DateTime value) =>
     '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';

@@ -143,6 +143,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   FocusSessionStore? _focusSessionStore;
   CalendarStore? _calendarStore;
   DateTime? _calendarLastSyncedAt;
+  CalendarConnectionStatus _calendarStatus =
+      CalendarConnectionStatus.disconnected;
   String? _calendarAccessToken;
   bool _calendarAuthorizationPending = false;
   final _androidWidgetBridge = AndroidWidgetBridge();
@@ -174,8 +176,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final calendarEvents = <CalendarEvent>[];
   final focusSessions = <FocusSession>[];
   late final TaskSyncService _sync = TaskSyncService(Supabase.instance.client);
-  late final TaskCategorySyncService _categorySync =
-      TaskCategorySyncService(Supabase.instance.client);
+  late final TaskCategorySyncService _categorySync = TaskCategorySyncService(
+    Supabase.instance.client,
+  );
   late final NoteSyncService _noteSync = NoteSyncService(
     Supabase.instance.client,
   );
@@ -281,6 +284,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final noteSyncOutbox = NoteSyncOutbox(preferences);
     final taskSyncOutbox = TaskSyncOutbox(preferences);
     final calendarCache = await calendarStore.loadCache();
+    final storedCalendarStatus = await calendarStore.loadConnectionStatus();
+    // Calendar provider tokens are intentionally not persisted in the app
+    // preferences. Until the user reconnects this device, a previous
+    // connected state is therefore honestly shown as offline while keeping
+    // the cached events available for planning.
+    final calendarStatus =
+        storedCalendarStatus == CalendarConnectionStatus.connected
+        ? CalendarConnectionStatus.offline
+        : storedCalendarStatus;
+    if (calendarStatus != storedCalendarStatus) {
+      unawaited(calendarStore.saveConnectionStatus(calendarStatus));
+    }
     if (!mounted) return;
     setState(() {
       _localStore = store;
@@ -292,6 +307,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _noteSyncOutbox = noteSyncOutbox;
       _taskSyncOutbox = taskSyncOutbox;
       _calendarLastSyncedAt = calendarCache.lastSyncedAt;
+      _calendarStatus = calendarStatus;
       calendarEvents
         ..clear()
         ..addAll(calendarCache.events);
@@ -349,25 +365,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         note.id == _selectedAndroidWidgetNoteId,
                   )
                   .firstOrNull ??
-            notes.where((note) => !note.isDeleted && note.pinned).firstOrNull ??
-            notes.where((note) => !note.isDeleted).firstOrNull;
+              notes
+                  .where((note) => !note.isDeleted && note.pinned)
+                  .firstOrNull ??
+              notes.where((note) => !note.isDeleted).firstOrNull;
     final snapshot = AndroidWidgetSnapshot.fromData(
       tasks: clear
           ? const []
           : tasks
-              .map(
-                (task) => WidgetTaskData(
-                  id: task.id,
-                  title: task.title,
-                  isDone: task.isDone,
-                ),
-              )
-              .toList(growable: false),
+                .map(
+                  (task) => WidgetTaskData(
+                    id: task.id,
+                    title: task.title,
+                    isDone: task.isDone,
+                  ),
+                )
+                .toList(growable: false),
       selectedNote: selectedNote == null
           ? null
           : WidgetNoteData(
               id: selectedNote.id,
-              title: selectedNote.title.isEmpty ? 'Notatka' : selectedNote.title,
+              title: selectedNote.title.isEmpty
+                  ? 'Notatka'
+                  : selectedNote.title,
               preview: selectedNote.previewText,
             ),
     );
@@ -397,10 +417,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _changeOrganizerSettings(OrganizerSettings settings) async {
     setState(() => _organizerSettings = settings);
     await _organizerSettingsStore?.save(settings);
-    if (settings.dailyPlanEnabled || settings.overdueReminderIntervalMinutes > 0) {
-      final permission = await NotificationService.instance.requestPermissions();
+    if (settings.dailyPlanEnabled ||
+        settings.overdueReminderIntervalMinutes > 0) {
+      final permission = await NotificationService.instance
+          .requestPermissions();
       if (!permission && mounted) {
-        _showSuccessNotice('Włącz powiadomienia systemowe, aby dostawać przypomnienia.');
+        _showSuccessNotice(
+          'Włącz powiadomienia systemowe, aby dostawać przypomnienia.',
+        );
       }
     }
     await NotificationService.instance.scheduleDailyPlan(
@@ -415,7 +439,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final allowed = await NotificationService.instance.requestPermissions();
       if (!allowed) {
-        _showSuccessNotice('Powiadomienia są wyłączone w ustawieniach systemu.');
+        _showSuccessNotice(
+          'Powiadomienia są wyłączone w ustawieniach systemu.',
+        );
         return;
       }
       await NotificationService.instance.showTestNotification();
@@ -473,15 +499,31 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return store;
   }
 
+  Future<void> _setCalendarStatus(CalendarConnectionStatus status) async {
+    if (mounted) setState(() => _calendarStatus = status);
+    final store = await _calendarStoreOrCreate();
+    await store.saveConnectionStatus(status);
+  }
+
+  CalendarConnectionStatus _calendarStatusForError(Object error) {
+    if (error is CalendarTransportException &&
+        (error.statusCode == 401 || error.statusCode == 403)) {
+      return CalendarConnectionStatus.expired;
+    }
+    return CalendarConnectionStatus.offline;
+  }
+
   Future<void> _startCalendarConnection() async {
     if (!cloudMode) {
       _showSuccessNotice('Zaloguj się, aby połączyć Google Calendar.');
       return;
     }
     if (mounted) setState(() => _calendarAuthorizationPending = true);
+    await _setCalendarStatus(CalendarConnectionStatus.connecting);
     try {
       await SupabaseCalendarConnectionAction(Supabase.instance.client).start();
     } catch (_) {
+      await _setCalendarStatus(CalendarConnectionStatus.disconnected);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
         'Nie udało się otworzyć połączenia z Google Calendar.',
@@ -491,6 +533,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _finishCalendarConnection(String? providerToken) async {
     if (providerToken == null || providerToken.isEmpty) {
+      await _setCalendarStatus(CalendarConnectionStatus.disconnected);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
         'Google nie przekazał dostępu do Kalendarza. Spróbuj ponownie.',
@@ -504,9 +547,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
       if (!mounted) return;
       await _chooseCalendars(_availableCalendars);
+      await _setCalendarStatus(CalendarConnectionStatus.connected);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
-    } catch (_) {
+    } catch (error) {
       _calendarAccessToken = null;
+      await _setCalendarStatus(_calendarStatusForError(error));
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice('Nie udało się pobrać listy kalendarzy.');
     }
@@ -581,6 +626,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _refreshCalendar() async {
     final token = _calendarAccessToken;
     if (token == null) {
+      if (_calendarStatus == CalendarConnectionStatus.connected) {
+        await _setCalendarStatus(CalendarConnectionStatus.offline);
+      }
       _showSuccessNotice(
         'Połącz Google Calendar ponownie, aby odświeżyć dane.',
       );
@@ -615,11 +663,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ..addAll(events);
         _calendarLastSyncedAt = syncedAt;
       });
+      await _setCalendarStatus(CalendarConnectionStatus.connected);
       _showSuccessNotice('Kalendarz odświeżony');
-    } catch (_) {
-      _calendarAccessToken = null;
+    } catch (error) {
+      final status = _calendarStatusForError(error);
+      if (status == CalendarConnectionStatus.expired) {
+        _calendarAccessToken = null;
+      }
+      await _setCalendarStatus(status);
       _showSuccessNotice(
-        'Nie udało się odświeżyć Calendar. Połącz go ponownie.',
+        status == CalendarConnectionStatus.expired
+            ? 'Sesja Google Calendar wygasła. Połącz go ponownie.'
+            : 'Nie udało się odświeżyć Calendar. Pokazuję ostatni zapis offline.',
       );
     }
   }
@@ -637,10 +692,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         );
       }
       await _chooseCalendars(_availableCalendars);
-    } catch (_) {
-      _calendarAccessToken = null;
+    } catch (error) {
+      final status = _calendarStatusForError(error);
+      if (status == CalendarConnectionStatus.expired) {
+        _calendarAccessToken = null;
+      }
+      await _setCalendarStatus(status);
       _showSuccessNotice(
-        'Nie udało się pobrać listy kalendarzy. Połącz go ponownie.',
+        status == CalendarConnectionStatus.expired
+            ? 'Sesja Google Calendar wygasła. Połącz go ponownie.'
+            : 'Nie udało się pobrać listy kalendarzy. Spróbuj ponownie online.',
       );
     }
   }
@@ -651,6 +712,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() {
       _calendarAccessToken = null;
+      _calendarStatus = CalendarConnectionStatus.disconnected;
       _availableCalendars = const [];
       _calendarLastSyncedAt = null;
       calendarEvents.clear();
@@ -837,7 +899,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _localTaskCategoryStore?.save(taskCategories);
     } catch (_) {
       if (mounted) {
-        setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+        setState(
+          () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+        );
       }
     }
   }
@@ -865,13 +929,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
     } catch (_) {
       if (mounted) {
-        setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+        setState(
+          () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+        );
       }
     }
   }
 
   Future<void> _openTaskCategories() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'local-user';
+    final userId =
+        Supabase.instance.client.auth.currentUser?.id ?? 'local-user';
     await _navigatorKey.currentState?.push(
       MaterialPageRoute<void>(
         builder: (_) => TaskCategoriesScreen(
@@ -1144,7 +1211,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
           );
         }
-        throw StateError('Notatka jest zapisana lokalnie i czeka na synchronizację.');
+        throw StateError(
+          'Notatka jest zapisana lokalnie i czeka na synchronizację.',
+        );
       }
       await _noteSyncOutbox?.remove(note.id);
       await _loadCloudNotes();
@@ -1313,7 +1382,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               await _taskSyncOutbox?.enqueueUpdate(updatedTask);
               if (mounted) {
                 setState(
-                  () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+                  () => _syncStatus =
+                      'Zapisano lokalnie · czeka na synchronizację',
                 );
               }
             }
@@ -1360,7 +1430,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             await _taskSyncOutbox?.enqueue(pendingTask);
             if (mounted) {
               setState(
-                () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+                () =>
+                    _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
               );
             }
             taskId = provisionalId;
@@ -1804,7 +1875,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await _taskSyncOutbox?.enqueueUpdate(task);
         if (mounted) {
           setState(
-            () => _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację',
+            () =>
+                _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację',
           );
         }
       }
@@ -2142,6 +2214,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             onSignOut: cloudMode ? _signOut : null,
             calendarConnected: _calendarAccessToken != null,
             calendarConnecting: _calendarAuthorizationPending,
+            calendarStatus: _calendarStatus,
             calendarCachedEventCount: calendarEvents.length,
             calendarLastSyncedAt: _calendarLastSyncedAt,
             onConnectCalendar: () => unawaited(_startCalendarConnection()),

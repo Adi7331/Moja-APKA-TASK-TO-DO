@@ -11,12 +11,21 @@ class CalendarCache {
   final DateTime? lastSyncedAt;
 }
 
+enum CalendarConnectionStatus {
+  disconnected,
+  connecting,
+  connected,
+  offline,
+  expired,
+}
+
 class CalendarStore {
   CalendarStore(this._preferences);
 
   static const _selectionKey = 'calendar_selected_ids_v1';
   static const _cacheKey = 'calendar_events_cache_v1';
   static const _syncedAtKey = 'calendar_events_synced_at_v1';
+  static const _statusKey = 'calendar_connection_status_v1';
   final SharedPreferences _preferences;
 
   Future<List<String>> loadSelection() async =>
@@ -24,6 +33,18 @@ class CalendarStore {
 
   Future<void> saveSelection(List<String> ids) async {
     await _preferences.setStringList(_selectionKey, ids);
+  }
+
+  Future<CalendarConnectionStatus> loadConnectionStatus() async {
+    final raw = _preferences.getString(_statusKey);
+    return CalendarConnectionStatus.values.firstWhere(
+      (status) => status.name == raw,
+      orElse: () => CalendarConnectionStatus.disconnected,
+    );
+  }
+
+  Future<void> saveConnectionStatus(CalendarConnectionStatus status) async {
+    await _preferences.setString(_statusKey, status.name);
   }
 
   Future<CalendarCache> loadCache() async {
@@ -68,6 +89,7 @@ class CalendarStore {
       _preferences.remove(_selectionKey),
       _preferences.remove(_cacheKey),
       _preferences.remove(_syncedAtKey),
+      _preferences.remove(_statusKey),
     ]);
   }
 }

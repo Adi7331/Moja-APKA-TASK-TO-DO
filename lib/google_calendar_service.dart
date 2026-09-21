@@ -7,6 +7,12 @@ abstract interface class CalendarTransport {
   Future<Map<String, dynamic>> get(Uri uri, String accessToken);
 }
 
+class CalendarTransportException extends StateError {
+  CalendarTransportException(this.statusCode, String message) : super(message);
+
+  final int statusCode;
+}
+
 class HttpCalendarTransport implements CalendarTransport {
   @override
   Future<Map<String, dynamic>> get(Uri uri, String accessToken) async {
@@ -20,7 +26,8 @@ class HttpCalendarTransport implements CalendarTransport {
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
+        throw CalendarTransportException(
+          response.statusCode,
           'Google Calendar zwrócił błąd ${response.statusCode}.',
         );
       }

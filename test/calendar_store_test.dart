@@ -27,4 +27,19 @@ void main() {
       expect(cache.events.single.title, 'Dentysta');
     },
   );
+
+  test(
+    'calendar store persists connection status separately from event cache',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = CalendarStore(await SharedPreferences.getInstance());
+
+      await store.saveConnectionStatus(CalendarConnectionStatus.offline);
+
+      expect(
+        await store.loadConnectionStatus(),
+        CalendarConnectionStatus.offline,
+      );
+    },
+  );
 }

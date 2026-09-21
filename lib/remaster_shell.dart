@@ -8,6 +8,7 @@ import 'remaster_theme.dart';
 import 'remaster_settings_screen.dart';
 import 'suggestion_engine.dart';
 import 'calendar_event.dart';
+import 'calendar_store.dart';
 import 'organizer_settings.dart';
 
 enum AppSpace { start, tasks, notes }
@@ -41,6 +42,7 @@ class RemasterShell extends StatefulWidget {
     this.updateCheckStatus,
     this.calendarConnected = false,
     this.calendarConnecting = false,
+    this.calendarStatus = CalendarConnectionStatus.disconnected,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
     this.onConnectCalendar,
@@ -71,6 +73,7 @@ class RemasterShell extends StatefulWidget {
   final ValueListenable<String>? updateCheckStatus;
   final bool calendarConnected;
   final bool calendarConnecting;
+  final CalendarConnectionStatus calendarStatus;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
   final VoidCallback? onConnectCalendar,
@@ -160,6 +163,7 @@ class _RemasterShellState extends State<RemasterShell> {
         updateCheckStatus: widget.updateCheckStatus,
         calendarConnected: widget.calendarConnected,
         calendarConnecting: widget.calendarConnecting,
+        calendarStatus: widget.calendarStatus,
         calendarCachedEventCount: widget.calendarCachedEventCount,
         calendarLastSyncedAt: widget.calendarLastSyncedAt,
         onConnectCalendar: widget.onConnectCalendar,
