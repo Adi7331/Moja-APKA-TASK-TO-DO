@@ -885,7 +885,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await _noteSync.saveFolder(folder);
         await _noteFolderSyncOutbox?.remove(folder.id);
         await _loadCloudFolders();
-        if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+        await _refreshSyncStatusFromOutboxes();
       } catch (_) {
         await _noteFolderSyncOutbox?.enqueueUpsert(folder);
         if (mounted) {
@@ -917,7 +917,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await _noteFolderSyncOutbox?.remove(folder.id);
         await _loadCloudFolders();
         await _loadCloudNotes();
-        if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+        await _refreshSyncStatusFromOutboxes();
       } catch (_) {
         await _noteFolderSyncOutbox?.enqueueDelete(folder);
         for (final changed in changedNotes) {
@@ -948,7 +948,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await _noteSync.saveFolder(updated);
         await _noteFolderSyncOutbox?.remove(updated.id);
         await _loadCloudFolders();
-        if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+        await _refreshSyncStatusFromOutboxes();
       } catch (_) {
         await _noteFolderSyncOutbox?.enqueueUpsert(updated);
         if (mounted) {
@@ -1159,7 +1159,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await _sync.updateOrganizerTask(task);
       }
       await _categorySync.delete(category.id);
-      if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+      await _refreshSyncStatusFromOutboxes();
     } catch (_) {
       for (final task in changedTasks) {
         await _taskSyncOutbox?.enqueueUpdate(task);
@@ -1425,6 +1425,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _refreshSyncStatusFromOutboxes() async {
+    if (!cloudMode) return;
+    final pending = await Future.wait([
+      _taskSyncOutbox?.load() ?? Future.value(const <PendingTaskSync>[]),
+      _taskCategorySyncOutbox?.load() ??
+          Future.value(const <PendingTaskCategorySync>[]),
+      _noteSyncOutbox?.load() ?? Future.value(const <PendingNoteSync>[]),
+      _noteFolderSyncOutbox?.load() ??
+          Future.value(const <PendingNoteFolderSync>[]),
+    ]);
+    final hasPending = pending.any((items) => (items as List).isNotEmpty);
+    if (mounted) {
+      setState(
+        () => _syncStatus = hasPending
+            ? 'Czeka na synchronizację'
+            : 'Zsynchronizowano',
+      );
+    }
+  }
+
   Future<void> _loadCloudFolders() async {
     final loaded = await _noteSync.loadFolders();
     final pending =
@@ -1511,6 +1531,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       await _noteSyncOutbox?.remove(note.id);
       await _loadCloudNotes();
+      await _refreshSyncStatusFromOutboxes();
       try {
         await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
       } catch (_) {
