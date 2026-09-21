@@ -16,11 +16,7 @@ void main() {
       updatedAt: DateTime(2026, 9, 20, 12),
     );
 
-    await store.enqueue(
-      note,
-      expectedRevision: null,
-      includeFolderId: false,
-    );
+    await store.enqueue(note, expectedRevision: null, includeFolderId: false);
 
     final reloaded = NoteSyncOutbox(preferences);
     final pending = await reloaded.load();
@@ -31,5 +27,19 @@ void main() {
 
     await reloaded.remove(pending.single.id);
     expect(await reloaded.load(), isEmpty);
+  });
+
+  test('permanent delete replaces an older save for the same note', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = NoteSyncOutbox(preferences);
+    final note = NoteItem(id: 'note-2', title: 'Do usunięcia');
+
+    await store.enqueue(note, expectedRevision: null, includeFolderId: false);
+    await store.enqueueDelete(note);
+
+    final pending = await store.load();
+    expect(pending, hasLength(1));
+    expect(pending.single.kind, NoteSyncOperationKind.delete);
   });
 }

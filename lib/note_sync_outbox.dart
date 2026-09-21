@@ -4,36 +4,48 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'note_item.dart';
 
+enum NoteSyncOperationKind { save, delete }
+
 class PendingNoteSync {
   const PendingNoteSync({
     required this.id,
     required this.note,
     required this.expectedRevision,
     required this.includeFolderId,
+    this.kind = NoteSyncOperationKind.save,
   });
 
   final String id;
   final NoteItem note;
   final int? expectedRevision;
   final bool includeFolderId;
+  final NoteSyncOperationKind kind;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'note': note.toStorage(),
     'expectedRevision': expectedRevision,
     'includeFolderId': includeFolderId,
+    'kind': kind.name,
   };
 
-  factory PendingNoteSync.fromJson(Map<String, dynamic> json) => PendingNoteSync(
-    id: json['id'] as String,
-    note: NoteItem.fromStorage(Map<String, dynamic>.from(json['note'] as Map)),
-    expectedRevision: (json['expectedRevision'] as num?)?.toInt(),
-    includeFolderId: json['includeFolderId'] as bool? ?? false,
-  );
+  factory PendingNoteSync.fromJson(Map<String, dynamic> json) =>
+      PendingNoteSync(
+        id: json['id'] as String,
+        note: NoteItem.fromStorage(
+          Map<String, dynamic>.from(json['note'] as Map),
+        ),
+        expectedRevision: (json['expectedRevision'] as num?)?.toInt(),
+        includeFolderId: json['includeFolderId'] as bool? ?? false,
+        kind: NoteSyncOperationKind.values.firstWhere(
+          (value) => value.name == json['kind'],
+          orElse: () => NoteSyncOperationKind.save,
+        ),
+      );
 }
 
-/// Small durable outbox for note saves. It intentionally stores snapshots,
-/// not tokens or credentials, so an offline restart can retry safely.
+/// Durable outbox for note saves and permanent deletes. It intentionally stores
+/// snapshots, not tokens or credentials, so an offline restart can retry safely.
 class NoteSyncOutbox {
   NoteSyncOutbox(this._preferences);
 
@@ -47,7 +59,9 @@ class NoteSyncOutbox {
     if (decoded is! List) return [];
     return decoded
         .whereType<Map>()
-        .map((entry) => PendingNoteSync.fromJson(Map<String, dynamic>.from(entry)))
+        .map(
+          (entry) => PendingNoteSync.fromJson(Map<String, dynamic>.from(entry)),
+        )
         .toList();
   }
 
@@ -62,6 +76,24 @@ class NoteSyncOutbox {
       note: note,
       expectedRevision: expectedRevision,
       includeFolderId: includeFolderId,
+    );
+    final index = items.indexWhere((item) => item.id == note.id);
+    if (index == -1) {
+      items.add(pending);
+    } else {
+      items[index] = pending;
+    }
+    await _save(items);
+  }
+
+  Future<void> enqueueDelete(NoteItem note) async {
+    final items = await load();
+    final pending = PendingNoteSync(
+      id: note.id,
+      note: note,
+      expectedRevision: null,
+      includeFolderId: false,
+      kind: NoteSyncOperationKind.delete,
     );
     final index = items.indexWhere((item) => item.id == note.id);
     if (index == -1) {

@@ -1358,11 +1358,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final pending = await outbox.load();
     for (final operation in pending) {
       try {
-        await _noteSync.saveNote(
-          operation.note,
-          expectedRevision: operation.expectedRevision,
-          includeFolderId: operation.includeFolderId,
-        );
+        if (operation.kind == NoteSyncOperationKind.delete) {
+          await _noteSync.permanentlyDeleteNote(operation.note);
+        } else {
+          await _noteSync.saveNote(
+            operation.note,
+            expectedRevision: operation.expectedRevision,
+            includeFolderId: operation.includeFolderId,
+          );
+        }
         await outbox.remove(operation.id);
       } on NoteConflictException {
         final conflict = await _noteSync.createConflictCopy(operation.note);
@@ -1582,13 +1586,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _permanentlyDeleteNote(NoteItem note) async {
-    if (cloudMode && _notesCloudAvailable) {
-      await _noteSync.permanentlyDeleteNote(note);
-      await _loadCloudNotes();
-      return;
-    }
-    setState(() => notes.removeWhere((item) => item.id == note.id));
+    if (mounted) setState(() => notes.removeWhere((item) => item.id == note.id));
     await _saveLocalNotes();
+    if (cloudMode && _notesCloudAvailable) {
+      try {
+        await _noteSync.permanentlyDeleteNote(note);
+        await _noteSyncOutbox?.remove(note.id);
+        await _loadCloudNotes();
+      } catch (_) {
+        await _noteSyncOutbox?.enqueueDelete(note);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Usunięto lokalnie · czeka na synchronizację',
+          );
+        }
+      }
+    }
   }
 
   Future<void> _showTaskForm(BuildContext context, {TaskItem? task}) async {
