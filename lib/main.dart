@@ -224,11 +224,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _snoozeTaskFromNotification(TaskItem task) async {
     final updated = task.copyWith(
-      reminderAt: DateTime.now().add(const Duration(minutes: 15)),
+      reminderAt: DateTime.now().add(
+        Duration(minutes: _organizerSettings.defaultSnoozeMinutes),
+      ),
     );
     if (cloudMode) {
-      await _sync.updateOrganizerTask(updated);
-      await _loadCloudTasks();
+      try {
+        await _sync.updateOrganizerTask(updated);
+        await _loadCloudTasks();
+      } catch (_) {
+        final index = tasks.indexWhere((item) => item.id == task.id);
+        if (index == -1) return;
+        setState(() => tasks[index] = updated);
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueueUpdate(updated);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       final index = tasks.indexWhere((item) => item.id == task.id);
       if (index == -1) return;
@@ -236,7 +251,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _saveLocalTasks();
     }
     await _syncTaskNotifications(updated);
-    _showSuccessNotice('Zadanie odłożone o 15 minut');
+    _showSuccessNotice(
+      'Zadanie odłożone o ${_organizerSettings.defaultSnoozeMinutes} min',
+    );
   }
 
   void _restoreCloudSession() {
@@ -1822,13 +1839,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     late final String taskId;
     if (cloudMode) {
-      final row = await _sync.addTask(
-        parsed.title,
-        dueAt: parsed.dueAt,
-        sourceNoteId: sourceNoteId,
-      );
-      taskId = row['id'] as String;
-      await _loadCloudTasks();
+      try {
+        final row = await _sync.addTask(
+          parsed.title,
+          dueAt: parsed.dueAt,
+          sourceNoteId: sourceNoteId,
+        );
+        taskId = row['id'] as String;
+        await _loadCloudTasks();
+      } catch (_) {
+        taskId = 'local-${_nextLocalTaskId++}';
+        final pendingTask = TaskItem(
+          id: taskId,
+          title: parsed.title,
+          status: 'todo',
+          dueAt: parsed.dueAt,
+          sourceNoteId: sourceNoteId,
+        );
+        setState(() => tasks.insert(0, pendingTask));
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueue(pendingTask);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
     } else {
       taskId = 'local-${_nextLocalTaskId++}';
       setState(
