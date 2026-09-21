@@ -164,6 +164,68 @@ class NotificationService {
     );
   }
 
+  /// Schedules a bounded window of reminders after a task becomes overdue.
+  ///
+  /// One-shot alarms are used instead of a platform repeating alarm so the
+  /// first reminder can start exactly at due time + interval. The window is
+  /// rebuilt on resume and after task/settings changes.
+  Future<void> scheduleOverdueTaskReminders({
+    required String taskId,
+    required String title,
+    required DateTime dueAt,
+    required int intervalMinutes,
+  }) async {
+    await cancelOverdueTaskReminders(taskId);
+    if (!_isInitialized) return;
+    final times = overdueReminderTimes(
+      dueAt: dueAt,
+      intervalMinutes: intervalMinutes,
+    );
+    if (times.isEmpty) return;
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'task_reminders',
+        'Przypomnienia o zadaniach',
+        channelDescription: 'Przypomnienia o zaplanowanych zadaniach',
+        importance: Importance.high,
+        priority: Priority.high,
+        actions: [
+          AndroidNotificationAction(
+            'done',
+            'Zrobione',
+            showsUserInterface: true,
+          ),
+          AndroidNotificationAction(
+            'snooze',
+            'Odłóż',
+            showsUserInterface: true,
+          ),
+        ],
+      ),
+    );
+    for (var index = 0; index < times.length; index++) {
+      await _plugin.zonedSchedule(
+        id: overdueReminderNotificationId(taskId, index),
+        title: 'Zaległe zadanie',
+        body: title,
+        scheduledDate: tz.TZDateTime.from(times[index], tz.local),
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: taskId,
+      );
+    }
+  }
+
+  Future<void> cancelOverdueTaskReminders(String taskId) async {
+    if (!_isInitialized) return;
+    await Future.wait([
+      for (var index = 0;
+        index < overdueReminderOccurrenceCount;
+        index++)
+        _plugin.cancel(id: overdueReminderNotificationId(taskId, index)),
+    ]);
+  }
+
   Future<void> schedule({
     required String taskId,
     required String title,
@@ -198,7 +260,11 @@ class NotificationService {
   }
 
   Future<void> cancel(String taskId) async {
-    if (_isInitialized) await _plugin.cancel(id: taskId.hashCode);
+    if (!_isInitialized) return;
+    await Future.wait([
+      _plugin.cancel(id: taskId.hashCode),
+      cancelOverdueTaskReminders(taskId),
+    ]);
   }
 
   Future<void> cancelNote(String noteId) async {

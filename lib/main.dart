@@ -234,12 +234,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() => tasks[index] = updated);
       await _saveLocalTasks();
     }
-    await NotificationService.instance.cancel(task.id);
-    await NotificationService.instance.scheduleTaskReminder(
-      taskId: updated.id,
-      title: updated.title,
-      when: updated.reminderAt!,
-    );
+    await _syncTaskNotifications(updated);
     _showSuccessNotice('Zadanie odłożone o 15 minut');
   }
 
@@ -267,6 +262,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     if (cloudMode) unawaited(_retryPendingTaskSync());
+    unawaited(_refreshOverdueTaskNotifications());
     if (!_calendarAuthorizationPending) return;
     final token = Supabase.instance.client.auth.currentSession?.providerToken;
     if (token?.isNotEmpty == true) {
@@ -342,6 +338,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..addAll(sessions);
     });
     await _refreshDailyPlanNotification();
+    await _refreshOverdueTaskNotifications();
     _refreshAndroidWidgets();
   }
 
@@ -441,6 +438,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       minute: settings.dailyPlanMinute,
       pendingTaskCount: tasks.where((task) => !task.isDone).length,
     );
+    await _refreshOverdueTaskNotifications();
   }
 
   Future<void> _sendReminderTest() async {
@@ -466,6 +464,53 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         minute: _organizerSettings.dailyPlanMinute,
         pendingTaskCount: tasks.where((task) => !task.isDone).length,
       );
+
+  Future<void> _syncTaskNotifications(TaskItem task) async {
+    await NotificationService.instance.cancel(task.id);
+    if (task.isDone) return;
+    final reminderTime = task.reminderAt ?? task.dueAt;
+    if (reminderTime != null) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: task.id,
+        title: task.title,
+        when: reminderTime,
+      );
+    }
+    final interval = _organizerSettings.overdueReminderIntervalMinutes;
+    if (task.dueAt != null && interval > 0) {
+      await NotificationService.instance.scheduleOverdueTaskReminders(
+        taskId: task.id,
+        title: task.title,
+        dueAt: task.dueAt!,
+        intervalMinutes: interval,
+      );
+    }
+  }
+
+  Future<void> _refreshOverdueTaskNotifications() async {
+    final currentTasks = List<TaskItem>.of(tasks);
+    for (final task in currentTasks) {
+      if (task.isDone || task.dueAt == null) {
+        await NotificationService.instance.cancelOverdueTaskReminders(
+          task.id,
+        );
+        continue;
+      }
+      final interval = _organizerSettings.overdueReminderIntervalMinutes;
+      if (interval == 0) {
+        await NotificationService.instance.cancelOverdueTaskReminders(
+          task.id,
+        );
+      } else {
+        await NotificationService.instance.scheduleOverdueTaskReminders(
+          taskId: task.id,
+          title: task.title,
+          dueAt: task.dueAt!,
+          intervalMinutes: interval,
+        );
+      }
+    }
+  }
 
   Future<void> _saveLocalNotes() async {
     await _localNoteStore?.save(notes);
@@ -1501,15 +1546,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           );
           await _saveLocalTasks();
         }
-        await NotificationService.instance.cancel(taskId);
-        final reminderTime = draft.reminderAt ?? draft.dueAt;
-        if (reminderTime != null) {
-          await NotificationService.instance.scheduleTaskReminder(
-            taskId: taskId,
-            title: draft.title,
-            when: reminderTime,
-          );
-        }
+        final taskForNotifications = tasks
+                .where((item) => item.id == taskId)
+                .firstOrNull ??
+            (task?.copyWith(
+              title: draft.title,
+              note: draft.note,
+              category: draft.category,
+              categoryId: draft.categoryId,
+              priority: draft.priority,
+              dueAt: draft.dueAt,
+              reminderAt: draft.reminderAt,
+              repeatRule: draft.repeatRule,
+              subtasks: draft.subtasks,
+            ) ??
+                TaskItem(
+                  id: taskId,
+                  title: draft.title,
+                  status: 'todo',
+                  note: draft.note,
+                  category: draft.category,
+                  categoryId: draft.categoryId,
+                  priority: draft.priority,
+                  dueAt: draft.dueAt,
+                  reminderAt: draft.reminderAt,
+                  repeatRule: draft.repeatRule,
+                  subtasks: draft.subtasks,
+                ));
+        await _syncTaskNotifications(taskForNotifications);
         await _refreshDailyPlanNotification();
         _refreshAndroidWidgets();
         saved = true;
@@ -1638,7 +1702,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       });
       await _saveLocalTasks();
     }
-    if (status == 'done') await NotificationService.instance.cancel(task.id);
+    await _syncTaskNotifications(updated);
+    if (next != null) await _syncTaskNotifications(next);
     await _refreshDailyPlanNotification();
     _refreshAndroidWidgets();
     if (status == 'done' && task.repeatRule == null) {
@@ -1673,14 +1738,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() => tasks[index] = task);
       await _saveLocalTasks();
     }
-    final reminderTime = task.reminderAt ?? task.dueAt;
-    if (reminderTime != null) {
-      await NotificationService.instance.scheduleTaskReminder(
-        taskId: task.id,
-        title: task.title,
-        when: reminderTime,
-      );
-    }
+    await _syncTaskNotifications(task);
     await _refreshDailyPlanNotification();
     _refreshAndroidWidgets();
   }
@@ -1714,14 +1772,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() => tasks[index] = plan.updatedTask);
       await _saveLocalTasks();
     }
-    await NotificationService.instance.cancel(task.id);
-    if (plan.reminderTime != null) {
-      await NotificationService.instance.scheduleTaskReminder(
-        taskId: task.id,
-        title: task.title,
-        when: plan.reminderTime!,
-      );
-    }
+    await _syncTaskNotifications(plan.updatedTask);
     _showSuccessNotice('Zadanie odłożone');
     _refreshAndroidWidgets();
   }
@@ -1756,13 +1807,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
       await _saveLocalTasks();
     }
-    if (parsed.dueAt != null) {
-      await NotificationService.instance.scheduleTaskReminder(
-        taskId: taskId,
-        title: parsed.title,
-        when: parsed.dueAt!,
-      );
-    }
+    final taskForNotifications = tasks
+            .where((item) => item.id == taskId)
+            .firstOrNull ??
+        TaskItem(
+          id: taskId,
+          title: parsed.title,
+          status: 'todo',
+          dueAt: parsed.dueAt,
+          sourceNoteId: sourceNoteId,
+        );
+    await _syncTaskNotifications(taskForNotifications);
     await _refreshDailyPlanNotification();
     _refreshAndroidWidgets();
     _showSuccessNotice();
@@ -1849,14 +1904,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       });
       await _saveLocalTasks();
     }
-    if (plan.reminderTime != null) {
-      await NotificationService.instance.cancel(task.id);
-      await NotificationService.instance.scheduleTaskReminder(
-        taskId: updated.id,
-        title: updated.title,
-        when: plan.reminderTime!,
-      );
-    }
+    await _syncTaskNotifications(updated);
     _refreshAndroidWidgets();
   }
 
@@ -1931,14 +1979,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() => tasks.insert(restoreIndex, task));
       await _saveLocalTasks();
     }
-    final reminderTime = task.reminderAt ?? task.dueAt;
-    if (reminderTime != null) {
-      await NotificationService.instance.scheduleTaskReminder(
-        taskId: task.id,
-        title: task.title,
-        when: reminderTime,
-      );
-    }
+    await _syncTaskNotifications(task);
     await _refreshDailyPlanNotification();
     _refreshAndroidWidgets();
   }
