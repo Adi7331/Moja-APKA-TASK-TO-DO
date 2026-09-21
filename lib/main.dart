@@ -48,6 +48,7 @@ import 'note_attachment_picker.dart';
 import 'notes_screen.dart';
 import 'note_sync_service.dart';
 import 'note_sync_outbox.dart';
+import 'note_folder_sync_outbox.dart';
 import 'focus_session.dart';
 import 'focus_session_store.dart';
 import 'focus_session_sync_service.dart';
@@ -145,6 +146,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   TaskCategorySyncOutbox? _taskCategorySyncOutbox;
   LocalNoteStore? _localNoteStore;
   NoteSyncOutbox? _noteSyncOutbox;
+  NoteFolderSyncOutbox? _noteFolderSyncOutbox;
   FocusSessionStore? _focusSessionStore;
   CalendarStore? _calendarStore;
   final _calendarCredentials = CalendarCredentialStore.secure();
@@ -286,6 +288,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (cloudMode) {
       unawaited(_retryPendingTaskSync());
       unawaited(_retryPendingTaskCategorySync());
+      unawaited(_retryPendingFolderSync());
+      unawaited(_retryPendingNoteSync());
     }
     unawaited(_refreshOverdueTaskNotifications());
     unawaited(_refreshNotificationPermissionStatus());
@@ -306,6 +310,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final organizerSettingsStore = OrganizerSettingsStore(preferences);
     final organizerSettings = await organizerSettingsStore.load();
     final noteSyncOutbox = NoteSyncOutbox(preferences);
+    final noteFolderSyncOutbox = NoteFolderSyncOutbox(preferences);
     final taskSyncOutbox = TaskSyncOutbox(preferences);
     final taskCategorySyncOutbox = TaskCategorySyncOutbox(preferences);
     final calendarCache = await calendarStore.loadCache();
@@ -330,6 +335,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _organizerSettingsStore = organizerSettingsStore;
       _organizerSettings = organizerSettings;
       _noteSyncOutbox = noteSyncOutbox;
+      _noteFolderSyncOutbox = noteFolderSyncOutbox;
       _taskSyncOutbox = taskSyncOutbox;
       _taskCategorySyncOutbox = taskCategorySyncOutbox;
       _calendarLastSyncedAt = calendarCache.lastSyncedAt;
@@ -489,7 +495,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshNotificationPermissionStatus() async {
-    final enabled = await NotificationService.instance.areNotificationsEnabled();
+    final enabled = await NotificationService.instance
+        .areNotificationsEnabled();
     if (enabled != null && mounted) {
       setState(() => _notificationPermissionGranted = enabled);
     }
@@ -508,10 +515,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         pendingTaskCount: tasks.where((task) => !task.isDone).length,
       );
 
-  bool _subtasksChanged(
-    List<SubtaskItem> before,
-    List<SubtaskItem> after,
-  ) {
+  bool _subtasksChanged(List<SubtaskItem> before, List<SubtaskItem> after) {
     if (before.length != after.length) return true;
     for (var index = 0; index < before.length; index++) {
       final previous = before[index];
@@ -552,16 +556,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final currentTasks = List<TaskItem>.of(tasks);
     for (final task in currentTasks) {
       if (task.isDone || task.dueAt == null) {
-        await NotificationService.instance.cancelOverdueTaskReminders(
-          task.id,
-        );
+        await NotificationService.instance.cancelOverdueTaskReminders(task.id);
         continue;
       }
       final interval = _organizerSettings.overdueReminderIntervalMinutes;
       if (interval == 0) {
-        await NotificationService.instance.cancelOverdueTaskReminders(
-          task.id,
-        );
+        await NotificationService.instance.cancelOverdueTaskReminders(task.id);
       } else {
         await NotificationService.instance.scheduleOverdueTaskReminders(
           taskId: task.id,
@@ -878,49 +878,86 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       name: trimmed,
       colorKey: colorKey,
     );
-    if (cloudMode && _foldersCloudAvailable) {
-      await _noteSync.saveFolder(folder);
-      await _loadCloudFolders();
-      return;
-    }
     setState(() => folders.add(folder));
     await _saveLocalFolders();
+    if (cloudMode && _foldersCloudAvailable) {
+      try {
+        await _noteSync.saveFolder(folder);
+        await _noteFolderSyncOutbox?.remove(folder.id);
+        await _loadCloudFolders();
+        if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+      } catch (_) {
+        await _noteFolderSyncOutbox?.enqueueUpsert(folder);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
+    }
   }
 
   Future<void> _deleteFolder(NoteFolder folder) async {
-    if (cloudMode && _foldersCloudAvailable) {
-      await _noteSync.deleteFolder(folder);
-      await _loadCloudFolders();
-      await _loadCloudNotes();
-      return;
-    }
+    final changedNotes = notes
+        .where((item) => item.folderId == folder.id)
+        .map((item) => item.copyWith(folderId: null, updatedAt: DateTime.now()))
+        .toList();
     setState(() {
       folders.removeWhere((item) => item.id == folder.id);
-      for (var index = 0; index < notes.length; index++) {
-        if (notes[index].folderId == folder.id) {
-          notes[index] = notes[index].copyWith(
-            folderId: null,
-            updatedAt: DateTime.now(),
-          );
-        }
+      for (final changed in changedNotes) {
+        final index = notes.indexWhere((item) => item.id == changed.id);
+        if (index != -1) notes[index] = changed;
       }
     });
     await _saveLocalFolders();
     await _saveLocalNotes();
+    if (cloudMode && _foldersCloudAvailable) {
+      try {
+        await _noteSync.deleteFolder(folder);
+        await _noteFolderSyncOutbox?.remove(folder.id);
+        await _loadCloudFolders();
+        await _loadCloudNotes();
+        if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+      } catch (_) {
+        await _noteFolderSyncOutbox?.enqueueDelete(folder);
+        for (final changed in changedNotes) {
+          await _noteSyncOutbox?.enqueue(
+            changed,
+            expectedRevision: changed.revision - 1,
+            includeFolderId: true,
+          );
+        }
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
+    }
   }
 
   Future<void> _renameFolder(NoteFolder folder) async {
     final updated = folder.copyWith(updatedAt: DateTime.now());
-    if (cloudMode && _foldersCloudAvailable) {
-      await _noteSync.saveFolder(updated);
-      await _loadCloudFolders();
-      return;
-    }
     setState(() {
       final index = folders.indexWhere((item) => item.id == folder.id);
       if (index != -1) folders[index] = updated;
     });
     await _saveLocalFolders();
+    if (cloudMode && _foldersCloudAvailable) {
+      try {
+        await _noteSync.saveFolder(updated);
+        await _noteFolderSyncOutbox?.remove(updated.id);
+        await _loadCloudFolders();
+        if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+      } catch (_) {
+        await _noteFolderSyncOutbox?.enqueueUpsert(updated);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
+    }
   }
 
   Future<void> _moveNoteToFolder(NoteItem note, String? folderId) async {
@@ -1041,6 +1078,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       } catch (_) {
         break;
       }
+    }
+  }
+
+  Future<void> _retryPendingFolderSync() async {
+    final outbox = _noteFolderSyncOutbox;
+    if (outbox == null || !_foldersCloudAvailable) return;
+    final pending = await outbox.load();
+    var changed = false;
+    for (final operation in pending) {
+      try {
+        if (operation.kind == NoteFolderSyncOperationKind.upsert) {
+          await _noteSync.saveFolder(operation.folder);
+        } else {
+          await _noteSync.deleteFolder(operation.folder);
+        }
+        await outbox.remove(operation.id);
+        changed = true;
+      } catch (_) {
+        break;
+      }
+    }
+    if (changed) {
+      await _loadCloudFolders();
+      await _loadCloudNotes();
     }
   }
 
@@ -1192,8 +1253,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           if (localFolders.isNotEmpty && cloudFolders.isEmpty) {
             await _noteSync.importLocalFolders(localFolders);
           }
-          await _loadCloudFolders();
           _foldersCloudAvailable = true;
+          await _retryPendingFolderSync();
+          await _loadCloudFolders();
+          await _retryPendingNoteSync();
         } catch (_) {
           // Folder SQL is a separate, backwards-compatible migration. Notes
           // continue syncing normally until the user enables it.
@@ -1328,12 +1391,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (mounted) setState(() => _syncStatus = 'Synchronizowanie…');
     try {
       await _retryPendingTaskSync();
+      await _retryPendingFolderSync();
       await _retryPendingNoteSync();
       final taskPending = await _taskSyncOutbox?.load() ?? const [];
       final notePending = await _noteSyncOutbox?.load() ?? const [];
+      final folderPending = await _noteFolderSyncOutbox?.load() ?? const [];
       if (!mounted) return;
       setState(() {
-        _syncStatus = taskPending.isEmpty && notePending.isEmpty
+        _syncStatus =
+            taskPending.isEmpty && notePending.isEmpty && folderPending.isEmpty
             ? 'Zsynchronizowano'
             : 'Czeka na synchronizację';
       });
@@ -1350,6 +1416,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(loaded);
     });
+    await _saveLocalFolders();
   }
 
   Future<void> _loadCloudFocusSessions() async {
@@ -1567,10 +1634,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               await _saveLocalTasks();
               await _taskSyncOutbox?.enqueueUpdate(
                 updatedTask,
-                syncSubtasks: _subtasksChanged(
-                  task.subtasks,
-                  draft.subtasks,
-                ),
+                syncSubtasks: _subtasksChanged(task.subtasks, draft.subtasks),
               );
               if (mounted) {
                 setState(
@@ -1649,20 +1713,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           );
           await _saveLocalTasks();
         }
-        final taskForNotifications = tasks
-                .where((item) => item.id == taskId)
-                .firstOrNull ??
+        final taskForNotifications =
+            tasks.where((item) => item.id == taskId).firstOrNull ??
             (task?.copyWith(
-              title: draft.title,
-              note: draft.note,
-              category: draft.category,
-              categoryId: draft.categoryId,
-              priority: draft.priority,
-              dueAt: draft.dueAt,
-              reminderAt: draft.reminderAt,
-              repeatRule: draft.repeatRule,
-              subtasks: draft.subtasks,
-            ) ??
+                  title: draft.title,
+                  note: draft.note,
+                  category: draft.category,
+                  categoryId: draft.categoryId,
+                  priority: draft.priority,
+                  dueAt: draft.dueAt,
+                  reminderAt: draft.reminderAt,
+                  repeatRule: draft.repeatRule,
+                  subtasks: draft.subtasks,
+                ) ??
                 TaskItem(
                   id: taskId,
                   title: draft.title,
@@ -1929,9 +1992,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
       await _saveLocalTasks();
     }
-    final taskForNotifications = tasks
-            .where((item) => item.id == taskId)
-            .firstOrNull ??
+    final taskForNotifications =
+        tasks.where((item) => item.id == taskId).firstOrNull ??
         TaskItem(
           id: taskId,
           title: parsed.title,
