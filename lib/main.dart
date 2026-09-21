@@ -51,6 +51,7 @@ import 'focus_session_store.dart';
 import 'focus_session_sync_service.dart';
 import 'calendar_event.dart';
 import 'calendar_store.dart';
+import 'calendar_credentials.dart';
 import 'update_gate.dart';
 import 'update_service.dart';
 import 'google_calendar_service.dart';
@@ -142,6 +143,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   NoteSyncOutbox? _noteSyncOutbox;
   FocusSessionStore? _focusSessionStore;
   CalendarStore? _calendarStore;
+  final _calendarCredentials = CalendarCredentialStore.secure();
   DateTime? _calendarLastSyncedAt;
   CalendarConnectionStatus _calendarStatus =
       CalendarConnectionStatus.disconnected;
@@ -285,12 +287,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final taskSyncOutbox = TaskSyncOutbox(preferences);
     final calendarCache = await calendarStore.loadCache();
     final storedCalendarStatus = await calendarStore.loadConnectionStatus();
-    // Calendar provider tokens are intentionally not persisted in the app
-    // preferences. Until the user reconnects this device, a previous
-    // connected state is therefore honestly shown as offline while keeping
-    // the cached events available for planning.
+    // A connected status is only restored when this device still has the
+    // matching token in its secure store. Cached events remain available even
+    // when the token is missing or the device is offline.
     final calendarStatus =
-        storedCalendarStatus == CalendarConnectionStatus.connected
+        storedCalendarStatus == CalendarConnectionStatus.connected &&
+            _calendarAccessToken == null
         ? CalendarConnectionStatus.offline
         : storedCalendarStatus;
     if (calendarStatus != storedCalendarStatus) {
@@ -326,6 +328,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ..clear()
         ..addAll(storedCategories);
     });
+    unawaited(
+      _restoreCalendarCredential(
+        wasConnected:
+            storedCalendarStatus == CalendarConnectionStatus.connected,
+      ),
+    );
     final sessions = await _focusSessionStore!.load();
     if (!mounted) return;
     setState(() {
@@ -499,6 +507,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return store;
   }
 
+  Future<void> _clearCalendarCredentials() async {
+    try {
+      await _calendarCredentials.clear();
+    } catch (_) {
+      // Some test or desktop environments may not expose a secure store.
+    }
+  }
+
+  Future<void> _restoreCalendarCredential({required bool wasConnected}) async {
+    String? token;
+    try {
+      token = await _calendarCredentials.read();
+    } catch (_) {
+      return;
+    }
+    if (token == null || token.isEmpty || !mounted) return;
+    _calendarAccessToken = token;
+    if (wasConnected) {
+      await _setCalendarStatus(CalendarConnectionStatus.connected);
+    } else if (mounted) {
+      setState(() {});
+    }
+  }
+
   Future<void> _setCalendarStatus(CalendarConnectionStatus status) async {
     if (mounted) setState(() => _calendarStatus = status);
     final store = await _calendarStoreOrCreate();
@@ -542,6 +574,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     try {
       _calendarAccessToken = providerToken;
+      try {
+        await _calendarCredentials.save(providerToken);
+      } catch (_) {
+        // Keep this session usable if the platform secure store is unavailable.
+      }
       _availableCalendars = await GoogleCalendarService().loadCalendars(
         providerToken,
       );
@@ -550,8 +587,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _setCalendarStatus(CalendarConnectionStatus.connected);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
     } catch (error) {
-      _calendarAccessToken = null;
-      await _setCalendarStatus(_calendarStatusForError(error));
+      final status = _calendarStatusForError(error);
+      if (status == CalendarConnectionStatus.expired) {
+        _calendarAccessToken = null;
+        await _clearCalendarCredentials();
+      }
+      await _setCalendarStatus(status);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice('Nie udało się pobrać listy kalendarzy.');
     }
@@ -669,6 +710,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final status = _calendarStatusForError(error);
       if (status == CalendarConnectionStatus.expired) {
         _calendarAccessToken = null;
+        await _clearCalendarCredentials();
       }
       await _setCalendarStatus(status);
       _showSuccessNotice(
@@ -696,6 +738,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final status = _calendarStatusForError(error);
       if (status == CalendarConnectionStatus.expired) {
         _calendarAccessToken = null;
+        await _clearCalendarCredentials();
       }
       await _setCalendarStatus(status);
       _showSuccessNotice(
@@ -707,6 +750,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _disconnectCalendar() async {
+    await _clearCalendarCredentials();
     final store = await _calendarStoreOrCreate();
     await store.clear();
     if (!mounted) return;
@@ -1500,6 +1544,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     } catch (_) {
       // The local UI still needs to leave cloud mode if the network is down.
     }
+    await _clearCalendarCredentials();
     if (!mounted) return;
     setState(() {
       localMode = false;
