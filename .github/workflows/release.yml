@@ -36,8 +36,18 @@ jobs:
       - name: Configure app and signing
         shell: bash
         run: |
+          for name in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY ANDROID_KEYSTORE_BASE64 ANDROID_STORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required repository secret: $name" >&2
+              exit 1
+            fi
+          done
           printf 'SUPABASE_URL=%s\nSUPABASE_PUBLISHABLE_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_PUBLISHABLE_KEY" > .env
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-signing.jks
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-signing.jks
+          if [[ ! -s android/app/release-signing.jks ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 did not decode to a non-empty keystore" >&2
+            exit 1
+          fi
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release-signing.jks\n' "$ANDROID_STORE_PASSWORD" "$ANDROID_KEY_PASSWORD" "$ANDROID_KEY_ALIAS" > android/key.properties
       - name: Build release APK
         shell: bash
@@ -55,6 +65,8 @@ jobs:
           patch=$((10#$patch))
           ANDROID_BUILD_NUMBER=$((major * 1000000 + minor * 1000 + patch))
           flutter pub get
+          flutter analyze --no-pub
+          flutter test
           flutter build apk --release --build-name "$VERSION" --build-number "$ANDROID_BUILD_NUMBER" --dart-define=APP_VERSION="$VERSION"
           mkdir -p release-assets
           zip -j "release-assets/dzien-po-dniu-android-v${VERSION}.zip" build/app/outputs/flutter-apk/app-release.apk
@@ -82,6 +94,9 @@ jobs:
       - name: Configure app
         shell: pwsh
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:SUPABASE_URL) -or [string]::IsNullOrWhiteSpace($env:SUPABASE_PUBLISHABLE_KEY)) {
+            throw 'Missing required repository secret: SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY'
+          }
           "SUPABASE_URL=$env:SUPABASE_URL" | Set-Content .env
           "SUPABASE_PUBLISHABLE_KEY=$env:SUPABASE_PUBLISHABLE_KEY" | Add-Content .env
       - name: Build Windows release
@@ -94,6 +109,8 @@ jobs:
           }
           $version = $tag.TrimStart('v')
           flutter pub get
+          flutter analyze --no-pub
+          flutter test
           flutter build windows --release --build-name $version --build-number $env:GITHUB_RUN_NUMBER --dart-define=APP_VERSION=$version
           New-Item -ItemType Directory -Force release-assets | Out-Null
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "release-assets/dzien-po-dniu-windows-v$version.zip"
