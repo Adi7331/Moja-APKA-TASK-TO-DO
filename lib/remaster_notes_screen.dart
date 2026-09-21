@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'note_item.dart';
 import 'note_folder.dart';
 import 'note_list_row.dart';
+import 'note_list_filters.dart';
 import 'remaster_theme.dart';
 
 typedef NewRemasterNote = void Function({String? folderId});
@@ -167,6 +168,13 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
 
 enum _NoteSection { notes, reminders, archive, trash }
 
+String _sectionKey(_NoteSection section) => switch (section) {
+  _NoteSection.notes => 'notes',
+  _NoteSection.reminders => 'reminders',
+  _NoteSection.archive => 'archive',
+  _NoteSection.trash => 'trash',
+};
+
 class _NotesGrid extends StatelessWidget {
   const _NotesGrid({
     required this.search,
@@ -242,53 +250,38 @@ class _NotesGrid extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 18),
-              TextField(
-                controller: search,
-                onChanged: onQueryChanged,
-                decoration: const InputDecoration(
-                  hintText: 'Szukaj w notatkach',
-                  prefixIcon: Icon(Icons.search_rounded),
+              NoteListFilters(
+                search: search,
+                query: query,
+                selectedSection: _sectionKey(section),
+                onQueryChanged: onQueryChanged,
+                onSectionChanged: (value) => onSectionChanged(
+                  _NoteSection.values.firstWhere(
+                    (item) => _sectionKey(item) == value,
+                    orElse: () => _NoteSection.notes,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _Composer(
                 selectedFolderId: selectedFolderId,
                 onNewNote: onNewNote,
                 onNewChecklist: onNewChecklist,
                 onNewImage: onNewImage,
                 onNewFile: onNewFile,
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _NoteSection.values
-                    .map(
-                      (item) => ChoiceChip(
-                        label: Text(_sectionLabel(item)),
-                        selected: section == item,
-                        onSelected: (_) => onSectionChanged(item),
-                      ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 12),
-              _FolderStrip(
-                folders: folders,
-                selectedFolderId: selectedFolderId,
-                onSelected: onFolderChanged,
-                onCreate: onCreateFolder,
-                onRename: onRenameFolder,
-                onDelete: onDeleteFolder,
-              ),
-              if (labels.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _LabelStrip(
-                  labels: labels,
-                  selectedLabel: selectedLabel,
-                  onSelected: onLabelChanged,
+                folderContent: _FolderStrip(
+                  folders: folders,
+                  selectedFolderId: selectedFolderId,
+                  onSelected: onFolderChanged,
+                  onCreate: onCreateFolder,
+                  onRename: onRenameFolder,
+                  onDelete: onDeleteFolder,
                 ),
-              ],
+                labelContent: labels.isEmpty
+                    ? null
+                    : _LabelStrip(
+                        labels: labels,
+                        selectedLabel: selectedLabel,
+                        onSelected: onLabelChanged,
+                      ),
+              ),
             ],
           ),
         ),

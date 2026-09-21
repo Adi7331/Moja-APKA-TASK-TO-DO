@@ -68,6 +68,28 @@ void main() {
     expect(find.text('Nie masz jeszcze notatek'), findsOneWidget);
   });
 
+  testWidgets('notes list exposes a stable search field and section filter', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: const [],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('notes-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('notes-section-filter')), findsOneWidget);
+    expect(find.byTooltip('Utwórz checklistę'), findsOneWidget);
+    expect(find.byTooltip('Dodaj zdjęcie do notatki'), findsOneWidget);
+    expect(find.byTooltip('Dodaj plik do notatki'), findsOneWidget);
+  });
+
   testWidgets('a phone tap opens a note directly', (tester) async {
     var opened = 0;
     await tester.pumpWidget(
