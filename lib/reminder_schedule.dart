@@ -15,6 +15,32 @@ DateTime? nextDailyPlanAt({
       : candidate.add(const Duration(days: 1));
 }
 
+/// Keep a short rolling window so the daily plan still appears when the app
+/// is not opened between two mornings. It is rebuilt whenever the task count
+/// or the reminder setting changes.
+const dailyPlanOccurrenceCount = 14;
+
+List<DateTime> dailyPlanTimes({
+  required DateTime now,
+  required bool enabled,
+  required int hour,
+  required int minute,
+  int occurrenceCount = dailyPlanOccurrenceCount,
+}) {
+  final first = nextDailyPlanAt(
+    now: now,
+    enabled: enabled,
+    hour: hour,
+    minute: minute,
+  );
+  if (first == null || occurrenceCount <= 0) return const [];
+  return List<DateTime>.generate(
+    occurrenceCount,
+    (index) => first.add(Duration(days: index)),
+    growable: false,
+  );
+}
+
 bool isSupportedOverdueInterval(int minutes) =>
     minutes == 0 || minutes == 30 || minutes == 60 || minutes == 120;
 

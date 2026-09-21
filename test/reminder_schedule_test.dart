@@ -39,6 +39,23 @@ void main() {
     );
   });
 
+  test('daily plan keeps a rolling sequence of future mornings', () {
+    expect(
+      dailyPlanTimes(
+        now: DateTime(2026, 9, 20, 8),
+        enabled: true,
+        hour: 9,
+        minute: 15,
+        occurrenceCount: 3,
+      ),
+      <DateTime>[
+        DateTime(2026, 9, 20, 9, 15),
+        DateTime(2026, 9, 21, 9, 15),
+        DateTime(2026, 9, 22, 9, 15),
+      ],
+    );
+  });
+
   test('overdue interval accepts only supported options', () {
     expect(isSupportedOverdueInterval(0), isTrue);
     expect(isSupportedOverdueInterval(30), isTrue);

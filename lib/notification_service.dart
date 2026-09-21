@@ -94,36 +94,43 @@ class NotificationService {
   }) async {
     await cancelDailyPlan();
     if (!_isInitialized || pendingTaskCount == 0) return;
-    final when = nextDailyPlanAt(
+    final times = dailyPlanTimes(
       now: DateTime.now(),
       enabled: enabled,
       hour: hour,
       minute: minute,
     );
-    if (when == null) return;
-    await _plugin.zonedSchedule(
-      id: dailyPlanNotificationId,
-      title: 'Plan na dziś',
-      body: pendingTaskCount == 1
-          ? 'Masz 1 niewykonane zadanie.'
-          : 'Masz $pendingTaskCount niewykonanych zadań.',
-      scheduledDate: tz.TZDateTime.from(when, tz.local),
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'daily_plan',
-          'Plan dnia',
-          channelDescription: 'Poranne przypomnienie o zadaniach',
-          importance: Importance.defaultImportance,
-          priority: Priority.defaultPriority,
+    if (times.isEmpty) return;
+    final body = pendingTaskCount == 1
+        ? 'Masz 1 niewykonane zadanie.'
+        : 'Masz $pendingTaskCount niewykonanych zadań.';
+    for (var index = 0; index < times.length; index++) {
+      await _plugin.zonedSchedule(
+        id: dailyPlanNotificationIdForOccurrence(index),
+        title: 'Plan na dziś',
+        body: body,
+        scheduledDate: tz.TZDateTime.from(times[index], tz.local),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'daily_plan',
+            'Plan dnia',
+            channelDescription: 'Poranne przypomnienie o zadaniach',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
         ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: 'daily-plan',
-    );
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'daily-plan',
+      );
+    }
   }
 
   Future<void> cancelDailyPlan() async {
-    if (_isInitialized) await _plugin.cancel(id: dailyPlanNotificationId);
+    if (!_isInitialized) return;
+    await Future.wait([
+      for (var index = 0; index < dailyPlanOccurrenceCount; index++)
+        _plugin.cancel(id: dailyPlanNotificationIdForOccurrence(index)),
+    ]);
   }
 
   Future<void> scheduleTaskReminder({
@@ -304,3 +311,6 @@ class NotificationService {
 int _noteNotificationId(String noteId) => noteId.hashCode ^ 0x4e4f5445;
 int focusNotificationId(String taskId) => taskId.hashCode ^ 0x464f4355;
 const dailyPlanNotificationId = 0x4441494c;
+
+int dailyPlanNotificationIdForOccurrence(int occurrence) =>
+    dailyPlanNotificationId ^ occurrence;
