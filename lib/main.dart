@@ -1230,6 +1230,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _retryAllPendingSync() async {
+    if (!cloudMode) {
+      _showSuccessNotice('Zaloguj się, aby ponowić synchronizację.');
+      return;
+    }
+    if (mounted) setState(() => _syncStatus = 'Synchronizowanie…');
+    try {
+      await _retryPendingTaskSync();
+      await _retryPendingNoteSync();
+      final taskPending = await _taskSyncOutbox?.load() ?? const [];
+      final notePending = await _noteSyncOutbox?.load() ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _syncStatus = taskPending.isEmpty && notePending.isEmpty
+            ? 'Zsynchronizowano'
+            : 'Czeka na synchronizację';
+      });
+    } catch (_) {
+      if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
+    }
+  }
+
   Future<void> _loadCloudFolders() async {
     final loaded = await _noteSync.loadFolders();
     if (!mounted) return;
@@ -2312,6 +2334,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             onOrganizerSettings: (settings) =>
                 unawaited(_changeOrganizerSettings(settings)),
             onTestReminder: () => unawaited(_sendReminderTest()),
+            onRetrySync: _retryAllPendingSync,
           );
         }
         return Stack(

@@ -53,6 +53,7 @@ class RemasterShell extends StatefulWidget {
     this.organizerSettings = const OrganizerSettings(),
     this.onOrganizerSettings,
     this.onTestReminder,
+    this.onRetrySync,
   });
   final List<TaskItem> tasks;
   final List<NoteItem> notes;
@@ -84,6 +85,7 @@ class RemasterShell extends StatefulWidget {
   final OrganizerSettings organizerSettings;
   final ValueChanged<OrganizerSettings>? onOrganizerSettings;
   final VoidCallback? onTestReminder;
+  final Future<void> Function()? onRetrySync;
   @override
   State<RemasterShell> createState() => _RemasterShellState();
 }
@@ -364,18 +366,28 @@ class _RemasterShellState extends State<RemasterShell> {
                                         ),
                                   ),
                                 ),
-                                Tooltip(
-                                  message: widget.syncStatus,
-                                  child: Icon(
-                                    widget.syncStatus.contains('Błąd')
-                                        ? Icons.cloud_off_rounded
-                                        : widget.syncStatus == 'Lokalnie'
-                                        ? Icons.offline_pin_outlined
-                                        : Icons.cloud_done_outlined,
-                                    size: 20,
-                                    color: scheme.onSurfaceVariant,
+                                if (widget.onRetrySync != null &&
+                                    (widget.syncStatus.contains('Błąd') ||
+                                        widget.syncStatus.contains('czeka') ||
+                                        widget.syncStatus.contains('Czeka')))
+                                  IconButton(
+                                    tooltip: 'Ponów synchronizację',
+                                    onPressed: widget.onRetrySync,
+                                    icon: const Icon(Icons.sync_rounded),
+                                  )
+                                else
+                                  Tooltip(
+                                    message: widget.syncStatus,
+                                    child: Icon(
+                                      widget.syncStatus.contains('Błąd')
+                                          ? Icons.cloud_off_rounded
+                                          : widget.syncStatus == 'Lokalnie'
+                                          ? Icons.offline_pin_outlined
+                                          : Icons.cloud_done_outlined,
+                                      size: 20,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
                                   ),
-                                ),
                                 const SizedBox(width: 8),
                                 IconButton(
                                   tooltip: 'Podpowiedzi',
