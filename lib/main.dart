@@ -1066,6 +1066,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       await _loadCloudTasks();
       await _retryPendingTaskSync();
+      await _refreshOverdueTaskNotifications();
       try {
         await _loadCloudTaskCategories();
       } catch (_) {
@@ -1182,6 +1183,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _refreshCloudTasks() async {
     try {
       await _loadCloudTasks();
+      await _refreshOverdueTaskNotifications();
       if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
     } catch (_) {
       if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
