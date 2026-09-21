@@ -1343,11 +1343,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _loadCloudNotes() async {
     final loaded = await _noteSync.loadNotes(includeTrash: true);
+    final pending = await _noteSyncOutbox?.load() ?? const <PendingNoteSync>[];
+    final merged = [...loaded];
+    for (final operation in pending) {
+      merged.removeWhere((item) => item.id == operation.note.id);
+      if (operation.kind == NoteSyncOperationKind.save) {
+        merged.add(operation.note);
+      }
+    }
     if (!mounted) return;
     setState(() {
       notes
         ..clear()
-        ..addAll(loaded);
+        ..addAll(merged);
     });
     _refreshAndroidWidgets();
   }
@@ -1419,11 +1427,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _loadCloudFolders() async {
     final loaded = await _noteSync.loadFolders();
+    final pending =
+        await _noteFolderSyncOutbox?.load() ?? const <PendingNoteFolderSync>[];
+    final merged = [...loaded];
+    for (final operation in pending) {
+      merged.removeWhere((item) => item.id == operation.folder.id);
+      if (operation.kind == NoteFolderSyncOperationKind.upsert) {
+        merged.add(operation.folder);
+      }
+    }
     if (!mounted) return;
     setState(() {
       folders
         ..clear()
-        ..addAll(loaded);
+        ..addAll(merged);
     });
     await _saveLocalFolders();
   }
@@ -1586,7 +1603,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _permanentlyDeleteNote(NoteItem note) async {
-    if (mounted) setState(() => notes.removeWhere((item) => item.id == note.id));
+    if (mounted) {
+      setState(() => notes.removeWhere((item) => item.id == note.id));
+    }
     await _saveLocalNotes();
     if (cloudMode && _notesCloudAvailable) {
       try {
