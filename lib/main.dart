@@ -15,6 +15,7 @@ import 'task_sync_service.dart';
 import 'task_sync_outbox.dart';
 import 'task_category.dart';
 import 'task_category_sync_service.dart';
+import 'task_category_sync_outbox.dart';
 import 'task_categories_screen.dart';
 import 'notification_service.dart';
 import 'task_item.dart';
@@ -141,6 +142,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   LocalTaskStore? _localStore;
   LocalTaskCategoryStore? _localTaskCategoryStore;
   TaskSyncOutbox? _taskSyncOutbox;
+  TaskCategorySyncOutbox? _taskCategorySyncOutbox;
   LocalNoteStore? _localNoteStore;
   NoteSyncOutbox? _noteSyncOutbox;
   FocusSessionStore? _focusSessionStore;
@@ -281,7 +283,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (cloudMode) unawaited(_retryPendingTaskSync());
+    if (cloudMode) {
+      unawaited(_retryPendingTaskSync());
+      unawaited(_retryPendingTaskCategorySync());
+    }
     unawaited(_refreshOverdueTaskNotifications());
     unawaited(_refreshNotificationPermissionStatus());
     if (!_calendarAuthorizationPending) return;
@@ -302,6 +307,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final organizerSettings = await organizerSettingsStore.load();
     final noteSyncOutbox = NoteSyncOutbox(preferences);
     final taskSyncOutbox = TaskSyncOutbox(preferences);
+    final taskCategorySyncOutbox = TaskCategorySyncOutbox(preferences);
     final calendarCache = await calendarStore.loadCache();
     final storedCalendarStatus = await calendarStore.loadConnectionStatus();
     // A connected status is only restored when this device still has the
@@ -325,6 +331,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _organizerSettings = organizerSettings;
       _noteSyncOutbox = noteSyncOutbox;
       _taskSyncOutbox = taskSyncOutbox;
+      _taskCategorySyncOutbox = taskCategorySyncOutbox;
       _calendarLastSyncedAt = calendarCache.lastSyncedAt;
       _calendarStatus = calendarStatus;
       calendarEvents
@@ -1019,6 +1026,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     await _localTaskCategoryStore?.save(taskCategories);
   }
 
+  Future<void> _retryPendingTaskCategorySync() async {
+    final outbox = _taskCategorySyncOutbox;
+    if (outbox == null) return;
+    final pending = await outbox.load();
+    for (final operation in pending) {
+      try {
+        if (operation.kind == TaskCategorySyncOperationKind.upsert) {
+          await _categorySync.save(operation.category);
+        } else {
+          await _categorySync.delete(operation.category.id);
+        }
+        await outbox.remove(operation.id);
+      } catch (_) {
+        break;
+      }
+    }
+  }
+
   Future<void> _saveTaskCategory(TaskCategory category) async {
     setState(() {
       final index = taskCategories.indexWhere((item) => item.id == category.id);
@@ -1044,6 +1069,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       });
       await _localTaskCategoryStore?.save(taskCategories);
     } catch (_) {
+      await _taskCategorySyncOutbox?.enqueueUpsert(category);
       if (mounted) {
         setState(
           () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
@@ -1074,6 +1100,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _categorySync.delete(category.id);
       if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
     } catch (_) {
+      for (final task in changedTasks) {
+        await _taskSyncOutbox?.enqueueUpdate(task);
+      }
+      await _taskCategorySyncOutbox?.enqueueDelete(category);
       if (mounted) {
         setState(
           () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
@@ -1123,6 +1153,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       await _loadCloudTasks();
       await _retryPendingTaskSync();
+      await _retryPendingTaskCategorySync();
       await _refreshOverdueTaskNotifications();
       try {
         await _loadCloudTaskCategories();
