@@ -1391,15 +1391,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (mounted) setState(() => _syncStatus = 'Synchronizowanie…');
     try {
       await _retryPendingTaskSync();
+      await _retryPendingTaskCategorySync();
       await _retryPendingFolderSync();
       await _retryPendingNoteSync();
       final taskPending = await _taskSyncOutbox?.load() ?? const [];
+      final categoryPending = await _taskCategorySyncOutbox?.load() ?? const [];
       final notePending = await _noteSyncOutbox?.load() ?? const [];
       final folderPending = await _noteFolderSyncOutbox?.load() ?? const [];
       if (!mounted) return;
       setState(() {
         _syncStatus =
-            taskPending.isEmpty && notePending.isEmpty && folderPending.isEmpty
+            taskPending.isEmpty &&
+                categoryPending.isEmpty &&
+                notePending.isEmpty &&
+                folderPending.isEmpty
             ? 'Zsynchronizowano'
             : 'Czeka na synchronizację';
       });
