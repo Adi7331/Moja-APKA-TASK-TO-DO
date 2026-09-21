@@ -27,6 +27,35 @@ void main() {
     expect(find.byKey(const ValueKey('remaster-note-editor')), findsOneWidget);
     expect(find.text('Edytujesz notatkę'), findsOneWidget);
     expect(find.byKey(const ValueKey('note-title-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-save-status')), findsOneWidget);
+  });
+
+  testWidgets('secondary blocks live under Więcej opcji with Lista kroków', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.light),
+        home: NoteEditorScreen(
+          remastered: true,
+          note: NoteItem(
+            id: 'note-3',
+            title: 'Plan',
+            blocks: [
+              NoteBlock.text(id: 'text-3', text: 'Opis'),
+              NoteBlock.checklist(id: 'check-3'),
+            ],
+          ),
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.text('Więcej opcji'), findsOneWidget);
+    await tester.tap(find.text('Więcej opcji'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lista kroków'), findsOneWidget);
   });
 
   testWidgets(

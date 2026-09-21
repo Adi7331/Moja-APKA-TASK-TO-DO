@@ -413,7 +413,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 onExpansionChanged: (open) =>
                     setState(() => _advancedOpen = open),
                 tilePadding: EdgeInsets.zero,
-                title: const Text('Dodatkowe bloki'),
+                title: const Text('Więcej opcji'),
                 children: _note.blocks.skip(1).map(_buildBlock).toList(),
               ),
             ),
@@ -475,6 +475,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               ),
               if (widget.remastered)
                 Text(
+                  key: const ValueKey('note-save-status'),
                   _saveStatus,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1073,7 +1074,7 @@ String _blockLabel(NoteBlockType type) => switch (type) {
   NoteBlockType.text => 'Tekst',
   NoteBlockType.heading => 'Nagłówek',
   NoteBlockType.quote => 'Cytat',
-  NoteBlockType.checklist => 'Checklista',
+  NoteBlockType.checklist => 'Lista kroków',
   NoteBlockType.table => 'Tabela',
   NoteBlockType.attachment => 'Załącznik',
 };
