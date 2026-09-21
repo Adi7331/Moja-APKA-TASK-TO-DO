@@ -291,7 +291,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(_retryPendingFolderSync());
       unawaited(_retryPendingNoteSync());
     }
-    unawaited(_refreshOverdueTaskNotifications());
+    unawaited(_refreshAllTaskNotifications());
     unawaited(_refreshNotificationPermissionStatus());
     if (!_calendarAuthorizationPending) return;
     final token = Supabase.instance.client.auth.currentSession?.providerToken;
@@ -532,6 +532,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _syncTaskNotifications(TaskItem task) async {
     await NotificationService.instance.cancel(task.id);
+    await NotificationService.instance.cancelOverdueTaskReminders(task.id);
     if (task.isDone) return;
     final reminderTime = task.reminderAt ?? task.dueAt;
     if (reminderTime != null) {
@@ -570,6 +571,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           intervalMinutes: interval,
         );
       }
+    }
+  }
+
+  Future<void> _refreshAllTaskNotifications() async {
+    final currentTasks = List<TaskItem>.of(tasks);
+    for (final task in currentTasks) {
+      await _syncTaskNotifications(task);
     }
   }
 
@@ -1215,7 +1223,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _loadCloudTasks();
       await _retryPendingTaskSync();
       await _retryPendingTaskCategorySync();
-      await _refreshOverdueTaskNotifications();
+      await _refreshAllTaskNotifications();
       try {
         await _loadCloudTaskCategories();
       } catch (_) {
@@ -1334,7 +1342,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _refreshCloudTasks() async {
     try {
       await _loadCloudTasks();
-      await _refreshOverdueTaskNotifications();
+      await _refreshAllTaskNotifications();
       if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
     } catch (_) {
       if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
