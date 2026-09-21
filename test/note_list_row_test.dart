@@ -88,4 +88,29 @@ void main() {
     );
     expect(find.textContaining('budżet.pdf'), findsOneWidget);
   });
+
+  testWidgets('exposes an actionable semantic label for keyboard and screen readers', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildRow(
+        NoteItem(
+          id: 'semantic',
+          title: 'Plan dnia',
+        ),
+        folder: NoteFolder(
+          id: 'long-folder',
+          name: 'Bardzo długa nazwa folderu do sprawdzenia',
+        ),
+      ),
+    );
+
+    expect(
+      find.bySemanticsLabel(
+        'Notatka Plan dnia, folder Bardzo długa nazwa folderu do sprawdzenia',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Opcje notatki'), findsOneWidget);
+  });
 }

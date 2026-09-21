@@ -1,3 +1,7 @@
+// Legacy card/composer helpers remain below for backwards-compatible test
+// fixtures while the live remaster uses the extracted list components.
+// ignore_for_file: unused_element, unused_element_parameter
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -1323,10 +1327,3 @@ class _EmptyNotes extends StatelessWidget {
     ),
   );
 }
-
-String _sectionLabel(_NoteSection section) => switch (section) {
-  _NoteSection.notes => 'Notatki',
-  _NoteSection.reminders => 'Przypomnienia',
-  _NoteSection.archive => 'Archiwum',
-  _NoteSection.trash => 'Kosz',
-};
