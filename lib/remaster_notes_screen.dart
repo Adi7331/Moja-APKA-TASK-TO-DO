@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'note_item.dart';
 import 'note_folder.dart';
+import 'note_list_row.dart';
 import 'remaster_theme.dart';
 
 typedef NewRemasterNote = void Function({String? folderId});
@@ -385,41 +386,28 @@ class _NoteCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SliverPadding(
     padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-    sliver: SliverToBoxAdapter(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 900
-              ? 3
-              : constraints.maxWidth >= 560
-              ? 2
-              : 1;
-          final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
-          return Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: notes
-                .map(
-                  (note) => SizedBox(
-                    width: width,
-                    child: _NoteCard(
-                      note: note,
-                      selected: note.id == selectedId,
-                      openOnTap: openOnTap,
-                      onSelect: () => onSelect(note),
-                      onOpen: () => onOpen(note),
-                      onSave: onSave,
-                      onDelete: onDelete,
-                      onPermanentlyDelete: onPermanentlyDelete,
-                      folders: folders,
-                      onMoveToFolder: onMoveToFolder,
-                      onSetWidgetNote: onSetWidgetNote,
-                    ),
-                  ),
-                )
-                .toList(),
-          );
-        },
-      ),
+    sliver: SliverList.builder(
+      itemCount: notes.length,
+      itemBuilder: (context, index) {
+        final note = notes[index];
+        final folder = folders.where((item) => item.id == note.folderId).firstOrNull;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: NoteListRow(
+            note: note,
+            folder: folder,
+            folders: folders,
+            selected: note.id == selectedId,
+            onTap: openOnTap ? () => onOpen(note) : () => onSelect(note),
+            onOpen: () => onOpen(note),
+            onSave: onSave,
+            onDelete: onDelete,
+            onPermanentlyDelete: onPermanentlyDelete,
+            onMoveToFolder: onMoveToFolder,
+            onSetWidgetNote: onSetWidgetNote,
+          ),
+        );
+      },
     ),
   );
 }
