@@ -53,6 +53,8 @@ class RemasterShell extends StatefulWidget {
     this.organizerSettings = const OrganizerSettings(),
     this.onOrganizerSettings,
     this.onTestReminder,
+    this.notificationPermissionGranted,
+    this.onOpenNotificationSettings,
     this.onRetrySync,
   });
   final List<TaskItem> tasks;
@@ -85,6 +87,8 @@ class RemasterShell extends StatefulWidget {
   final OrganizerSettings organizerSettings;
   final ValueChanged<OrganizerSettings>? onOrganizerSettings;
   final VoidCallback? onTestReminder;
+  final bool? notificationPermissionGranted;
+  final Future<void> Function()? onOpenNotificationSettings;
   final Future<void> Function()? onRetrySync;
   @override
   State<RemasterShell> createState() => _RemasterShellState();
@@ -176,6 +180,8 @@ class _RemasterShellState extends State<RemasterShell> {
         organizerSettings: widget.organizerSettings,
         onOrganizerSettings: widget.onOrganizerSettings,
         onTestReminder: widget.onTestReminder,
+        notificationPermissionGranted: widget.notificationPermissionGranted,
+        onOpenNotificationSettings: widget.onOpenNotificationSettings,
       ),
     ),
   );

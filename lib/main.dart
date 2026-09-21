@@ -125,6 +125,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   TaskView _selectedView = TaskView.today;
   ThemeMode _themeMode = ThemeMode.system;
   OrganizerSettings _organizerSettings = const OrganizerSettings();
+  bool? _notificationPermissionGranted;
   OrganizerSettingsStore? _organizerSettingsStore;
   String? _successNotice;
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -196,6 +197,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationService.instance.onResponse = _handleNotificationResponse;
     _localRestoreFuture = _restoreLocalTasks();
     _localNotesRestoreFuture = _restoreLocalNotes();
+    unawaited(_refreshNotificationPermissionStatus());
     unawaited(_consumeLaunchNotification());
     _restoreCloudSession();
   }
@@ -281,6 +283,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state != AppLifecycleState.resumed) return;
     if (cloudMode) unawaited(_retryPendingTaskSync());
     unawaited(_refreshOverdueTaskNotifications());
+    unawaited(_refreshNotificationPermissionStatus());
     if (!_calendarAuthorizationPending) return;
     final token = Supabase.instance.client.auth.currentSession?.providerToken;
     if (token?.isNotEmpty == true) {
@@ -449,6 +452,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           'Włącz powiadomienia systemowe, aby dostawać przypomnienia.',
         );
       }
+      await _refreshNotificationPermissionStatus();
     }
     await NotificationService.instance.scheduleDailyPlan(
       enabled: settings.dailyPlanEnabled,
@@ -463,16 +467,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final allowed = await NotificationService.instance.requestPermissions();
       if (!allowed) {
+        await _refreshNotificationPermissionStatus();
         _showSuccessNotice(
           'Powiadomienia są wyłączone w ustawieniach systemu.',
         );
         return;
       }
       await NotificationService.instance.showTestNotification();
+      await _refreshNotificationPermissionStatus();
       _showSuccessNotice('Wysłano testowe powiadomienie.');
     } catch (_) {
       _showSuccessNotice('Nie udało się wysłać testowego powiadomienia.');
     }
+  }
+
+  Future<void> _refreshNotificationPermissionStatus() async {
+    final enabled = await NotificationService.instance.areNotificationsEnabled();
+    if (enabled != null && mounted) {
+      setState(() => _notificationPermissionGranted = enabled);
+    }
+  }
+
+  Future<void> _openNotificationSettings() async {
+    await NotificationService.instance.openNotificationSettings();
+    await _refreshNotificationPermissionStatus();
   }
 
   Future<void> _refreshDailyPlanNotification() =>
@@ -2385,6 +2403,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             onOrganizerSettings: (settings) =>
                 unawaited(_changeOrganizerSettings(settings)),
             onTestReminder: () => unawaited(_sendReminderTest()),
+            notificationPermissionGranted: _notificationPermissionGranted,
+            onOpenNotificationSettings: _openNotificationSettings,
             onRetrySync: _retryAllPendingSync,
           );
         }

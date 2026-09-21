@@ -68,6 +68,24 @@ class NotificationService {
     return true;
   }
 
+  /// Returns the current notification permission when the platform exposes
+  /// it. A null value means the plugin is not initialized yet or the target
+  /// does not provide a query API.
+  Future<bool?> areNotificationsEnabled() async {
+    if (!_isInitialized) return null;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return true;
+    return android.areNotificationsEnabled();
+  }
+
+  Future<void> openNotificationSettings() async {
+    if (!_isInitialized) return;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await android?.openAppNotificationSettings();
+  }
+
   Future<void> showTestNotification() async {
     if (!_isInitialized) return;
     await _plugin.show(

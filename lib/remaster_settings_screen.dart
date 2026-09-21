@@ -30,6 +30,8 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.organizerSettings = const OrganizerSettings(),
     this.onOrganizerSettings,
     this.onTestReminder,
+    this.notificationPermissionGranted,
+    this.onOpenNotificationSettings,
   });
 
   final String appVersion;
@@ -54,6 +56,8 @@ class RemasterSettingsScreen extends StatelessWidget {
   final OrganizerSettings organizerSettings;
   final ValueChanged<OrganizerSettings>? onOrganizerSettings;
   final VoidCallback? onTestReminder;
+  final bool? notificationPermissionGranted;
+  final Future<void> Function()? onOpenNotificationSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +133,8 @@ class RemasterSettingsScreen extends StatelessWidget {
                   settings: organizerSettings,
                   onChanged: onOrganizerSettings,
                   onTest: onTestReminder,
+                  notificationPermissionGranted: notificationPermissionGranted,
+                  onOpenNotificationSettings: onOpenNotificationSettings,
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -287,11 +293,15 @@ class _ReminderSettingsCard extends StatelessWidget {
     required this.settings,
     this.onChanged,
     this.onTest,
+    this.notificationPermissionGranted,
+    this.onOpenNotificationSettings,
   });
 
   final OrganizerSettings settings;
   final ValueChanged<OrganizerSettings>? onChanged;
   final VoidCallback? onTest;
+  final bool? notificationPermissionGranted;
+  final Future<void> Function()? onOpenNotificationSettings;
 
   Future<void> _pickTime(BuildContext context) async {
     final picked = await showTimePicker(
@@ -395,6 +405,22 @@ class _ReminderSettingsCard extends StatelessWidget {
                 label: const Text('Wyślij test'),
               ),
             ),
+            if (notificationPermissionGranted == false)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.notifications_off_outlined,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: const Text('Powiadomienia są zablokowane'),
+                subtitle: const Text(
+                  'Włącz je w ustawieniach systemu, aby alarmy działały.',
+                ),
+                trailing: TextButton(
+                  onPressed: onOpenNotificationSettings,
+                  child: const Text('Ustawienia'),
+                ),
+              ),
           ],
         ),
       ),

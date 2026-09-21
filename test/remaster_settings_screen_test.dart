@@ -137,4 +137,31 @@ void main() {
     await tester.tap(find.text('Wyślij test'));
     expect(testSent, isTrue);
   });
+
+  testWidgets('blocked notifications show a direct system settings action', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 1400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    var opened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RemasterSettingsScreen(
+          appVersion: '1.1.4',
+          syncStatus: 'Zsynchronizowano',
+          themeMode: ThemeMode.dark,
+          onThemeMode: (_) {},
+          onLegacy: () {},
+          notificationPermissionGranted: false,
+          onOpenNotificationSettings: () async => opened = true,
+        ),
+      ),
+    );
+
+    expect(find.text('Powiadomienia są zablokowane'), findsOneWidget);
+    await tester.tap(find.text('Ustawienia'));
+    expect(opened, isTrue);
+  });
 }
