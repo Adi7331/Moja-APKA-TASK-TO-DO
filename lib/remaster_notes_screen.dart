@@ -156,6 +156,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
               color: Theme.of(context).colorScheme.outlineVariant,
             ),
             SizedBox(
+              key: const ValueKey('notes-detail-panel'),
               width: 348,
               child: _NotePreview(note: _selected, onOpen: widget.onOpenNote),
             ),

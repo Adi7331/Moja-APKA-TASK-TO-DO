@@ -90,6 +90,51 @@ void main() {
     expect(find.byTooltip('Dodaj plik do notatki'), findsOneWidget);
   });
 
+  testWidgets('desktop shows a stable detail panel after selecting a note', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1366, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [NoteItem(id: 'n1', title: 'Plan')],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('note-row-n1')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('notes-detail-panel')), findsOneWidget);
+  });
+
+  testWidgets('phone list has no desktop detail panel', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      app(
+        RemasterNotesScreen(
+          notes: [NoteItem(id: 'n1', title: 'Plan')],
+          onNewNote: ({String? folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('notes-detail-panel')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a phone tap opens a note directly', (tester) async {
     var opened = 0;
     await tester.pumpWidget(
