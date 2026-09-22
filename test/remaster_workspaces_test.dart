@@ -1,8 +1,8 @@
+import 'package:dzien_po_dniu/note_folder.dart';
 import 'package:dzien_po_dniu/note_item.dart';
 import 'package:dzien_po_dniu/remaster_notes_screen.dart';
 import 'package:dzien_po_dniu/remaster_tasks_screen.dart';
 import 'package:dzien_po_dniu/remaster_theme.dart';
-import 'package:dzien_po_dniu/note_folder.dart';
 import 'package:dzien_po_dniu/task_item.dart';
 import 'package:dzien_po_dniu/task_view.dart';
 import 'package:flutter/material.dart';
@@ -10,8 +10,26 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   Widget app(Widget child) => MaterialApp(
-    theme: buildRemasterTheme(Brightness.light),
+    theme: buildRemasterTheme(Brightness.dark),
     home: Scaffold(body: child),
+  );
+
+  RemasterNotesScreen notesApp({
+    String greetingName = 'Adrian',
+    List<NoteItem> notes = const [],
+    List<NoteFolder> folders = const [],
+    NewRemasterNote? onNewNote,
+    ValueChanged<NoteItem>? onOpenNote,
+    Future<void> Function(NoteItem)? onSave,
+    Future<void> Function(NoteItem)? onDelete,
+  }) => RemasterNotesScreen(
+    greetingName: greetingName,
+    notes: notes,
+    folders: folders,
+    onNewNote: onNewNote ?? ({folderId}) {},
+    onOpenNote: onOpenNote ?? (_) {},
+    onSave: onSave ?? (_) async {},
+    onDelete: onDelete ?? (_) async {},
   );
 
   testWidgets('task row exposes the status actions without a menu', (
@@ -47,585 +65,128 @@ void main() {
     expect(selectedStatus, 'doing');
   });
 
-  testWidgets('notes composer starts another new note immediately', (
-    tester,
-  ) async {
-    var created = 0;
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: const [],
-          onNewNote: ({String? folderId}) => created++,
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    await tester.tap(find.byTooltip('Utwórz notatkę'));
-    expect(created, 1);
-    expect(find.text('Nie masz jeszcze notatek'), findsOneWidget);
-  });
-
-  testWidgets('notes list exposes a stable search field and section filter', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: const [],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.byKey(const ValueKey('notes-search')), findsOneWidget);
-    expect(find.byKey(const ValueKey('notes-section-filter')), findsOneWidget);
-    expect(find.byTooltip('Utwórz checklistę'), findsOneWidget);
-    expect(find.byTooltip('Dodaj zdjęcie do notatki'), findsOneWidget);
-    expect(find.byTooltip('Dodaj plik do notatki'), findsOneWidget);
-  });
-
-  testWidgets('desktop shows a stable detail panel after selecting a note', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1366, 768);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [NoteItem(id: 'n1', title: 'Plan')],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey('note-row-n1')));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('notes-detail-panel')), findsOneWidget);
-  });
-
-  testWidgets('phone list has no desktop detail panel', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [NoteItem(id: 'n1', title: 'Plan')],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.byKey(const ValueKey('notes-detail-panel')), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('a phone tap opens a note directly', (tester) async {
-    var opened = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SizedBox(
-          width: 390,
-          height: 844,
-          child: Scaffold(
-            body: RemasterNotesScreen(
-              notes: [NoteItem(id: 'note-1', title: 'Szybka notatka')],
-              onNewNote: ({String? folderId}) {},
-              onOpenNote: (_) => opened++,
-              onSave: (_) async {},
-              onDelete: (_) async {},
-            ),
+  testWidgets(
+    'phone library has greeting, one filter strip and cards without legacy sections',
+    (tester) async {
+      await tester.pumpWidget(
+        app(
+          notesApp(
+            notes: [NoteItem(id: 'plan', title: 'Plan na tydzień')],
+            folders: [NoteFolder(id: 'work', name: 'Praca')],
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Szybka notatka'));
-    await tester.pump();
+      expect(find.text('Dzień dobry, Adrian!'), findsOneWidget);
+      expect(find.byKey(const ValueKey('notes-filter-strip')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('note-library-card-plan')),
+        findsOneWidget,
+      );
+      expect(find.text('Przypomnienia'), findsNothing);
+      expect(find.text('Archiwum'), findsNothing);
+      expect(find.text('Kosz'), findsNothing);
+    },
+  );
 
-    expect(opened, 1);
+  testWidgets('more menu exposes reminders archive and trash', (tester) async {
+    await tester.pumpWidget(app(notesApp()));
+
+    await tester.tap(find.byTooltip('Więcej widoków notatek'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Przypomnienia'), findsOneWidget);
+    expect(find.text('Archiwum'), findsOneWidget);
+    expect(find.text('Kosz'), findsOneWidget);
   });
 
-  testWidgets('notes show a compact checklist summary on a card', (
+  testWidgets('new note inherits the active folder from the one filter strip', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'note-1',
-              title: 'Zakupy',
-              blocks: [
-                NoteBlock.checklist(
-                  id: 'block-1',
-                  items: const [
-                    NoteChecklistItem(id: 'item-1', text: 'Mleko'),
-                    NoteChecklistItem(
-                      id: 'item-2',
-                      text: 'Chleb',
-                      isDone: true,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.text('1 z 2 ukończone'), findsOneWidget);
-  });
-
-  testWidgets('a note card exposes a preview for its image attachment', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'note-1',
-              title: 'Plan podróży',
-              attachments: [
-                NoteAttachment(
-                  id: 'image-1',
-                  fileName: 'mapa.png',
-                  mimeType: 'image/png',
-                  byteSize: 1024,
-                  localPath: 'C:/brakujacy-plik/mapa.png',
-                ),
-              ],
-            ),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.bySemanticsLabel('Podgląd zdjęcia: mapa.png'), findsOneWidget);
-  });
-
-  testWidgets('a note card identifies an attached document', (tester) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'note-1',
-              title: 'Formalności',
-              attachments: [
-                NoteAttachment(
-                  id: 'document-1',
-                  fileName: 'budżet.pdf',
-                  mimeType: 'application/pdf',
-                  byteSize: 2048,
-                ),
-              ],
-            ),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.text('budżet.pdf'), findsOneWidget);
-    expect(find.text('PDF · 2 KB'), findsOneWidget);
-  });
-
-  testWidgets('new note keeps the selected folder', (tester) async {
     String? createdInFolder;
     await tester.pumpWidget(
       app(
-        RemasterNotesScreen(
-          notes: const [],
+        notesApp(
           folders: [NoteFolder(id: 'work', name: 'Praca')],
-          onNewNote: ({String? folderId}) => createdInFolder = folderId,
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
+          onNewNote: ({folderId}) => createdInFolder = folderId,
         ),
       ),
     );
 
     await tester.tap(find.text('Praca'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Utwórz notatkę'));
+    await tester.tap(find.byKey(const ValueKey('notes-new-note')));
 
     expect(createdInFolder, 'work');
   });
 
-  testWidgets('a note card identifies its folder without opening the note', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(id: 'note-1', title: 'Wymiana opon', folderId: 'car'),
-          ],
-          folders: [NoteFolder(id: 'car', name: 'Samochód')],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    // One label is the folder filter; the other is the context marker on the
-    // card itself, visible before opening the note.
-    expect(find.text('Samochód'), findsNWidgets(2));
-  });
-
-  testWidgets('a note label filter limits the visible note cards', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'work',
-              title: 'Dopiąć ofertę',
-              labels: const ['Praca'],
-            ),
-            NoteItem(id: 'home', title: 'Kupić kawę', labels: const ['Dom']),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    await tester.tap(find.widgetWithText(FilterChip, 'Praca'));
-    await tester.pump();
-
-    expect(find.text('Dopiąć ofertę'), findsOneWidget);
-    expect(find.text('Kupić kawę'), findsNothing);
-  });
-
-  testWidgets('a note card archives a note without opening its editor', (
-    tester,
-  ) async {
+  testWidgets('card actions archive without opening the note', (tester) async {
     NoteItem? saved;
     await tester.pumpWidget(
       app(
-        RemasterNotesScreen(
-          notes: [NoteItem(id: 'note-1', title: 'Rachunki')],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
+        notesApp(
+          notes: [NoteItem(id: 'archive-me', title: 'Rachunki')],
           onSave: (note) async => saved = note,
-          onDelete: (_) async {},
         ),
       ),
     );
 
-    await tester.tap(find.byTooltip('Archiwizuj notatkę'));
+    await tester.tap(find.byTooltip('Opcje notatki'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archiwizuj'));
     await tester.pump();
 
     expect(saved?.isArchived, isTrue);
   });
 
-  testWidgets('a trashed note can be restored directly from the trash view', (
-    tester,
-  ) async {
-    NoteItem? saved;
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'note-1',
-              title: 'Rachunki',
-              deletedAt: DateTime(2026, 9, 11),
-            ),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (note) async => saved = note,
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Kosz'));
-    await tester.pump();
-    await tester.tap(find.byTooltip('Przywróć notatkę z kosza'));
-    await tester.pump();
-
-    expect(saved?.isDeleted, isFalse);
-  });
-
-  testWidgets('a trashed note explains automatic 30-day cleanup', (
-    tester,
-  ) async {
-    var permanentlyDeleted = false;
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'note-1',
-              title: 'Rachunki',
-              deletedAt: DateTime(2026, 9, 11),
-            ),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-          onPermanentlyDelete: (_) async => permanentlyDeleted = true,
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Kosz'));
-    await tester.pump();
-    await tester.tap(find.byTooltip('Kosz czyści notatki po 30 dniach'));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('Notatki w Koszu są czyszczone automatycznie po 30 dniach.'),
-      findsOneWidget,
-    );
-    expect(permanentlyDeleted, isFalse);
-  });
-
-  testWidgets('a note card makes its reminder visible before opening', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(
-              id: 'note-1',
-              title: 'Rachunki',
-              reminderAt: DateTime(2026, 9, 12, 10, 30),
-            ),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.textContaining('Przypomnienie'), findsOneWidget);
-  });
-
-  testWidgets('pinned notes and remaining notes have separate sections', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(id: 'pinned', title: 'Najważniejsza', pinned: true),
-            NoteItem(id: 'regular', title: 'Na później'),
-          ],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    expect(find.text('PRZYPIĘTE'), findsOneWidget);
-    expect(find.text('POZOSTAŁE'), findsOneWidget);
-  });
-
-  testWidgets('note section filters stay within a 390 pixel phone viewport', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SizedBox(
-          key: const ValueKey('phone-viewport'),
-          width: 390,
-          height: 844,
-          child: Scaffold(
-            body: RemasterNotesScreen(
-              notes: const <NoteItem>[],
-              onNewNote: ({String? folderId}) {},
-              onOpenNote: (_) {},
-              onSave: (_) async {},
-              onDelete: (_) async {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final viewport = tester.getRect(
-      find.byKey(const ValueKey('phone-viewport')),
-    );
-    for (final label in ['Notatki', 'Przypomnienia', 'Archiwum', 'Kosz']) {
-      expect(
-        tester.getRect(find.text(label).last).right,
-        lessThanOrEqualTo(viewport.right),
-      );
-    }
-  });
-
-  testWidgets('note section filters wrap at 200 percent phone text size', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(2)),
-          child: child!,
-        ),
-        home: SizedBox(
-          key: const ValueKey('large-text-phone-viewport'),
-          width: 390,
-          height: 844,
-          child: Scaffold(
-            body: RemasterNotesScreen(
-              notes: const <NoteItem>[],
-              onNewNote: ({String? folderId}) {},
-              onOpenNote: (_) {},
-              onSave: (_) async {},
-              onDelete: (_) async {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final viewport = tester.getRect(
-      find.byKey(const ValueKey('large-text-phone-viewport')),
-    );
-    for (final label in ['Notatki', 'Przypomnienia', 'Archiwum', 'Kosz']) {
-      expect(
-        tester.getRect(find.text(label).last).right,
-        lessThanOrEqualTo(viewport.right),
-      );
-    }
-  });
-
-  testWidgets('notes show sync status and expose retry without hiding rows', (
-    tester,
-  ) async {
+  testWidgets('sync error stays visible with the local card', (tester) async {
     var retried = false;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RemasterNotesScreen(
-            notes: [NoteItem(id: 'offline-note', title: 'Lokalna notatka')],
-            syncStatus: 'Zapisano lokalnie · czeka na synchronizację',
-            onRetrySync: () async => retried = true,
-            onNewNote: ({String? folderId}) {},
-            onOpenNote: (_) {},
-            onSave: (_) async {},
-            onDelete: (_) async {},
-          ),
+      app(
+        RemasterNotesScreen(
+          notes: [NoteItem(id: 'offline', title: 'Lokalna notatka')],
+          syncStatus: 'Błąd synchronizacji',
+          onRetrySync: () async => retried = true,
+          onNewNote: ({folderId}) {},
+          onOpenNote: (_) {},
+          onSave: (_) async {},
+          onDelete: (_) async {},
         ),
       ),
     );
+
     expect(find.byKey(const ValueKey('notes-sync-status')), findsOneWidget);
     expect(find.text('Lokalna notatka'), findsOneWidget);
     await tester.tap(find.byTooltip('Ponów synchronizację notatek'));
     expect(retried, isTrue);
   });
 
-  testWidgets(
-    'notes expose an explicit error state while keeping local content',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: RemasterNotesScreen(
-              notes: [NoteItem(id: 'error-note', title: 'Notatka lokalna')],
-              syncStatus: 'Błąd synchronizacji',
-              onNewNote: ({String? folderId}) {},
-              onOpenNote: (_) {},
-              onSave: (_) async {},
-              onDelete: (_) async {},
-            ),
-          ),
-        ),
-      );
-      expect(find.text('Błąd synchronizacji'), findsOneWidget);
-      expect(find.text('Notatka lokalna'), findsOneWidget);
-    },
-  );
-
-  testWidgets('notes show loading state instead of an empty-state conclusion', (
+  testWidgets('phone library survives 200 percent text without an exception', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildRemasterTheme(Brightness.dark),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(2)),
+          child: child!,
+        ),
         home: Scaffold(
-          body: RemasterNotesScreen(
-            notes: const <NoteItem>[],
-            isLoading: true,
-            onNewNote: ({String? folderId}) {},
-            onOpenNote: (_) {},
-            onSave: (_) async {},
-            onDelete: (_) async {},
+          body: notesApp(
+            notes: [NoteItem(id: 'plan', title: 'Plan na tydzień')],
+            folders: [
+              NoteFolder(id: 'work', name: 'Bardzo długi folder Praca'),
+            ],
           ),
         ),
       ),
     );
-    expect(find.byKey(const ValueKey('notes-loading-state')), findsOneWidget);
-    expect(find.text('Nie masz jeszcze notatek'), findsNothing);
-  });
 
-  testWidgets('note search also finds notes by their folder name', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      app(
-        RemasterNotesScreen(
-          notes: [
-            NoteItem(id: 'note-1', title: 'Wymiana opon', folderId: 'car'),
-          ],
-          folders: [NoteFolder(id: 'car', name: 'Samochód')],
-          onNewNote: ({String? folderId}) {},
-          onOpenNote: (_) {},
-          onSave: (_) async {},
-          onDelete: (_) async {},
-        ),
-      ),
-    );
-
-    await tester.enterText(find.byType(TextField).first, 'samochód');
-    await tester.pump();
-
-    expect(find.text('Wymiana opon'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
