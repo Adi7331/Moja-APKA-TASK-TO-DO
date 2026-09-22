@@ -2367,6 +2367,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         onRenameFolder: _renameFolder,
         onDeleteFolder: _deleteFolder,
         onSetWidgetNote: _setAndroidWidgetNote,
+        syncStatus: _syncStatus,
+        onRetrySync: _retryAllPendingSync,
       );
     }
     return NotesScreen(

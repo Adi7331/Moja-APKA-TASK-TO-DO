@@ -413,7 +413,10 @@ void main() {
     await tester.tap(find.byTooltip('Kosz czyści notatki po 30 dniach'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Notatki w Koszu są czyszczone automatycznie po 30 dniach.'), findsOneWidget);
+    expect(
+      find.text('Notatki w Koszu są czyszczone automatycznie po 30 dniach.'),
+      findsOneWidget,
+    );
     expect(permanentlyDeleted, isFalse);
   });
 
@@ -532,6 +535,74 @@ void main() {
         lessThanOrEqualTo(viewport.right),
       );
     }
+  });
+
+  testWidgets('notes show sync status and expose retry without hiding rows', (
+    tester,
+  ) async {
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RemasterNotesScreen(
+            notes: [NoteItem(id: 'offline-note', title: 'Lokalna notatka')],
+            syncStatus: 'Zapisano lokalnie · czeka na synchronizację',
+            onRetrySync: () async => retried = true,
+            onNewNote: ({String? folderId}) {},
+            onOpenNote: (_) {},
+            onSave: (_) async {},
+            onDelete: (_) async {},
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('notes-sync-status')), findsOneWidget);
+    expect(find.text('Lokalna notatka'), findsOneWidget);
+    await tester.tap(find.byTooltip('Ponów synchronizację notatek'));
+    expect(retried, isTrue);
+  });
+
+  testWidgets(
+    'notes expose an explicit error state while keeping local content',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RemasterNotesScreen(
+              notes: [NoteItem(id: 'error-note', title: 'Notatka lokalna')],
+              syncStatus: 'Błąd synchronizacji',
+              onNewNote: ({String? folderId}) {},
+              onOpenNote: (_) {},
+              onSave: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Błąd synchronizacji'), findsOneWidget);
+      expect(find.text('Notatka lokalna'), findsOneWidget);
+    },
+  );
+
+  testWidgets('notes show loading state instead of an empty-state conclusion', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RemasterNotesScreen(
+            notes: const <NoteItem>[],
+            isLoading: true,
+            onNewNote: ({String? folderId}) {},
+            onOpenNote: (_) {},
+            onSave: (_) async {},
+            onDelete: (_) async {},
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('notes-loading-state')), findsOneWidget);
+    expect(find.text('Nie masz jeszcze notatek'), findsNothing);
   });
 
   testWidgets('note search also finds notes by their folder name', (

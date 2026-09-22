@@ -58,6 +58,41 @@ void main() {
     expect(find.text('Lista kroków'), findsOneWidget);
   });
 
+  testWidgets('save error keeps the editor open and exposes retry', (
+    tester,
+  ) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.light),
+        home: NoteEditorScreen(
+          remastered: true,
+          note: NoteItem(
+            id: 'note-retry',
+            blocks: [NoteBlock.text(id: 'text-retry')],
+          ),
+          onSave: (_) async {
+            attempts++;
+            if (attempts == 1) throw StateError('offline');
+          },
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('note-title-field')),
+      'Zmiana',
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('note-save-retry')), findsOneWidget);
+    expect(find.textContaining('Błąd zapisu lokalnego'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('note-save-retry')));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+  });
+
   testWidgets(
     'saving note labels closes the dialog without disposing its field early',
     (tester) async {

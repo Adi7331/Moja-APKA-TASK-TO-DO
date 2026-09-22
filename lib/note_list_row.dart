@@ -4,6 +4,8 @@ import 'note_folder.dart';
 import 'note_item.dart';
 import 'remaster_theme.dart';
 
+const _noFolderSelection = Object();
+
 /// A compact, list-first presentation of one note.
 ///
 /// The row deliberately keeps actions in a menu so the title and preview have
@@ -37,7 +39,8 @@ class NoteListRow extends StatelessWidget {
   final Future<void> Function(NoteItem, String?)? onMoveToFolder;
   final Future<void> Function(NoteItem)? onSetWidgetNote;
 
-  String get _title => note.title.trim().isEmpty ? 'Bez tytułu' : note.title.trim();
+  String get _title =>
+      note.title.trim().isEmpty ? 'Bez tytułu' : note.title.trim();
 
   String get _preview {
     final value = note.previewText.trim();
@@ -54,7 +57,10 @@ class NoteListRow extends StatelessWidget {
         ? scheme.outlineVariant
         : remasterNoteColor(context, note.colorKey.index - 1);
     final surface = selected
-        ? Color.alphaBlend(scheme.primary.withValues(alpha: .10), scheme.surfaceContainerLow)
+        ? Color.alphaBlend(
+            scheme.primary.withValues(alpha: .10),
+            scheme.surfaceContainerLow,
+          )
         : scheme.surfaceContainerLow;
     final status = _statusLabel(context);
 
@@ -62,7 +68,8 @@ class NoteListRow extends StatelessWidget {
       button: true,
       container: true,
       explicitChildNodes: true,
-      label: 'Notatka $_title${folder == null ? '' : ', folder ${folder!.name}'}',
+      label:
+          'Notatka $_title${folder == null ? '' : ', folder ${folder!.name}'}',
       hint: 'Otwórz notatkę',
       child: Material(
         key: ValueKey('note-row-${note.id}'),
@@ -115,16 +122,17 @@ class NoteListRow extends StatelessWidget {
                           const SizedBox(height: 3),
                           Text(
                             _preview,
-                            maxLines: 2,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: scheme.onSurfaceVariant),
                           ),
                         ],
                         if (note.attachments.isNotEmpty) ...[
                           const SizedBox(height: 5),
-                          _AttachmentSummary(attachment: note.attachments.first),
+                          _AttachmentSummary(
+                            attachment: note.attachments.first,
+                          ),
                         ],
                         const SizedBox(height: 7),
                         Wrap(
@@ -150,7 +158,8 @@ class NoteListRow extends StatelessWidget {
                               ),
                             if (note.attachments.isNotEmpty)
                               Tooltip(
-                                message: 'Załączniki: ${note.attachments.length}',
+                                message:
+                                    'Załączniki: ${note.attachments.length}',
                                 child: _MetaItem(
                                   icon: Icons.attach_file_rounded,
                                   label: '${note.attachments.length}',
@@ -161,16 +170,19 @@ class NoteListRow extends StatelessWidget {
                                 icon: status.$1,
                                 label: 'Przypomnienie · ${status.$2}',
                               ),
+                            if (status == null)
+                              _MetaItem(
+                                icon: Icons.update_rounded,
+                                label: MaterialLocalizations.of(
+                                  context,
+                                ).formatCompactDate(note.updatedAt.toLocal()),
+                              ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  _QuickActions(
-                    note: note,
-                    onSave: onSave,
-                    onDelete: onDelete,
-                  ),
+                  _QuickActions(note: note, onSave: onSave, onDelete: onDelete),
                   _ActionsMenu(
                     note: note,
                     folders: folders,
@@ -194,9 +206,8 @@ class NoteListRow extends StatelessWidget {
     final reminder = note.reminderAt;
     if (reminder == null) return null;
     final local = reminder.toLocal();
-    final time = MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(local),
-    );
+    final time = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(local));
     return (Icons.schedule_rounded, time);
   }
 }
@@ -263,7 +274,11 @@ class _AttachmentSummary extends StatelessWidget {
 }
 
 class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.note, required this.onSave, required this.onDelete});
+  const _QuickActions({
+    required this.note,
+    required this.onSave,
+    required this.onDelete,
+  });
 
   final NoteItem note;
   final Future<void> Function(NoteItem) onSave;
@@ -334,7 +349,11 @@ class _MetaItem extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(
+          icon,
+          size: 16,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 4),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 180),
@@ -421,9 +440,11 @@ class _ActionsMenu extends StatelessWidget {
       case _NoteAction.open:
         onOpen();
       case _NoteAction.pin:
-        await onSave(note.copyWith(pinned: !note.pinned, updatedAt: DateTime.now()));
+        await onSave(
+          note.copyWith(pinned: !note.pinned, updatedAt: DateTime.now()),
+        );
       case _NoteAction.move:
-        final folderId = await showModalBottomSheet<String?>(
+        final selection = await showModalBottomSheet<Object?>(
           context: context,
           builder: (context) => SafeArea(
             child: ListView(
@@ -433,7 +454,7 @@ class _ActionsMenu extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.folder_off_outlined),
                   title: const Text('Bez folderu'),
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => Navigator.pop(context, _noFolderSelection),
                 ),
                 ...folders.map(
                   (folder) => ListTile(
@@ -446,7 +467,11 @@ class _ActionsMenu extends StatelessWidget {
             ),
           ),
         );
-        await onMoveToFolder?.call(note, folderId);
+        if (selection == null) return;
+        await onMoveToFolder?.call(
+          note,
+          selection == _noFolderSelection ? null : selection as String,
+        );
       case _NoteAction.archive:
         await onSave(
           note.copyWith(

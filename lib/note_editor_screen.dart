@@ -122,10 +122,18 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         await widget.onSave(draft);
         _note = draft;
       });
-      if (mounted) setState(() => _saveStatus = 'Zapisano');
+      if (mounted) {
+        setState(
+          () => _saveStatus = 'Zapisano lokalnie · czeka na synchronizację',
+        );
+      }
       return true;
     } catch (_) {
-      if (mounted) setState(() => _saveStatus = 'Błąd — spróbuj ponownie');
+      if (mounted) {
+        setState(
+          () => _saveStatus = 'Błąd zapisu lokalnego — spróbuj ponownie',
+        );
+      }
       return false;
     }
   }
@@ -474,12 +482,30 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               if (widget.remastered)
-                Text(
-                  key: const ValueKey('note-save-status'),
-                  _saveStatus,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        key: const ValueKey('note-save-status'),
+                        _saveStatus,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                    if (_saveStatus.startsWith('Błąd'))
+                      TextButton(
+                        key: const ValueKey('note-save-retry'),
+                        onPressed: _save,
+                        child: const Text('Ponów'),
+                      ),
+                  ],
                 ),
             ],
           ),

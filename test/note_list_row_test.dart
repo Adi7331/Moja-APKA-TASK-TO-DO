@@ -53,7 +53,9 @@ void main() {
     expect(find.byTooltip('Załączniki: 1'), findsOneWidget);
   });
 
-  testWidgets('long text truncates without horizontal overflow', (tester) async {
+  testWidgets('long text truncates without horizontal overflow', (
+    tester,
+  ) async {
     final long = List.filled(80, 'Bardzo długa treść notatki').join(' ');
     await tester.pumpWidget(
       buildRow(
@@ -89,28 +91,63 @@ void main() {
     expect(find.textContaining('budżet.pdf'), findsOneWidget);
   });
 
-  testWidgets('exposes an actionable semantic label for keyboard and screen readers', (
+  testWidgets(
+    'exposes an actionable semantic label for keyboard and screen readers',
+    (tester) async {
+      await tester.pumpWidget(
+        buildRow(
+          NoteItem(id: 'semantic', title: 'Plan dnia'),
+          folder: NoteFolder(
+            id: 'long-folder',
+            name: 'Bardzo długa nazwa folderu do sprawdzenia',
+          ),
+        ),
+      );
+
+      expect(
+        find.bySemanticsLabel(
+          'Notatka Plan dnia, folder Bardzo długa nazwa folderu do sprawdzenia',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Opcje notatki'), findsOneWidget);
+    },
+  );
+
+  testWidgets('cancelling the folder picker does not clear the folder', (
     tester,
   ) async {
+    String? movedTo;
+    var called = false;
     await tester.pumpWidget(
-      buildRow(
-        NoteItem(
-          id: 'semantic',
-          title: 'Plan dnia',
-        ),
-        folder: NoteFolder(
-          id: 'long-folder',
-          name: 'Bardzo długa nazwa folderu do sprawdzenia',
+      MaterialApp(
+        home: Scaffold(
+          body: NoteListRow(
+            note: NoteItem(id: 'move', title: 'Notatka'),
+            folder: NoteFolder(id: 'work', name: 'Praca'),
+            folders: [NoteFolder(id: 'work', name: 'Praca')],
+            selected: false,
+            onTap: () {},
+            onOpen: () {},
+            onSave: (_) async {},
+            onDelete: (_) async {},
+            onMoveToFolder: (_, folderId) async {
+              called = true;
+              movedTo = folderId;
+            },
+          ),
         ),
       ),
     );
+    await tester.tap(find.byTooltip('Opcje notatki'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Przenieś do folderu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Przenieś notatkę'), findsOneWidget);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
 
-    expect(
-      find.bySemanticsLabel(
-        'Notatka Plan dnia, folder Bardzo długa nazwa folderu do sprawdzenia',
-      ),
-      findsOneWidget,
-    );
-    expect(find.byTooltip('Opcje notatki'), findsOneWidget);
+    expect(called, isFalse);
+    expect(movedTo, isNull);
   });
 }

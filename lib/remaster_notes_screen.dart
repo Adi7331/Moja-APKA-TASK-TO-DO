@@ -39,6 +39,9 @@ class RemasterNotesScreen extends StatefulWidget {
     this.onRenameFolder,
     this.onDeleteFolder,
     this.onSetWidgetNote,
+    this.syncStatus,
+    this.onRetrySync,
+    this.isLoading = false,
   });
 
   final List<NoteItem> notes;
@@ -56,6 +59,9 @@ class RemasterNotesScreen extends StatefulWidget {
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
   final Future<void> Function(NoteItem? note)? onSetWidgetNote;
+  final String? syncStatus;
+  final Future<void> Function()? onRetrySync;
+  final bool isLoading;
 
   @override
   State<RemasterNotesScreen> createState() => _RemasterNotesScreenState();
@@ -150,6 +156,9 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
           onRenameFolder: widget.onRenameFolder,
           onDeleteFolder: widget.onDeleteFolder,
           onSetWidgetNote: widget.onSetWidgetNote,
+          syncStatus: widget.syncStatus,
+          onRetrySync: widget.onRetrySync,
+          isLoading: widget.isLoading,
         );
         if (!wide) return content;
         return Row(
@@ -210,6 +219,9 @@ class _NotesGrid extends StatelessWidget {
     this.onRenameFolder,
     this.onDeleteFolder,
     this.onSetWidgetNote,
+    this.syncStatus,
+    this.onRetrySync,
+    this.isLoading = false,
   });
   final TextEditingController search;
   final String query;
@@ -239,6 +251,9 @@ class _NotesGrid extends StatelessWidget {
   final Future<void> Function(NoteFolder folder)? onRenameFolder;
   final Future<void> Function(NoteFolder folder)? onDeleteFolder;
   final Future<void> Function(NoteItem? note)? onSetWidgetNote;
+  final String? syncStatus;
+  final Future<void> Function()? onRetrySync;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) => CustomScrollView(
@@ -286,12 +301,17 @@ class _NotesGrid extends StatelessWidget {
                         selectedLabel: selectedLabel,
                         onSelected: onLabelChanged,
                       ),
+                syncStatus: syncStatus,
+                onRetrySync: onRetrySync,
+                isLoading: isLoading,
               ),
             ],
           ),
         ),
       ),
-      if (notes.isEmpty)
+      if (isLoading)
+        const SliverToBoxAdapter(child: _LoadingNotes())
+      else if (notes.isEmpty)
         SliverToBoxAdapter(
           child: _EmptyNotes(
             onNewNote: () => onNewNote(folderId: selectedFolderId),
@@ -388,7 +408,9 @@ class _NoteCards extends StatelessWidget {
       itemCount: notes.length,
       itemBuilder: (context, index) {
         final note = notes[index];
-        final folder = folders.where((item) => item.id == note.folderId).firstOrNull;
+        final folder = folders
+            .where((item) => item.id == note.folderId)
+            .firstOrNull;
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: NoteListRow(
@@ -885,12 +907,17 @@ class _NoteCard extends StatelessWidget {
   Future<void> _requestDelete(BuildContext context) async {
     if (note.isDeleted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notatki w Koszu są czyszczone automatycznie po 30 dniach.')),
+        const SnackBar(
+          content: Text(
+            'Notatki w Koszu są czyszczone automatycznie po 30 dniach.',
+          ),
+        ),
       );
       return;
     }
     await onDelete(note);
   }
+
   final List<NoteFolder> folders;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
   final Future<void> Function(NoteItem? note)? onSetWidgetNote;
@@ -1290,6 +1317,28 @@ class _NotePreview extends StatelessWidget {
       ),
     );
   }
+}
+
+class _LoadingNotes extends StatelessWidget {
+  const _LoadingNotes();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            'Ładowanie notatek…',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _EmptyNotes extends StatelessWidget {
