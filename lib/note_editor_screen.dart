@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'note_attachment_picker.dart';
+import 'note_folder.dart';
 import 'note_item.dart';
 import 'serial_async_queue.dart';
 
@@ -23,6 +24,9 @@ class NoteEditorScreen extends StatefulWidget {
     this.initialFilePicker = false,
     this.initialChecklist = false,
     this.remastered = false,
+    this.onClose,
+    this.folders = const [],
+    this.onMoveToFolder,
   });
 
   final NoteItem note;
@@ -41,6 +45,9 @@ class NoteEditorScreen extends StatefulWidget {
   final bool initialFilePicker;
   final bool initialChecklist;
   final bool remastered;
+  final VoidCallback? onClose;
+  final List<NoteFolder> folders;
+  final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
 
   @override
   State<NoteEditorScreen> createState() => _NoteEditorScreenState();
@@ -141,7 +148,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Future<void> _close() async {
     if (!await _save()) return;
     if (!mounted) return;
-    if (widget.embedded) return;
+    if (widget.embedded) {
+      widget.onClose?.call();
+      return;
+    }
     Navigator.of(context).pop(_note);
   }
 
@@ -466,7 +476,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       children: [
         IconButton(
           key: const ValueKey('note-close-button'),
-          tooltip: 'Zamknij notatkę',
+          tooltip: widget.remastered ? 'Wróć do notatek' : 'Zamknij notatkę',
           onPressed: _close,
           icon: const Icon(Icons.close_rounded),
         ),

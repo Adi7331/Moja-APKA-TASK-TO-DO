@@ -2303,6 +2303,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           note: note,
           onSave: _saveNote,
           onDelete: _deleteNote,
+          folders: folders,
+          onMoveToFolder: _moveNoteToFolder,
           onCreateTask: (note, title) =>
               _quickAddTask(title, sourceNoteId: note.id),
           onAttach: _attachNoteFile,
@@ -2347,6 +2349,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (_remasterPreview) {
       return RemasterNotesScreen(
         notes: notes,
+        greetingName:
+            _profileValue('full_name') ??
+            _profileValue('name') ??
+            (cloudMode
+                ? Supabase.instance.client.auth.currentUser?.email
+                      ?.split('@')
+                      .first
+                : null),
         folders: folders,
         onNewNote: ({String? folderId}) =>
             _openNewRemasterNote(folderId: folderId),
@@ -2369,6 +2379,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         onSetWidgetNote: _setAndroidWidgetNote,
         syncStatus: _syncStatus,
         onRetrySync: _retryAllPendingSync,
+        editorBuilder: (note, onClose) => NoteEditorScreen(
+          embedded: true,
+          remastered: true,
+          onClose: onClose,
+          note: note,
+          folders: folders,
+          onMoveToFolder: _moveNoteToFolder,
+          onSave: _saveNote,
+          onDelete: _deleteNote,
+          onCreateTask: (source, title) =>
+              _quickAddTask(title, sourceNoteId: source.id),
+          onAttach: _attachNoteFile,
+          onDeleteAttachment: _deleteNoteAttachment,
+          onOpenAttachment: _openNoteAttachment,
+        ),
       );
     }
     return NotesScreen(

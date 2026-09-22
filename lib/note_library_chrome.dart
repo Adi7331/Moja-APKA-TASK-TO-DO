@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'note_folder.dart';
+import 'note_item.dart';
 import 'note_library_state.dart';
 
 class NotesLibraryHeader extends StatelessWidget {
@@ -232,6 +233,172 @@ class NotesOverflowMenu extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+class NotesDesktopSidebar extends StatelessWidget {
+  const NotesDesktopSidebar({
+    required this.folders,
+    required this.notes,
+    required this.selection,
+    required this.onSelectionChanged,
+    super.key,
+  });
+
+  final List<NoteFolder> folders;
+  final List<NoteItem> notes;
+  final NoteLibrarySelection selection;
+  final ValueChanged<NoteLibrarySelection> onSelectionChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('notes-desktop-sidebar'),
+    width: 224,
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
+      children: [
+        Text(
+          'NOTATKI',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            letterSpacing: 1.1,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SidebarDestination(
+          icon: Icons.grid_view_rounded,
+          label: 'Wszystkie',
+          count: visibleFolderCount(notes: notes, folderId: null),
+          selected:
+              selection.scope == NoteLibraryScope.all &&
+              selection.folderId == null,
+          onTap: () => onSelectionChanged(
+            selection.copyWith(scope: NoteLibraryScope.all, folderId: null),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'FOLDERY',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            letterSpacing: 1,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        for (final folder in folders)
+          _SidebarDestination(
+            icon: Icons.folder_outlined,
+            label: folder.name,
+            count: visibleFolderCount(notes: notes, folderId: folder.id),
+            selected:
+                selection.scope == NoteLibraryScope.all &&
+                selection.folderId == folder.id,
+            onTap: () => onSelectionChanged(
+              selection.copyWith(
+                scope: NoteLibraryScope.all,
+                folderId: folder.id,
+              ),
+            ),
+          ),
+        const SizedBox(height: 18),
+        _SidebarDestination(
+          icon: Icons.push_pin_outlined,
+          label: 'Przypięte',
+          count: selectNotesForLibrary(
+            notes: notes,
+            folders: folders,
+            selection: const NoteLibrarySelection(
+              scope: NoteLibraryScope.pinned,
+            ),
+          ).length,
+          selected: selection.scope == NoteLibraryScope.pinned,
+          onTap: () => onSelectionChanged(
+            selection.copyWith(scope: NoteLibraryScope.pinned, folderId: null),
+          ),
+        ),
+        _SidebarDestination(
+          icon: Icons.archive_outlined,
+          label: 'Archiwum',
+          count: selectNotesForLibrary(
+            notes: notes,
+            folders: folders,
+            selection: const NoteLibrarySelection(
+              scope: NoteLibraryScope.archive,
+            ),
+          ).length,
+          selected: selection.scope == NoteLibraryScope.archive,
+          onTap: () => onSelectionChanged(
+            selection.copyWith(scope: NoteLibraryScope.archive, folderId: null),
+          ),
+        ),
+        _SidebarDestination(
+          icon: Icons.delete_outline_rounded,
+          label: 'Kosz',
+          count: selectNotesForLibrary(
+            notes: notes,
+            folders: folders,
+            selection: const NoteLibrarySelection(
+              scope: NoteLibraryScope.trash,
+            ),
+          ).length,
+          selected: selection.scope == NoteLibraryScope.trash,
+          onTap: () => onSelectionChanged(
+            selection.copyWith(scope: NoteLibraryScope.trash, folderId: null),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SidebarDestination extends StatelessWidget {
+  const _SidebarDestination({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Material(
+      color: selected
+          ? Theme.of(context).colorScheme.primaryContainer
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Icon(icon, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text('$count', style: Theme.of(context).textTheme.labelMedium),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 

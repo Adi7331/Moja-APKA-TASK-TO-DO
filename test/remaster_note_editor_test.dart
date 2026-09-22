@@ -5,6 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('embedded editor closes through callback rather than navigator', (
+    tester,
+  ) async {
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NoteEditorScreen(
+          embedded: true,
+          remastered: true,
+          onClose: () => closed = true,
+          note: NoteItem(id: 'embedded', title: 'Plan'),
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Wróć do notatek'));
+    await tester.pump();
+
+    expect(closed, isTrue);
+  });
+
   testWidgets('remastered note editor presents a focused writing surface', (
     tester,
   ) async {

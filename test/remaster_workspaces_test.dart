@@ -189,4 +189,43 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'desktop shows folders and keeps selection after opening editor',
+    (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        app(
+          RemasterNotesScreen(
+            notes: [
+              NoteItem(id: 'work-note', title: 'Oferta', folderId: 'work'),
+            ],
+            folders: [NoteFolder(id: 'work', name: 'Praca')],
+            editorBuilder: (note, onClose) => Text('Edytor: ${note.title}'),
+            onNewNote: ({folderId}) {},
+            onOpenNote: (_) {},
+            onSave: (_) async {},
+            onDelete: (_) async {},
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Praca').last);
+      await tester.tap(
+        find.byKey(const ValueKey('note-library-card-work-note')),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('notes-desktop-sidebar')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('notes-detail-panel')), findsOneWidget);
+      expect(find.text('Edytor: Oferta'), findsOneWidget);
+      expect(find.text('Praca').last, findsOneWidget);
+    },
+  );
 }

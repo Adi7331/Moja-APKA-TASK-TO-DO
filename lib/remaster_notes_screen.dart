@@ -11,6 +11,10 @@ typedef SaveRemasterFolder = Future<void> Function(
   String name,
   NoteColorKey colorKey,
 );
+typedef RemasterNoteEditorBuilder = Widget Function(
+  NoteItem note,
+  VoidCallback onClose,
+);
 
 /// The Notes library keeps only presentation state. Saving and synchronizing
 /// stay with the parent, so switching a filter can never lose an offline edit.
@@ -36,6 +40,7 @@ class RemasterNotesScreen extends StatefulWidget {
     this.syncStatus,
     this.onRetrySync,
     this.isLoading = false,
+    this.editorBuilder,
   });
 
   final List<NoteItem> notes;
@@ -57,6 +62,7 @@ class RemasterNotesScreen extends StatefulWidget {
   final String? syncStatus;
   final Future<void> Function()? onRetrySync;
   final bool isLoading;
+  final RemasterNoteEditorBuilder? editorBuilder;
 
   @override
   State<RemasterNotesScreen> createState() => _RemasterNotesScreenState();
@@ -65,6 +71,7 @@ class RemasterNotesScreen extends StatefulWidget {
 class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
   final _search = TextEditingController();
   NoteLibrarySelection _selection = const NoteLibrarySelection();
+  String? _selectedNoteId;
 
   @override
   void dispose() {
@@ -117,7 +124,10 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
     await widget.onCreateFolder!(name.trim(), NoteColorKey.blue);
   }
 
-  Future<void> _showCardActions(NoteItem note) async {
+  NoteItem? get _selectedNote =>
+      widget.notes.where((note) => note.id == _selectedNoteId).firstOrNull;
+
+  Future<void> _showCardActions(NoteItem note, {required bool desktop}) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -127,7 +137,11 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
         isTrash: _selection.scope == NoteLibraryScope.trash,
         onOpen: () {
           Navigator.pop(context);
-          widget.onOpenNote(note);
+          if (desktop) {
+            setState(() => _selectedNoteId = note.id);
+          } else {
+            widget.onOpenNote(note);
+          }
         },
         onSave: (changed) async {
           Navigator.pop(context);
@@ -161,6 +175,46 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final desktop = constraints.maxWidth >= 1100;
+        final library = _library(context, desktop: desktop);
+        if (!desktop) return library;
+        final selected = _selectedNote;
+        return Row(
+          children: [
+            NotesDesktopSidebar(
+              folders: widget.folders,
+              notes: widget.notes,
+              selection: _selection,
+              onSelectionChanged: _select,
+            ),
+            VerticalDivider(
+              width: 1,
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+            Expanded(child: library),
+            if (selected != null && widget.editorBuilder != null) ...[
+              VerticalDivider(
+                width: 1,
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+              SizedBox(
+                key: const ValueKey('notes-detail-panel'),
+                width: 420,
+                child: widget.editorBuilder!(
+                  selected,
+                  () => setState(() => _selectedNoteId = null),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _library(BuildContext context, {required bool desktop}) {
     final visible = _visible;
     return CustomScrollView(
       key: const PageStorageKey('remaster-notes-scroll'),
@@ -226,8 +280,14 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
               child: NoteMasonryGrid(
                 notes: visible,
                 folders: widget.folders,
-                onOpen: widget.onOpenNote,
-                onMore: (note, _) => _showCardActions(note),
+                onOpen: (note) {
+                  if (desktop) {
+                    setState(() => _selectedNoteId = note.id);
+                  } else {
+                    widget.onOpenNote(note);
+                  }
+                },
+                onMore: (note, _) => _showCardActions(note, desktop: desktop),
               ),
             ),
           ),
