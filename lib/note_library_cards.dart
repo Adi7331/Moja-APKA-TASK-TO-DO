@@ -45,6 +45,7 @@ class NoteLibraryCard extends StatelessWidget {
         .where((text) => text.isNotEmpty)
         .join(' ');
     final preview = plainPreview.isNotEmpty ? plainPreview : note.previewText;
+    final displayPreview = preview == note.title.trim() ? '' : preview;
     final attachment = note.attachments.isEmpty ? null : note.attachments.first;
 
     return Semantics(
@@ -143,10 +144,10 @@ class NoteLibraryCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ] else if (preview.isNotEmpty) ...[
+                  ] else if (displayPreview.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Text(
-                      preview,
+                      displayPreview,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
