@@ -149,3 +149,30 @@ Color remasterNoteColor(BuildContext context, int index) {
   ];
   return (dark ? dim : light)[index % light.length];
 }
+
+/// Soft note-card fills inspired by paper notes; dark foregrounds keep the
+/// card readable even when the surrounding app is in dark mode.
+Color remasterNoteCardColor(int index) {
+  const colors = [
+    Color(0xffdceafa),
+    Color(0xffe9e1fa),
+    Color(0xffdcefe5),
+    Color(0xfff5ebd3),
+    Color(0xfff8dfd8),
+  ];
+  return colors[index % colors.length];
+}
+
+/// The Notes library deliberately keeps its paper-like cards light in both
+/// app themes. The surrounding chrome may be dark, but the content itself is
+/// always read as a physical, pastel note rather than another dark container.
+const noteLibraryPastelPalette = <Color>[
+  Color(0xffdbeafe),
+  Color(0xffe9ddff),
+  Color(0xffd9f0e5),
+  Color(0xffffefd6),
+  Color(0xffffe0db),
+];
+
+const noteLibraryCardInk = Color(0xff172337);
+const noteLibraryCardMutedInk = Color(0xff4b5d73);
