@@ -72,6 +72,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Timer? _saveTimer;
   final _saveQueue = SerialAsyncQueue();
   String _saveStatus = 'Zapisano';
+  bool _isSaving = false;
   bool _advancedOpen = false;
 
   @override
@@ -134,6 +135,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Future<bool> _save() async {
     _saveTimer?.cancel();
+    if (_isSaving) return false;
+    _isSaving = true;
     if (mounted) setState(() => _saveStatus = 'Zapisywanie…');
     try {
       await _saveQueue.run(() async {
@@ -154,6 +157,21 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         );
       }
       return false;
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      } else {
+        _isSaving = false;
+      }
+    }
+  }
+
+  Future<void> _finishEditing() async {
+    if (!await _save() || !mounted) return;
+    if (widget.embedded) {
+      widget.onClose?.call();
+    } else {
+      Navigator.of(context).pop(_note);
     }
   }
 
@@ -504,18 +522,43 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           ),
           if (widget.remastered) ...[
             const SizedBox(height: 18),
-            Row(
-              children: [
-                Text(
-                  'Załączniki',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _showAttachmentOptions,
-                  child: const Text('Dodaj'),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final largeText =
+                    MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+                if (constraints.maxWidth < 600 || largeText) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Załączniki',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _showAttachmentOptions,
+                          child: const Text('Dodaj'),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Załączniki',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _showAttachmentOptions,
+                      child: const Text('Dodaj'),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
           if (_note.attachments.isNotEmpty)
@@ -586,29 +629,84 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     return widget.embedded ? content : Scaffold(body: content);
   }
 
-  Widget _editorHeader(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-    child: Row(
-      children: [
-        IconButton(
-          key: const ValueKey('note-close-button'),
-          tooltip: widget.remastered ? 'Wróć do notatek' : 'Zamknij notatkę',
-          onPressed: _close,
-          icon: const Icon(Icons.close_rounded),
+  Widget _editorHeader(BuildContext context) {
+    final closeButton = IconButton(
+      key: const ValueKey('note-close-button'),
+      tooltip: widget.remastered ? 'Wróć do notatek' : 'Zamknij notatkę',
+      onPressed: _isSaving ? null : _close,
+      icon: const Icon(Icons.close_rounded),
+    );
+    if (widget.remastered) {
+      final pinButton = IconButton(
+        tooltip: _note.pinned ? 'Odepnij notatkę' : 'Przypnij notatkę',
+        onPressed: _isSaving
+            ? null
+            : () {
+                setState(() => _note = _note.copyWith(pinned: !_note.pinned));
+                _scheduleSave();
+              },
+        icon: Icon(_note.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+      );
+      final moreMenu = _remasteredMoreMenu();
+      final doneButton = FilledButton.tonalIcon(
+        key: const ValueKey('note-done-button'),
+        onPressed: _isSaving ? null : _finishEditing,
+        icon: _isSaving
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.check_rounded),
+        label: Text(_isSaving ? 'Zapisywanie…' : 'Gotowe'),
+      );
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+            final compact = constraints.maxWidth < 600 || largeText;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (compact) ...[
+                  Row(children: [closeButton, const Spacer(), doneButton]),
+                  Row(children: [const Spacer(), pinButton, moreMenu]),
+                ] else
+                  Row(
+                    children: [
+                      closeButton,
+                      const Spacer(),
+                      pinButton,
+                      moreMenu,
+                      const SizedBox(width: 4),
+                      doneButton,
+                    ],
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 12,
+                      right: 8,
+                      bottom: 4,
+                    ),
+                    child: _headerCopy(context),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
-        const SizedBox(width: 4),
-        Expanded(child: _headerCopy(context)),
-        if (widget.remastered) ...[
-          IconButton(
-            tooltip: _note.pinned ? 'Odepnij notatkę' : 'Przypnij notatkę',
-            onPressed: () {
-              setState(() => _note = _note.copyWith(pinned: !_note.pinned));
-              _scheduleSave();
-            },
-            icon: Icon(_note.pinned ? Icons.push_pin : Icons.push_pin_outlined),
-          ),
-          _remasteredMoreMenu(),
-        ] else ...[
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(
+        children: [
+          closeButton,
+          const SizedBox(width: 4),
+          Expanded(child: _headerCopy(context)),
           Text(_saveStatus, style: Theme.of(context).textTheme.labelMedium),
           IconButton(
             tooltip: _note.reminderAt == null
@@ -628,9 +726,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   Widget _headerCopy(BuildContext context) {
     if (!widget.remastered) {
@@ -657,7 +755,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         if (_saveStatus.startsWith('Błąd'))
           TextButton(
             key: const ValueKey('note-save-retry'),
-            onPressed: _save,
+            onPressed: _isSaving ? null : _save,
             child: const Text('Ponów'),
           ),
       ],

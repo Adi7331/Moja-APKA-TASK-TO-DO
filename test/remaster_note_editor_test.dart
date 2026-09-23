@@ -57,6 +57,141 @@ void main() {
     expect(closed, isTrue);
   });
 
+  testWidgets('Gotowe saves the current draft and closes the route', (
+    tester,
+  ) async {
+    NoteItem? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<NoteItem>(
+                    builder: (_) => NoteEditorScreen(
+                      remastered: true,
+                      note: NoteItem(id: 'done-route', title: 'Stary tytuł'),
+                      onSave: (note) async => saved = note,
+                      onDelete: (_) async {},
+                    ),
+                  ),
+                ),
+                child: const Text('Otwórz edytor'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Otwórz edytor'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('note-title-field')),
+      'Nowy tytuł',
+    );
+    await tester.enterText(find.byType(TextField).at(1), 'Zapisany tekst');
+    await tester.tap(find.byKey(const ValueKey('note-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(saved?.title, 'Nowy tytuł');
+    expect(saved?.blocks.first.text, 'Zapisany tekst');
+    expect(find.byKey(const ValueKey('note-title-field')), findsNothing);
+    expect(find.text('Otwórz edytor'), findsOneWidget);
+  });
+
+  testWidgets('Gotowe closes the embedded editor only after save succeeds', (
+    tester,
+  ) async {
+    var closed = false;
+    var saves = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.dark),
+        home: NoteEditorScreen(
+          embedded: true,
+          remastered: true,
+          onClose: () => closed = true,
+          note: NoteItem(id: 'done-embedded', title: 'Plan'),
+          onSave: (_) async => saves++,
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('note-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(saves, 1);
+    expect(closed, isTrue);
+  });
+
+  testWidgets('failed Gotowe keeps editor open and retry allows completion', (
+    tester,
+  ) async {
+    var attempts = 0;
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.light),
+        home: NoteEditorScreen(
+          embedded: true,
+          remastered: true,
+          onClose: () => closed = true,
+          note: NoteItem(id: 'done-retry', title: 'Plan'),
+          onSave: (_) async {
+            attempts++;
+            if (attempts == 1) throw StateError('offline');
+          },
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('note-done-button')));
+    await tester.pumpAndSettle();
+    expect(closed, isFalse);
+    expect(find.textContaining('Błąd zapisu lokalnego'), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-done-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('note-save-retry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 3);
+    expect(closed, isTrue);
+  });
+
+  testWidgets('Gotowe stays visible on a narrow phone with 200 percent text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.dark),
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Scaffold(
+            body: NoteEditorScreen(
+              embedded: true,
+              remastered: true,
+              note: NoteItem(id: 'done-small'),
+              onSave: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Gotowe'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'remastered editor shows back, save status, pin action and selected folder',
     (tester) async {
