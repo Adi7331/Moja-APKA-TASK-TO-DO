@@ -15,6 +15,18 @@ typedef RemasterNoteEditorBuilder = Widget Function(
 
 enum _FolderAction { rename, delete }
 
+Future<NoteFolderDraft?> showRemasterFolderDialog({
+  required BuildContext context,
+  required List<NoteFolder> folders,
+}) => showDialog<NoteFolderDraft>(
+  context: context,
+  builder: (context) => _FolderDialog(
+    title: 'Nowy folder',
+    folders: folders,
+    confirmLabel: 'Utwórz',
+  ),
+);
+
 /// The Notes library keeps only presentation state. Saving and synchronizing
 /// stay with the parent, so switching a filter can never lose an offline edit.
 class RemasterNotesScreen extends StatefulWidget {

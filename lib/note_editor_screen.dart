@@ -39,6 +39,7 @@ class NoteEditorScreen extends StatefulWidget {
     this.onClose,
     this.folders = const [],
     this.onMoveToFolder,
+    this.onCreateFolder,
   });
 
   final NoteItem note;
@@ -60,6 +61,7 @@ class NoteEditorScreen extends StatefulWidget {
   final VoidCallback? onClose;
   final List<NoteFolder> folders;
   final Future<void> Function(NoteItem note, String? folderId)? onMoveToFolder;
+  final Future<NoteFolder?> Function(BuildContext context)? onCreateFolder;
 
   @override
   State<NoteEditorScreen> createState() => _NoteEditorScreenState();
@@ -76,11 +78,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   bool _saveAgain = false;
   Future<bool>? _saveOperation;
   bool _advancedOpen = false;
+  late List<NoteFolder> _folders;
 
   @override
   void initState() {
     super.initState();
     _note = widget.note;
+    _folders = List<NoteFolder>.of(widget.folders);
     _titleController = TextEditingController(text: _note.title);
     _bodyController = TextEditingController(text: _firstText(_note));
     _advancedOpen = widget.initialChecklist;
@@ -95,6 +99,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _pickAttachment(imageOnly: false),
       );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteEditorScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.folders, widget.folders)) {
+      _folders = List<NoteFolder>.of(widget.folders);
     }
   }
 
@@ -416,7 +428,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   String get _folderName =>
-      widget.folders
+      _folders
           .where((folder) => folder.id == _note.folderId)
           .map((folder) => folder.displayName)
           .firstOrNull ??
@@ -425,7 +437,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Future<void> _pickFolder() async {
     if (widget.onMoveToFolder == null) return;
     const noFolder = '__no_folder__';
-    final choice = await showModalBottomSheet<String>(
+    const createFolder = '__create_folder__';
+    var choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -438,7 +451,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               title: const Text('Bez folderu'),
               onTap: () => Navigator.pop(context, noFolder),
             ),
-            for (final folder in widget.folders)
+            for (final folder in _folders)
               ListTile(
                 leading: folder.emoji == null
                     ? const Icon(Icons.folder_outlined)
@@ -449,11 +462,28 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     : null,
                 onTap: () => Navigator.pop(context, folder.id),
               ),
+            if (widget.onCreateFolder != null)
+              ListTile(
+                key: const ValueKey('note-create-folder-action'),
+                leading: const Icon(Icons.create_new_folder_outlined),
+                title: const Text('Utwórz nowy folder'),
+                onTap: () => Navigator.pop(context, createFolder),
+              ),
           ],
         ),
       ),
     );
     if (choice == null || !mounted) return;
+    if (choice == createFolder) {
+      final created = await widget.onCreateFolder?.call(context);
+      if (created == null || !mounted) return;
+      setState(() {
+        if (!_folders.any((folder) => folder.id == created.id)) {
+          _folders = [..._folders, created];
+        }
+      });
+      choice = created.id;
+    }
     final folderId = choice == noFolder ? null : choice;
     final updated = _draft().copyWith(
       folderId: folderId,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dzien_po_dniu/note_editor_screen.dart';
 import 'package:dzien_po_dniu/note_folder.dart';
 import 'package:dzien_po_dniu/note_item.dart';
+import 'package:dzien_po_dniu/remaster_notes_screen.dart';
 import 'package:dzien_po_dniu/remaster_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -211,6 +212,92 @@ void main() {
     expect(moved?.revision, 6);
     expect(moved?.title, 'Aktualny tytuł');
     expect(moved?.blocks.first.text, 'Aktualny tekst');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('can create and immediately assign a folder from the picker', (
+    tester,
+  ) async {
+    NoteItem? moved;
+    var nextFolderId = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.dark),
+        home: NoteEditorScreen(
+          remastered: true,
+          note: NoteItem(id: 'quick-create'),
+          onCreateFolder: (context) async {
+            final draft = await showRemasterFolderDialog(
+              context: context,
+              folders: const [],
+            );
+            if (draft == null) return null;
+            return NoteFolder(
+              id: 'quick-folder-${nextFolderId++}',
+              name: draft.name,
+              colorKey: draft.colorKey,
+              emoji: draft.emoji,
+            );
+          },
+          onMoveToFolder: (note, _) async => moved = note,
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Bez folderu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Utwórz nowy folder'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('note-create-folder-action')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-name-field')),
+      'Pomysły',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-emoji-field')),
+      '💡',
+    );
+    await tester.tap(find.text('Utwórz'));
+    await tester.pumpAndSettle();
+
+    expect(moved?.folderId, 'quick-folder-0');
+    expect(find.text('💡 Pomysły'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cancelling folder creation leaves the note unchanged', (
+    tester,
+  ) async {
+    NoteItem? moved;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.dark),
+        home: NoteEditorScreen(
+          remastered: true,
+          note: NoteItem(id: 'cancel-create'),
+          onCreateFolder: (context) async {
+            await showRemasterFolderDialog(context: context, folders: const []);
+            return null;
+          },
+          onMoveToFolder: (note, _) async => moved = note,
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Bez folderu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-create-folder-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Anuluj'));
+    await tester.pumpAndSettle();
+
+    expect(moved, isNull);
+    expect(find.text('Bez folderu'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

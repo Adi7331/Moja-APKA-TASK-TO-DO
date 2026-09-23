@@ -883,8 +883,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _createFolder(NoteFolderDraft draft) async {
+    await _createFolderDraft(draft);
+  }
+
+  Future<NoteFolder?> _createFolderFromEditor(BuildContext context) async {
+    final draft = await showRemasterFolderDialog(
+      context: context,
+      folders: folders,
+    );
+    if (draft == null || !context.mounted) return null;
+    return _createFolderDraft(draft);
+  }
+
+  Future<NoteFolder?> _createFolderDraft(NoteFolderDraft draft) async {
     final trimmed = draft.name.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty) return null;
     final folder = NoteFolder(
       id: newNoteId(),
       name: trimmed,
@@ -908,6 +921,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
       }
     }
+    return folder;
   }
 
   Future<void> _deleteFolder(NoteFolder folder) async {
@@ -2320,6 +2334,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           onDelete: _deleteNote,
           folders: folders,
           onMoveToFolder: _moveNoteToFolder,
+          onCreateFolder: _createFolderFromEditor,
           onCreateTask: (note, title) =>
               _quickAddTask(title, sourceNoteId: note.id),
           onAttach: _attachNoteFile,
@@ -2401,6 +2416,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           note: note,
           folders: folders,
           onMoveToFolder: _moveNoteToFolder,
+          onCreateFolder: _createFolderFromEditor,
           onSave: _saveNote,
           onDelete: _deleteNote,
           onCreateTask: (source, title) =>
