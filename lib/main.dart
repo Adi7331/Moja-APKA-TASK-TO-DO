@@ -49,6 +49,7 @@ import 'note_attachment_picker.dart';
 import 'notes_screen.dart';
 import 'note_sync_service.dart';
 import 'note_sync_outbox.dart';
+import 'note_save_sync.dart';
 import 'note_folder_sync_outbox.dart';
 import 'note_folder_operations.dart';
 import 'focus_session.dart';
@@ -1509,13 +1510,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
       });
     }
-    await _saveLocalNotes();
     if (cloudMode && _notesCloudAvailable) {
+      late final bool synchronized;
       try {
-        await _noteSync.saveNote(
-          note,
-          expectedRevision: isNew ? null : note.revision - 1,
-          includeFolderId: _foldersCloudAvailable,
+        synchronized = await saveLocallyThenSyncOrQueueNote(
+          saveLocal: _saveLocalNotes,
+          syncCloud: () => _noteSync.saveNote(
+            note,
+            expectedRevision: isNew ? null : note.revision - 1,
+            includeFolderId: _foldersCloudAvailable,
+          ),
+          enqueue: () async {
+            final outbox = _noteSyncOutbox;
+            if (outbox == null) {
+              throw StateError('Brak kolejki synchronizacji notatek.');
+            }
+            await outbox.enqueue(
+              note,
+              expectedRevision: isNew ? null : note.revision - 1,
+              includeFolderId: _foldersCloudAvailable,
+            );
+          },
         );
       } on NoteConflictException {
         final conflict = await _noteSync.createConflictCopy(note);
@@ -1527,33 +1542,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
         await _noteSyncOutbox?.remove(note.id);
         return;
-      } catch (_) {
-        await _noteSyncOutbox?.enqueue(
-          note,
-          expectedRevision: isNew ? null : note.revision - 1,
-          includeFolderId: _foldersCloudAvailable,
-        );
+      }
+      if (!synchronized) {
         if (mounted) {
           setState(
             () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
           );
         }
-        throw StateError(
-          'Notatka jest zapisana lokalnie i czeka na synchronizację.',
-        );
-      }
-      await _noteSyncOutbox?.remove(note.id);
-      await _loadCloudNotes();
-      await _refreshSyncStatusFromOutboxes();
-      try {
-        await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
-      } catch (_) {
-        // The current note was synchronized; cleanup can retry later.
+      } else {
+        await _noteSyncOutbox?.remove(note.id);
+        await _loadCloudNotes();
+        await _refreshSyncStatusFromOutboxes();
+        try {
+          await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
+        } catch (_) {
+          // The current note was synchronized; cleanup can retry later.
+        }
       }
       await _scheduleNoteReminder(note);
       _refreshAndroidWidgets();
       return;
     }
+    await _saveLocalNotes();
     await _scheduleNoteReminder(note);
     _refreshAndroidWidgets();
   }

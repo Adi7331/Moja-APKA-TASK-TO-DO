@@ -26,7 +26,7 @@ class NoteFolder {
       (value) => value.name == json['colorKey'],
       orElse: () => NoteColorKey.neutral,
     ),
-    emoji: json['emoji'] as String?,
+    emoji: _storedEmoji(json['emoji']),
     createdAt: _date(json['createdAt']),
     updatedAt: _date(json['updatedAt']),
   );
@@ -39,7 +39,7 @@ class NoteFolder {
       (value) => value.name == row['color_key'],
       orElse: () => NoteColorKey.neutral,
     ),
-    emoji: row['emoji'] as String?,
+    emoji: _storedEmoji(row['emoji']),
     createdAt: _date(row['created_at']),
     updatedAt: _date(row['updated_at']),
   );
@@ -114,3 +114,9 @@ String? normalizeFolderEmoji(String value) {
 }
 
 DateTime? _date(Object? raw) => raw is String ? DateTime.tryParse(raw) : null;
+
+String? _storedEmoji(Object? raw) {
+  if (raw is! String) return null;
+  final trimmed = raw.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}

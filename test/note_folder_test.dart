@@ -38,4 +38,31 @@ void main() {
     );
     expect(folder.copyWith(emoji: null).emoji, isNull);
   });
+
+  test('blank stored and cloud emoji normalize to null', () {
+    expect(
+      NoteFolder.fromStorage({
+        'id': 'blank-local',
+        'name': 'Praca',
+        'emoji': '',
+      }).emoji,
+      isNull,
+    );
+    expect(
+      NoteFolder.fromStorage({
+        'id': 'spaces-local',
+        'name': 'Praca',
+        'emoji': '  ',
+      }).emoji,
+      isNull,
+    );
+    expect(
+      NoteFolder.fromSupabaseRow({
+        'id': 'blank-cloud',
+        'name': 'Praca',
+        'emoji': '  ',
+      }).emoji,
+      isNull,
+    );
+  });
 }

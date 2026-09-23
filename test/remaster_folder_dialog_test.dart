@@ -124,6 +124,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('folder manager refreshes its list after rename and deletion', (
+    tester,
+  ) async {
+    var folders = [NoteFolder(id: 'work', name: 'Praca')];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setParentState) => Scaffold(
+            body: screen(
+              folders: folders,
+              onRenameFolder: (updated) async {
+                setParentState(() => folders = [updated]);
+              },
+              onDeleteFolder: (deleted) async {
+                setParentState(
+                  () => folders = folders
+                      .where((folder) => folder.id != deleted.id)
+                      .toList(),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await openMore(tester);
+    await tester.tap(find.text('Zarządzaj folderami'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Opcje folderu: Praca'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edytuj'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-name-field')),
+      'Biuro',
+    );
+    await tester.tap(find.text('Zapisz'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Biuro'), findsNWidgets(2));
+    expect(find.byTooltip('Opcje folderu: Biuro'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Opcje folderu: Biuro'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń folder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń folder').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Opcje folderu: Biuro'), findsNothing);
+    expect(find.text('Nie masz jeszcze folderów.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('rejects more than one emoji grapheme without closing', (
     tester,
   ) async {

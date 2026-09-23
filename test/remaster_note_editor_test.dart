@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dzien_po_dniu/note_editor_screen.dart';
 import 'package:dzien_po_dniu/note_folder.dart';
 import 'package:dzien_po_dniu/note_item.dart';
@@ -24,6 +26,7 @@ void main() {
     final blue = find.byKey(const ValueKey('note-color-swatch-blue'));
     await tester.ensureVisible(blue);
     await tester.pumpAndSettle();
+    expect(tester.getSize(blue), const Size(48, 48));
     final swatch = tester.widget<CircleAvatar>(
       find.descendant(of: blue, matching: find.byType(CircleAvatar)),
     );
@@ -124,6 +127,91 @@ void main() {
 
     expect(saves, 1);
     expect(closed, isTrue);
+  });
+
+  testWidgets('autosave keeps edits made while a slow save is in flight', (
+    tester,
+  ) async {
+    final firstSave = Completer<void>();
+    final savedBodies = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.dark),
+        home: NoteEditorScreen(
+          embedded: true,
+          remastered: true,
+          note: NoteItem(
+            id: 'autosave-in-flight',
+            blocks: [NoteBlock.text(id: 'body', text: '')],
+          ),
+          onSave: (note) {
+            savedBodies.add(note.blocks.first.text);
+            if (savedBodies.length == 1) return firstSave.future;
+            return Future<void>.value();
+          },
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    final body = find.byType(TextField).at(1);
+    await tester.enterText(body, 'Pierwsza wersja');
+    await tester.pump(const Duration(milliseconds: 601));
+    expect(savedBodies, ['Pierwsza wersja']);
+
+    await tester.enterText(body, 'Nowsza wersja');
+    await tester.pump(const Duration(milliseconds: 601));
+    firstSave.complete();
+    await tester.pumpAndSettle();
+
+    expect(savedBodies, ['Pierwsza wersja', 'Nowsza wersja']);
+    expect(find.byKey(const ValueKey('note-title-field')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('moving a note folder saves the current draft and revision', (
+    tester,
+  ) async {
+    NoteItem? moved;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRemasterTheme(Brightness.light),
+        home: NoteEditorScreen(
+          remastered: true,
+          note: NoteItem(
+            id: 'move-folder',
+            title: 'Stary tytuł',
+            revision: 5,
+            folderId: 'work',
+            blocks: [NoteBlock.text(id: 'body', text: 'Stary tekst')],
+          ),
+          folders: [
+            NoteFolder(id: 'work', name: 'Praca', emoji: '💼'),
+            NoteFolder(id: 'home', name: 'Dom', emoji: '🏠'),
+          ],
+          onMoveToFolder: (note, _) async => moved = note,
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('note-title-field')),
+      'Aktualny tytuł',
+    );
+    await tester.enterText(find.byType(TextField).at(1), 'Aktualny tekst');
+    await tester.tap(find.text('💼 Praca'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('🏠 Dom').last);
+    await tester.pumpAndSettle();
+
+    expect(moved?.folderId, 'home');
+    expect(moved?.revision, 6);
+    expect(moved?.title, 'Aktualny tytuł');
+    expect(moved?.blocks.first.text, 'Aktualny tekst');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('failed Gotowe keeps editor open and retry allows completion', (

@@ -107,52 +107,69 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
   }
 
   Future<void> _manageFolders() async {
+    var folderItems = List<NoteFolder>.of(widget.folders);
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(title: Text('Zarządzaj folderami')),
-            if (widget.folders.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('Nie masz jeszcze folderów.'),
-              ),
-            for (final folder in widget.folders)
-              ListTile(
-                leading: _FolderAvatar(folder: folder),
-                title: Text(folder.displayName),
-                trailing: PopupMenuButton<_FolderAction>(
-                  tooltip: 'Opcje folderu: ${folder.name}',
-                  onSelected: (action) async {
-                    if (action == _FolderAction.rename) {
-                      await _editFolder(folder);
-                    } else {
-                      await _deleteFolder(folder);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: _FolderAction.rename,
-                      child: Text('Edytuj'),
-                    ),
-                    PopupMenuItem(
-                      value: _FolderAction.delete,
-                      child: Text('Usuń folder'),
-                    ),
-                  ],
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(title: Text('Zarządzaj folderami')),
+              if (folderItems.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text('Nie masz jeszcze folderów.'),
                 ),
-              ),
-          ],
+              for (final folder in folderItems)
+                ListTile(
+                  leading: _FolderAvatar(folder: folder),
+                  title: Text(folder.displayName),
+                  trailing: PopupMenuButton<_FolderAction>(
+                    tooltip: 'Opcje folderu: ${folder.name}',
+                    onSelected: (action) async {
+                      if (action == _FolderAction.rename) {
+                        final updated = await _editFolder(folder);
+                        if (updated == null) return;
+                        setSheetState(() {
+                          final index = folderItems.indexWhere(
+                            (item) => item.id == updated.id,
+                          );
+                          if (index != -1) folderItems[index] = updated;
+                        });
+                      } else {
+                        final deleted = await _deleteFolder(folder);
+                        if (deleted) {
+                          setSheetState(
+                            () => folderItems.removeWhere(
+                              (item) => item.id == folder.id,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: _FolderAction.rename,
+                        child: Text('Edytuj'),
+                      ),
+                      PopupMenuItem(
+                        value: _FolderAction.delete,
+                        child: Text('Usuń folder'),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _editFolder(NoteFolder folder) async {
-    if (widget.onRenameFolder == null || !mounted) return;
+  Future<NoteFolder?> _editFolder(NoteFolder folder) async {
+    if (widget.onRenameFolder == null || !mounted) return null;
     final draft = await showDialog<NoteFolderDraft>(
       context: context,
       builder: (context) => _FolderDialog(
@@ -162,19 +179,19 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
         confirmLabel: 'Zapisz',
       ),
     );
-    if (draft == null || !mounted) return;
-    await widget.onRenameFolder!(
-      folder.copyWith(
-        name: draft.name,
-        colorKey: draft.colorKey,
-        emoji: draft.emoji,
-        updatedAt: DateTime.now(),
-      ),
+    if (draft == null || !mounted) return null;
+    final updated = folder.copyWith(
+      name: draft.name,
+      colorKey: draft.colorKey,
+      emoji: draft.emoji,
+      updatedAt: DateTime.now(),
     );
+    await widget.onRenameFolder!(updated);
+    return updated;
   }
 
-  Future<void> _deleteFolder(NoteFolder folder) async {
-    if (widget.onDeleteFolder == null || !mounted) return;
+  Future<bool> _deleteFolder(NoteFolder folder) async {
+    if (widget.onDeleteFolder == null || !mounted) return false;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -192,7 +209,9 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
         ],
       ),
     );
-    if (accepted == true && mounted) await widget.onDeleteFolder!(folder);
+    if (accepted != true || !mounted) return false;
+    await widget.onDeleteFolder!(folder);
+    return true;
   }
 
   NoteItem? get _selectedNote =>

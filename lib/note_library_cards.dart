@@ -222,37 +222,43 @@ class NoteMasonryGrid extends StatelessWidget {
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
         final columns = _columnCount(constraints.maxWidth, textScale);
-        final buckets = List.generate(columns, (_) => <NoteItem>[]);
-        for (var index = 0; index < notes.length; index++) {
-          buckets[index % columns].add(notes[index]);
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: List.generate(
-            columns,
-            (column) => Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: column == columns - 1 ? 0 : 12),
-                child: Column(
-                  key: ValueKey('note-library-column-$column'),
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+        final rowCount = (notes.length / columns).ceil();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var row = 0; row < rowCount; row++)
+              Padding(
+                padding: EdgeInsets.only(bottom: row == rowCount - 1 ? 0 : 12),
+                child: Row(
+                  key: ValueKey('note-library-row-$row'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final note in buckets[column]) ...[
-                      NoteLibraryCard(
-                        note: note,
-                        folder: foldersById[note.folderId],
-                        onOpen: () => onOpen(note),
-                        onMore: () => onMore(note, Offset.zero),
+                    for (var column = 0; column < columns; column++)
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right: column == columns - 1 ? 0 : 12,
+                          ),
+                          child: _cardAt(row * columns + column, foldersById),
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                    ],
                   ],
                 ),
               ),
-            ),
-          ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _cardAt(int index, Map<String, NoteFolder> foldersById) {
+    if (index >= notes.length) return const SizedBox.shrink();
+    final note = notes[index];
+    return NoteLibraryCard(
+      note: note,
+      folder: foldersById[note.folderId],
+      onOpen: () => onOpen(note),
+      onMore: () => onMore(note, Offset.zero),
     );
   }
 

@@ -149,12 +149,14 @@ void main() {
       );
 
       await tester.pumpWidget(app(grid));
+      expect(find.byKey(const ValueKey('note-library-row-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('note-library-row-1')), findsNothing);
       expect(
-        find.byKey(const ValueKey('note-library-column-0')),
+        find.byKey(const ValueKey('note-library-card-one')),
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('note-library-column-1')),
+        find.byKey(const ValueKey('note-library-card-two')),
         findsOneWidget,
       );
 
@@ -166,62 +168,59 @@ void main() {
           ),
         ),
       );
-      expect(find.byKey(const ValueKey('note-library-column-1')), findsNothing);
+      expect(find.byKey(const ValueKey('note-library-row-1')), findsOneWidget);
     },
   );
 
-  testWidgets(
-    'grid keeps stable reading order across columns despite card height',
-    (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final grid = NoteMasonryGrid(
-        notes: [
-          NoteItem(
-            id: 'first',
-            blocks: [
-              NoteBlock.checklist(
-                id: 'checklist',
-                items: List.generate(
-                  4,
-                  (index) =>
-                      NoteChecklistItem(id: '$index', text: 'Krok $index'),
-                ),
+  testWidgets('grid places each reading row below both cards above it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final grid = NoteMasonryGrid(
+      notes: [
+        NoteItem(
+          id: 'first',
+          blocks: [
+            NoteBlock.checklist(
+              id: 'checklist',
+              items: List.generate(
+                4,
+                (index) => NoteChecklistItem(id: '$index', text: 'Krok $index'),
               ),
-            ],
-          ),
-          NoteItem(id: 'second'),
-          NoteItem(id: 'third'),
-          NoteItem(id: 'fourth'),
-        ],
-        folders: const [],
-        onOpen: (_) {},
-        onMore: (_, _) {},
-      );
+            ),
+          ],
+        ),
+        NoteItem(id: 'second'),
+        NoteItem(id: 'third'),
+        NoteItem(id: 'fourth'),
+      ],
+      folders: const [],
+      onOpen: (_) {},
+      onMore: (_, _) {},
+    );
 
-      await tester.pumpWidget(app(grid));
-      for (final id in ['first', 'third']) {
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('note-library-column-0')),
-            matching: find.byKey(ValueKey('note-library-card-$id')),
-          ),
-          findsOneWidget,
-        );
-      }
-      for (final id in ['second', 'fourth']) {
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('note-library-column-1')),
-            matching: find.byKey(ValueKey('note-library-card-$id')),
-          ),
-          findsOneWidget,
-        );
-      }
-    },
-  );
+    await tester.pumpWidget(app(grid));
+    final first = tester.getRect(
+      find.byKey(const ValueKey('note-library-card-first')),
+    );
+    final second = tester.getRect(
+      find.byKey(const ValueKey('note-library-card-second')),
+    );
+    final third = tester.getRect(
+      find.byKey(const ValueKey('note-library-card-third')),
+    );
+    final fourth = tester.getRect(
+      find.byKey(const ValueKey('note-library-card-fourth')),
+    );
+
+    expect(first.top, second.top);
+    expect(third.top, fourth.top);
+    expect(third.top, greaterThan(second.bottom));
+    expect(third.top, greaterThan(first.bottom));
+  });
 }
 
 double _contrast(Color a, Color b) {

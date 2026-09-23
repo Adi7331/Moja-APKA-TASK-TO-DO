@@ -73,6 +73,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   final _saveQueue = SerialAsyncQueue();
   String _saveStatus = 'Zapisano';
   bool _isSaving = false;
+  bool _saveAgain = false;
+  Future<bool>? _saveOperation;
   bool _advancedOpen = false;
 
   @override
@@ -133,17 +135,32 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
   }
 
-  Future<bool> _save() async {
+  Future<bool> _save() {
     _saveTimer?.cancel();
-    if (_isSaving) return false;
+    final activeSave = _saveOperation;
+    if (activeSave != null) {
+      _saveAgain = true;
+      return activeSave;
+    }
+    final operation = _saveUntilCurrentDraftIsSaved();
+    _saveOperation = operation;
+    return operation.whenComplete(() {
+      if (identical(_saveOperation, operation)) _saveOperation = null;
+    });
+  }
+
+  Future<bool> _saveUntilCurrentDraftIsSaved() async {
     _isSaving = true;
     if (mounted) setState(() => _saveStatus = 'Zapisywanie…');
     try {
-      await _saveQueue.run(() async {
-        final draft = _draft();
-        await widget.onSave(draft);
-        _note = draft;
-      });
+      do {
+        _saveAgain = false;
+        await _saveQueue.run(() async {
+          final draft = _draft();
+          await widget.onSave(draft);
+          _note = draft;
+        });
+      } while (_saveAgain);
       if (mounted) {
         setState(
           () => _saveStatus = 'Zapisano lokalnie · czeka na synchronizację',
@@ -151,6 +168,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       }
       return true;
     } catch (_) {
+      _saveAgain = false;
       if (mounted) {
         setState(
           () => _saveStatus = 'Błąd zapisu lokalnego — spróbuj ponownie',
@@ -437,7 +455,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
     if (choice == null || !mounted) return;
     final folderId = choice == noFolder ? null : choice;
-    final updated = _note.copyWith(
+    final updated = _draft().copyWith(
       folderId: folderId,
       updatedAt: DateTime.now(),
     );
@@ -1158,17 +1176,19 @@ class _ColorButton extends StatelessWidget {
     child: InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: () => onChanged(note.copyWith(colorKey: color)),
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: CircleAvatar(
-          radius: 9,
-          backgroundColor: noteLibrarySurfaceForColor(
-            color,
-            Theme.of(context).colorScheme,
+      child: SizedBox.square(
+        dimension: 48,
+        child: Center(
+          child: CircleAvatar(
+            radius: 9,
+            backgroundColor: noteLibrarySurfaceForColor(
+              color,
+              Theme.of(context).colorScheme,
+            ),
+            child: note.colorKey == color
+                ? const Icon(Icons.check, size: 12)
+                : null,
           ),
-          child: note.colorKey == color
-              ? const Icon(Icons.check, size: 12)
-              : null,
         ),
       ),
     ),
