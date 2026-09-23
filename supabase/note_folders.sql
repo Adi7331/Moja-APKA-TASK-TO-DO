@@ -27,14 +27,53 @@ create index if not exists notes_user_folder_updated_idx
 grant select, insert, update, delete on public.note_folders to authenticated;
 alter table public.note_folders enable row level security;
 
-create policy "read own note folders" on public.note_folders for select to authenticated
-  using ((select auth.uid()) = user_id);
-create policy "create own note folders" on public.note_folders for insert to authenticated
-  with check ((select auth.uid()) = user_id);
-create policy "update own note folders" on public.note_folders for update to authenticated
-  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
-create policy "delete own note folders" on public.note_folders for delete to authenticated
-  using ((select auth.uid()) = user_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'note_folders'
+      and policyname = 'read own note folders'
+  ) then
+    create policy "read own note folders" on public.note_folders
+      for select to authenticated
+      using ((select auth.uid()) = user_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'note_folders'
+      and policyname = 'create own note folders'
+  ) then
+    create policy "create own note folders" on public.note_folders
+      for insert to authenticated
+      with check ((select auth.uid()) = user_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'note_folders'
+      and policyname = 'update own note folders'
+  ) then
+    create policy "update own note folders" on public.note_folders
+      for update to authenticated
+      using ((select auth.uid()) = user_id)
+      with check ((select auth.uid()) = user_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'note_folders'
+      and policyname = 'delete own note folders'
+  ) then
+    create policy "delete own note folders" on public.note_folders
+      for delete to authenticated
+      using ((select auth.uid()) = user_id);
+  end if;
+end $$;
 
 do $$
 begin

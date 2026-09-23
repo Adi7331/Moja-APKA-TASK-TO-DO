@@ -3,8 +3,11 @@ import 'package:dzien_po_dniu/note_item.dart';
 import 'package:dzien_po_dniu/remaster_notes_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUpAll(() => initializeDateFormatting('pl_PL'));
+
   RemasterNotesScreen screen({
     List<NoteItem> notes = const [],
     List<NoteFolder> folders = const [],
