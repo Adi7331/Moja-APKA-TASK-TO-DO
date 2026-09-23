@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'note_folder.dart';
 import 'note_item.dart';
@@ -8,18 +9,15 @@ import 'remaster_theme.dart';
 
 typedef NoteLibraryMoreCallback = void Function(NoteItem note, Offset anchor);
 
-Color noteLibraryCardColor(NoteItem note, int visualIndex) {
-  final paletteIndex = note.colorKey == NoteColorKey.neutral
-      ? visualIndex
-      : note.colorKey.index - 1;
-  return noteLibraryPastelPalette[paletteIndex %
-      noteLibraryPastelPalette.length];
-}
+Color noteLibraryCardColor(NoteItem note, ColorScheme scheme) =>
+    noteLibrarySurfaceForColor(note.colorKey, scheme);
+
+String formatNoteUpdatedAt(DateTime updatedAt) =>
+    DateFormat('dd.MM.yyyy · HH:mm', 'pl_PL').format(updatedAt.toLocal());
 
 class NoteLibraryCard extends StatelessWidget {
   const NoteLibraryCard({
     required this.note,
-    required this.visualIndex,
     required this.onOpen,
     required this.onMore,
     this.folder,
@@ -27,13 +25,18 @@ class NoteLibraryCard extends StatelessWidget {
   });
 
   final NoteItem note;
-  final int visualIndex;
   final VoidCallback onOpen;
   final VoidCallback onMore;
   final NoteFolder? folder;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isNeutral = note.colorKey == NoteColorKey.neutral;
+    final ink = isNeutral ? scheme.onSurface : noteLibraryCardInk;
+    final mutedInk = isNeutral
+        ? scheme.onSurfaceVariant
+        : noteLibraryCardMutedInk;
     final checklistItems = note.blocks
         .where((block) => block.type == NoteBlockType.checklist)
         .expand((block) => block.checklistItems)
@@ -54,8 +57,9 @@ class NoteLibraryCard extends StatelessWidget {
       child: DecoratedBox(
         key: ValueKey('note-library-card-surface-${note.id}'),
         decoration: BoxDecoration(
-          color: noteLibraryCardColor(note, visualIndex),
+          color: noteLibraryCardColor(note, scheme),
           borderRadius: BorderRadius.circular(18),
+          border: isNeutral ? Border.all(color: scheme.outlineVariant) : null,
         ),
         child: Material(
           color: Colors.transparent,
@@ -81,35 +85,38 @@ class NoteLibraryCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
-                                color: noteLibraryCardInk,
+                                color: ink,
                                 fontWeight: FontWeight.w800,
                                 height: 1.2,
                               ),
                         ),
                       ),
                       if (note.pinned)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
                           child: Icon(
                             Icons.push_pin_rounded,
                             size: 18,
-                            color: noteLibraryCardInk,
+                            color: ink,
                           ),
                         ),
                       IconButton(
                         tooltip: 'Opcje notatki',
                         onPressed: onMore,
                         visualDensity: VisualDensity.compact,
-                        icon: const Icon(
-                          Icons.more_horiz_rounded,
-                          color: noteLibraryCardInk,
-                        ),
+                        icon: Icon(Icons.more_horiz_rounded, color: ink),
                       ),
                     ],
                   ),
                   if (folder != null) ...[
                     const SizedBox(height: 6),
-                    _FolderBadge(name: folder!.name),
+                    _FolderBadge(
+                      name: folder!.displayName,
+                      foreground: ink,
+                      background: isNeutral
+                          ? scheme.surfaceContainer
+                          : Colors.white.withValues(alpha: .42),
+                    ),
                   ],
                   if (checklistItems.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -122,7 +129,7 @@ class NoteLibraryCard extends StatelessWidget {
                               item.isDone
                                   ? Icons.check_box_rounded
                                   : Icons.check_box_outline_blank_rounded,
-                              color: noteLibraryCardMutedInk,
+                              color: mutedInk,
                               size: 18,
                             ),
                             const SizedBox(width: 7),
@@ -133,7 +140,7 @@ class NoteLibraryCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      color: noteLibraryCardInk,
+                                      color: ink,
                                       decoration: item.isDone
                                           ? TextDecoration.lineThrough
                                           : null,
@@ -150,10 +157,8 @@ class NoteLibraryCard extends StatelessWidget {
                       displayPreview,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: noteLibraryCardMutedInk,
-                        height: 1.42,
-                      ),
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: mutedInk, height: 1.42),
                     ),
                   ],
                   if (attachment != null) ...[
@@ -162,20 +167,25 @@ class NoteLibraryCard extends StatelessWidget {
                   ],
                   const SizedBox(height: 14),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _formatDate(note.updatedAt),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: noteLibraryCardMutedInk,
-                          fontWeight: FontWeight.w700,
+                      Expanded(
+                        child: Text(
+                          formatNoteUpdatedAt(note.updatedAt),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: mutedInk,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ),
-                      const Spacer(),
                       if (note.reminderAt != null)
-                        const Icon(
+                        Icon(
                           Icons.notifications_none_rounded,
                           size: 17,
-                          color: noteLibraryCardMutedInk,
+                          color: mutedInk,
                         ),
                     ],
                   ),
@@ -212,13 +222,9 @@ class NoteMasonryGrid extends StatelessWidget {
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
         final columns = _columnCount(constraints.maxWidth, textScale);
-        final buckets = List.generate(columns, (_) => <_IndexedNote>[]);
-        final heights = List<double>.filled(columns, 0);
+        final buckets = List.generate(columns, (_) => <NoteItem>[]);
         for (var index = 0; index < notes.length; index++) {
-          final shortest = heights.indexOf(heights.reduce(math.min));
-          final note = notes[index];
-          buckets[shortest].add(_IndexedNote(note, index));
-          heights[shortest] += estimatedNoteHeight(note);
+          buckets[index % columns].add(notes[index]);
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,13 +237,12 @@ class NoteMasonryGrid extends StatelessWidget {
                   key: ValueKey('note-library-column-$column'),
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final indexed in buckets[column]) ...[
+                    for (final note in buckets[column]) ...[
                       NoteLibraryCard(
-                        note: indexed.note,
-                        visualIndex: indexed.index,
-                        folder: foldersById[indexed.note.folderId],
-                        onOpen: () => onOpen(indexed.note),
-                        onMore: () => onMore(indexed.note, Offset.zero),
+                        note: note,
+                        folder: foldersById[note.folderId],
+                        onOpen: () => onOpen(note),
+                        onMore: () => onMore(note, Offset.zero),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -267,20 +272,20 @@ double estimatedNoteHeight(NoteItem note) {
       (note.previewText.isNotEmpty && checklistRows == 0 ? 56 : 0);
 }
 
-class _IndexedNote {
-  const _IndexedNote(this.note, this.index);
-  final NoteItem note;
-  final int index;
-}
-
 class _FolderBadge extends StatelessWidget {
-  const _FolderBadge({required this.name});
+  const _FolderBadge({
+    required this.name,
+    required this.foreground,
+    required this.background,
+  });
   final String name;
+  final Color foreground;
+  final Color background;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .42),
+      color: background,
       borderRadius: BorderRadius.circular(99),
     ),
     child: Padding(
@@ -290,7 +295,7 @@ class _FolderBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.labelSmall
-            ?.copyWith(color: noteLibraryCardInk, fontWeight: FontWeight.w700),
+            ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
       ),
     ),
   );
@@ -335,6 +340,3 @@ class _AttachmentSummary extends StatelessWidget {
     );
   }
 }
-
-String _formatDate(DateTime date) =>
-    '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';

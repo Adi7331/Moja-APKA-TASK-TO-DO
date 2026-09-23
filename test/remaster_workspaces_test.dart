@@ -7,8 +7,11 @@ import 'package:dzien_po_dniu/task_item.dart';
 import 'package:dzien_po_dniu/task_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUpAll(() => initializeDateFormatting('pl_PL'));
+
   Widget app(Widget child) => MaterialApp(
     theme: buildRemasterTheme(Brightness.dark),
     home: Scaffold(body: child),

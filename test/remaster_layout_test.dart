@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:dzien_po_dniu/remaster_shell.dart';
 import 'package:dzien_po_dniu/remaster_theme.dart';
 import 'package:dzien_po_dniu/task_item.dart';
@@ -13,6 +14,7 @@ import 'package:dzien_po_dniu/note_item.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
+    await initializeDateFormatting('pl_PL');
     final font = FontLoader('Manrope')
       ..addFont(rootBundle.load('assets/fonts/Manrope.ttf'));
     await font.load();

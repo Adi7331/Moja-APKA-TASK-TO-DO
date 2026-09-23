@@ -37,33 +37,34 @@ List<NoteItem> selectNotesForLibrary({
 }) {
   final folderNames = {for (final folder in folders) folder.id: folder.name};
   final query = selection.query.trim().toLowerCase();
-  final selected = notes.where((note) {
-    final belongsToScope = switch (selection.scope) {
-      NoteLibraryScope.all => !note.isArchived && !note.isDeleted,
-      NoteLibraryScope.pinned =>
-        note.pinned && !note.isArchived && !note.isDeleted,
-      NoteLibraryScope.reminders =>
-        note.reminderAt != null && !note.isArchived && !note.isDeleted,
-      NoteLibraryScope.archive => note.isArchived && !note.isDeleted,
-      NoteLibraryScope.trash => note.isDeleted,
-    };
-    if (!belongsToScope) return false;
-    if (selection.folderId != null && note.folderId != selection.folderId) {
-      return false;
-    }
-    if (query.isEmpty) return true;
-    final searchable = [
-      note.title,
-      note.previewText,
-      ...note.labels,
-      folderNames[note.folderId] ?? '',
-    ].join(' ').toLowerCase();
-    return searchable.contains(query);
-  }).toList()
-    ..sort((a, b) {
-      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-      return b.updatedAt.compareTo(a.updatedAt);
-    });
+  final selected =
+      notes.where((note) {
+        final belongsToScope = switch (selection.scope) {
+          NoteLibraryScope.all => !note.isArchived && !note.isDeleted,
+          NoteLibraryScope.pinned =>
+            note.pinned && !note.isArchived && !note.isDeleted,
+          NoteLibraryScope.reminders =>
+            note.reminderAt != null && !note.isArchived && !note.isDeleted,
+          NoteLibraryScope.archive => note.isArchived && !note.isDeleted,
+          NoteLibraryScope.trash => note.isDeleted,
+        };
+        if (!belongsToScope) return false;
+        if (selection.folderId != null && note.folderId != selection.folderId) {
+          return false;
+        }
+        if (query.isEmpty) return true;
+        final searchable = [
+          note.title,
+          note.previewText,
+          ...note.labels,
+          folderNames[note.folderId] ?? '',
+        ].join(' ').toLowerCase();
+        return searchable.contains(query);
+      }).toList()..sort((a, b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        final newestFirst = b.updatedAt.compareTo(a.updatedAt);
+        return newestFirst == 0 ? a.id.compareTo(b.id) : newestFirst;
+      });
   return selected;
 }
 

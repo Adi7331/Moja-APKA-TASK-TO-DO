@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'note_item.dart';
+
 /// The preview is independently themed so the original UI remains comparable.
 ThemeData buildRemasterTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
@@ -167,12 +169,22 @@ Color remasterNoteCardColor(int index) {
 /// app themes. The surrounding chrome may be dark, but the content itself is
 /// always read as a physical, pastel note rather than another dark container.
 const noteLibraryPastelPalette = <Color>[
-  Color(0xffdbeafe),
-  Color(0xffe9ddff),
-  Color(0xffd9f0e5),
-  Color(0xffffefd6),
-  Color(0xffffe0db),
+  Color(0xffc4dcff),
+  Color(0xffdccbff),
+  Color(0xffbfead5),
+  Color(0xfff5d9a8),
+  Color(0xffffc7bb),
 ];
 
 const noteLibraryCardInk = Color(0xff172337);
-const noteLibraryCardMutedInk = Color(0xff4b5d73);
+const noteLibraryCardMutedInk = Color(0xff3c5069);
+
+Color noteLibrarySurfaceForColor(NoteColorKey colorKey, ColorScheme scheme) =>
+    switch (colorKey) {
+      NoteColorKey.neutral => scheme.surfaceContainerHigh,
+      NoteColorKey.blue => noteLibraryPastelPalette[0],
+      NoteColorKey.lavender => noteLibraryPastelPalette[1],
+      NoteColorKey.mint => noteLibraryPastelPalette[2],
+      NoteColorKey.sand => noteLibraryPastelPalette[3],
+      NoteColorKey.peach => noteLibraryPastelPalette[4],
+    };

@@ -6,6 +6,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('editor color swatches match the library card palette', (
+    tester,
+  ) async {
+    final theme = buildRemasterTheme(Brightness.dark);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: NoteEditorScreen(
+          remastered: true,
+          note: NoteItem(id: 'colors'),
+          onSave: (_) async {},
+          onDelete: (_) async {},
+        ),
+      ),
+    );
+    final blue = find.byKey(const ValueKey('note-color-swatch-blue'));
+    await tester.ensureVisible(blue);
+    await tester.pumpAndSettle();
+    final swatch = tester.widget<CircleAvatar>(
+      find.descendant(of: blue, matching: find.byType(CircleAvatar)),
+    );
+
+    expect(
+      swatch.backgroundColor,
+      noteLibrarySurfaceForColor(NoteColorKey.blue, theme.colorScheme),
+    );
+  });
+
   testWidgets('embedded editor closes through callback rather than navigator', (
     tester,
   ) async {

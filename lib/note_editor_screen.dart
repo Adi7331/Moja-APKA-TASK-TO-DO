@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'note_attachment_picker.dart';
 import 'note_folder.dart';
 import 'note_item.dart';
+import 'remaster_theme.dart';
 import 'serial_async_queue.dart';
 
 enum _EditorAction { reminder, labels, checklist, table, archive, trash }
@@ -1053,6 +1054,7 @@ class _ColorButton extends StatelessWidget {
   final ValueChanged<NoteItem> onChanged;
   @override
   Widget build(BuildContext context) => Semantics(
+    key: ValueKey('note-color-swatch-${color.name}'),
     label: 'Kolor: $label',
     selected: note.colorKey == color,
     child: InkWell(
@@ -1062,7 +1064,10 @@ class _ColorButton extends StatelessWidget {
         padding: const EdgeInsets.all(6),
         child: CircleAvatar(
           radius: 9,
-          backgroundColor: _noteTint(color, Theme.of(context).colorScheme),
+          backgroundColor: noteLibrarySurfaceForColor(
+            color,
+            Theme.of(context).colorScheme,
+          ),
           child: note.colorKey == color
               ? const Icon(Icons.check, size: 12)
               : null,
@@ -1280,27 +1285,3 @@ String _blockLabel(NoteBlockType type) => switch (type) {
 String _formatBytes(int bytes) => bytes < 1024 * 1024
     ? '${(bytes / 1024).ceil()} KB'
     : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-
-Color _noteTint(NoteColorKey key, ColorScheme scheme) => switch (key) {
-  NoteColorKey.neutral => scheme.surfaceContainerLow,
-  NoteColorKey.blue => Color.alphaBlend(
-    scheme.primary.withValues(alpha: .10),
-    scheme.surfaceContainerLow,
-  ),
-  NoteColorKey.lavender => Color.alphaBlend(
-    const Color(0xff8d7cf7).withValues(alpha: .10),
-    scheme.surfaceContainerLow,
-  ),
-  NoteColorKey.mint => Color.alphaBlend(
-    const Color(0xff52b788).withValues(alpha: .10),
-    scheme.surfaceContainerLow,
-  ),
-  NoteColorKey.peach => Color.alphaBlend(
-    const Color(0xffee9b6b).withValues(alpha: .10),
-    scheme.surfaceContainerLow,
-  ),
-  NoteColorKey.sand => Color.alphaBlend(
-    const Color(0xffd2b48c).withValues(alpha: .10),
-    scheme.surfaceContainerLow,
-  ),
-};
