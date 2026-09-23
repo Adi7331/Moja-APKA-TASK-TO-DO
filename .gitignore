@@ -6,4 +6,11 @@
 .vscode/
 .packages
 .pub-cache/
+.env
+/android/key.properties
+/.tooling/release-signing/
 build/
+.flutter-plugins-dependencies
+run-stdout.log
+run-stderr.log
+*.iml

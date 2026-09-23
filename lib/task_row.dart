@@ -1,0 +1,273 @@
+import 'package:flutter/material.dart';
+
+import 'task_item.dart';
+import 'task_status_control.dart';
+
+class TaskRow extends StatelessWidget {
+  const TaskRow({
+    super.key,
+    required this.task,
+    required this.onOpen,
+    required this.onComplete,
+    required this.onStatusSelected,
+    required this.onDelete,
+    this.onTogglePin,
+    this.onPostpone,
+  });
+
+  final TaskItem task;
+  final VoidCallback onOpen;
+  final VoidCallback onComplete;
+  final ValueChanged<String> onStatusSelected;
+  final VoidCallback onDelete;
+  final VoidCallback? onTogglePin;
+  final VoidCallback? onPostpone;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final progress = task.subtaskCount == 0
+        ? null
+        : task.completedSubtaskCount / task.subtaskCount;
+    final togglePin = onTogglePin;
+    final postpone = onPostpone;
+    return AnimatedOpacity(
+      opacity: task.isDone ? 0.72 : 1,
+      duration: const Duration(milliseconds: 120),
+      child: AnimatedScale(
+        scale: task.isDone ? 0.995 : 1,
+        duration: const Duration(milliseconds: 120),
+        child: Material(
+          color: scheme.surfaceContainerLow,
+          child: InkWell(
+            onTap: onOpen,
+            hoverColor: scheme.primary.withValues(alpha: 0.04),
+            focusColor: scheme.primary.withValues(alpha: 0.08),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: IconButton(
+                      tooltip: task.isDone
+                          ? 'Zadanie ukończone'
+                          : 'Oznacz jako zrobione',
+                      onPressed: task.isDone ? null : onComplete,
+                      icon: Icon(
+                        task.isDone
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        color: task.isDone ? scheme.primary : scheme.outline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.title,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                decoration: task.isDone
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                                color: task.isDone
+                                    ? scheme.onSurfaceVariant
+                                    : null,
+                              ),
+                        ),
+                        if (task.priority == 'high') ...[
+                          const SizedBox(height: 6),
+                          _TaskTag(
+                            label: 'Wysoki priorytet',
+                            icon: Icons.priority_high_rounded,
+                            backgroundColor: scheme.errorContainer,
+                            foregroundColor: scheme.onErrorContainer,
+                          ),
+                        ],
+                        if (task.note.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            task.note,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                        const SizedBox(height: 5),
+                        Text(
+                          _metadata(),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 8),
+                        TaskStatusControl(
+                          status: task.status,
+                          onStatusSelected: onStatusSelected,
+                        ),
+                        if (progress != null) ...[
+                          const SizedBox(height: 9),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: progress,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${task.completedSubtaskCount} z ${task.subtaskCount} kroków',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: scheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (!task.isDone && togglePin != null)
+                    _TaskActionButton(
+                      key: ValueKey('pin-task-${task.id}'),
+                      tooltip: task.pinnedToday
+                          ? 'Odepnij z planu dnia'
+                          : 'Przypnij do planu dnia',
+                      onPressed: togglePin,
+                      icon: task.pinnedToday
+                          ? Icons.push_pin
+                          : Icons.push_pin_outlined,
+                    ),
+                  if (!task.isDone && postpone != null)
+                    _TaskActionButton(
+                      key: ValueKey('postpone-task-${task.id}'),
+                      tooltip: 'Odłóż zadanie',
+                      onPressed: postpone,
+                      icon: Icons.snooze_outlined,
+                    ),
+                  _TaskActionButton(
+                    key: ValueKey('delete-task-${task.id}'),
+                    tooltip: 'Usuń zadanie',
+                    onPressed: onDelete,
+                    icon: Icons.delete_outline,
+                    destructive: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _metadata() {
+    final parts = <String>[
+      if (task.category != 'Skrzynka') task.category,
+      if (task.dueAt != null) _dueLabel(task.dueAt!),
+    ];
+    return parts.isEmpty ? 'Bez terminu' : parts.join(' · ');
+  }
+
+  String _dueLabel(DateTime dueAt) =>
+      '${dueAt.day.toString().padLeft(2, '0')}.${dueAt.month.toString().padLeft(2, '0')} · ${dueAt.hour.toString().padLeft(2, '0')}:${dueAt.minute.toString().padLeft(2, '0')}';
+}
+
+class _TaskActionButton extends StatelessWidget {
+  const _TaskActionButton({
+    super.key,
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    this.destructive = false,
+  });
+
+  final String tooltip;
+  final VoidCallback onPressed;
+  final IconData icon;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final interactionStates = <WidgetState>{
+      WidgetState.hovered,
+      WidgetState.focused,
+      WidgetState.pressed,
+    };
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (destructive && states.any(interactionStates.contains)) {
+              return scheme.error;
+            }
+            return scheme.onSurfaceVariant;
+          }),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (destructive && states.any(interactionStates.contains)) {
+              return scheme.error.withValues(alpha: 0.12);
+            }
+            return null;
+          }),
+        ),
+        icon: Icon(icon),
+      ),
+    );
+  }
+}
+
+class _TaskTag extends StatelessWidget {
+  const _TaskTag({
+    required this.label,
+    required this.icon,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: foregroundColor),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
