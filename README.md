@@ -44,6 +44,7 @@ Podczas pracy `r` w terminalu uruchamia hot reload, a `R` pełny restart aplikac
    - zawartość [`supabase/realtime.sql`](supabase/realtime.sql) — włącza aktualizacje czasu rzeczywistego dla tabeli `tasks`.
    - zawartość [`supabase/subtasks.sql`](supabase/subtasks.sql) — tworzy prywatne checklisty kroków, ich reguły RLS oraz synchronizację czasu rzeczywistego.
    - zawartość [`supabase/notes.sql`](supabase/notes.sql) — tworzy prywatne notatki, bloki, etykiety, załączniki, ustawienia kosza, RLS oraz publikację Realtime.
+   - zawartość [`supabase/note_folders.sql`](supabase/note_folders.sql) — dodaje prywatne foldery, przypisanie `folder_id` i publikację Realtime. Uruchom po `notes.sql`.
 3. W **Authentication → Providers → Email** włącz logowanie e-mailem. Na potrzeby szybkich testów można wyłączyć potwierdzanie adresu e-mail; w aplikacji produkcyjnej pozostaw je włączone i ustaw właściwe adresy przekierowań.
 4. W **Project Settings → API** skopiuj:
    - **Project URL**;
@@ -56,6 +57,8 @@ Podczas pracy `r` w terminalu uruchamia hot reload, a `R` pełny restart aplikac
 Sekcja **Notatki** działa bez sieci i zapisuje dane w katalogu danych aplikacji. Po zalogowaniu tym samym kontem Google może zsynchronizować notatki przez Supabase; Google służy wyłącznie do logowania — aplikacja nie prosi o dostęp do Dysku, Gmaila ani Kalendarza.
 
 Przed użyciem synchronizacji uruchom `supabase/notes.sql` w SQL Editor. Skrypt tworzy prywatny bucket Storage `note-attachments`, a polityki pozwalają użytkownikowi korzystać wyłącznie z plików w jego własnym katalogu. Limit pojedynczego pliku wynosi 20 MB. Nowe tabele są dodawane do publikacji `supabase_realtime`, więc zmiany notatek mogą odświeżać drugi telefon lub komputer.
+
+Do synchronizacji folderów uruchom następnie [`supabase/note_folders.sql`](supabase/note_folders.sql). Skrypt można bezpiecznie uruchomić ponownie: istniejące tabele, kolumny, indeksy, polityki właściciela i wpis Realtime nie są dublowane ani zastępowane. Opcjonalna kolumna `emoji` może pozostać pusta; wcześniejsze foldery i notatki bez folderu nadal działają. Nie trzeba zmieniać reguł RLS ani konfiguracji Realtime.
 
 Jeśli konto ma już notatki w chmurze, lokalny magazyn nie jest automatycznie nadpisywany — lokalne dane pozostają na urządzeniu do bezpiecznego importu. Konflikt wersji zachowuje kopię z tytułem „Konflikt — …”.
 

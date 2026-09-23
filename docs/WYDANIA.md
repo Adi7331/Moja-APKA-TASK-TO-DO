@@ -1,5 +1,7 @@
 # Wydania aplikacji
 
+Notatki mają teraz czytelniejsze, stałe kolory z kontrastowym tekstem, polską datę i godzinę ostatniej zmiany oraz kolejność od najnowszych (przypięte pozostają na górze). Foldery można tworzyć i edytować, także ustawiając jedną emoji. Edytor ma widoczne `Gotowe`, które zamyka go po zapisaniu; przy błędzie pozwala ponowić zapis. Wąski ekran i duży tekst nie ściskają przycisków ani nagłówka załączników.
+
 Od wersji `1.1.1` aplikacja sprawdza plik `update.json` dołączony do najnowszego GitHub Release. Android pobiera paczkę ZIP, a następnie otwiera systemowy instalator zawartego APK.
 
 ## Automatyczne wydania przez GitHub Actions
