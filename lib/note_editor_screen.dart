@@ -9,6 +9,17 @@ import 'note_folder.dart';
 import 'note_item.dart';
 import 'serial_async_queue.dart';
 
+enum _EditorAction { reminder, labels, checklist, table, archive, trash }
+
+enum _AttachmentAction { image, file }
+
+const _blockMenuItems = <PopupMenuEntry<NoteBlockType>>[
+  PopupMenuItem(value: NoteBlockType.heading, child: Text('Nagłówek')),
+  PopupMenuItem(value: NoteBlockType.quote, child: Text('Cytat')),
+  PopupMenuItem(value: NoteBlockType.checklist, child: Text('Checklista')),
+  PopupMenuItem(value: NoteBlockType.table, child: Text('Tabela')),
+];
+
 class NoteEditorScreen extends StatefulWidget {
   const NoteEditorScreen({
     super.key,
@@ -367,6 +378,79 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     await _save();
   }
 
+  String get _folderName =>
+      widget.folders
+          .where((folder) => folder.id == _note.folderId)
+          .map((folder) => folder.displayName)
+          .firstOrNull ??
+      'Bez folderu';
+
+  Future<void> _pickFolder() async {
+    if (widget.onMoveToFolder == null) return;
+    const noFolder = '__no_folder__';
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('Folder notatki')),
+            ListTile(
+              leading: const Icon(Icons.folder_off_outlined),
+              title: const Text('Bez folderu'),
+              onTap: () => Navigator.pop(context, noFolder),
+            ),
+            for (final folder in widget.folders)
+              ListTile(
+                leading: folder.emoji == null
+                    ? const Icon(Icons.folder_outlined)
+                    : Text(folder.emoji!, style: const TextStyle(fontSize: 20)),
+                title: Text(folder.displayName),
+                trailing: folder.id == _note.folderId
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.pop(context, folder.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    final folderId = choice == noFolder ? null : choice;
+    final updated = _note.copyWith(
+      folderId: folderId,
+      updatedAt: DateTime.now(),
+    );
+    setState(() => _note = updated);
+    await widget.onMoveToFolder!(updated, folderId);
+  }
+
+  Future<void> _showAttachmentOptions() async {
+    final action = await showModalBottomSheet<_AttachmentAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Dodaj zdjęcie'),
+              onTap: () => Navigator.pop(context, _AttachmentAction.image),
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file_rounded),
+              title: const Text('Dodaj plik'),
+              onTap: () => Navigator.pop(context, _AttachmentAction.file),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    await _pickAttachment(imageOnly: action == _AttachmentAction.image);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -381,6 +465,21 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.remastered) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                button: true,
+                label: 'Zmień folder notatki',
+                child: OutlinedButton.icon(
+                  onPressed: _pickFolder,
+                  icon: const Icon(Icons.folder_outlined, size: 18),
+                  label: Text(_folderName),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           TextField(
             key: const ValueKey('note-title-field'),
             controller: _titleController,
@@ -402,6 +501,22 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             ),
             textCapitalization: TextCapitalization.sentences,
           ),
+          if (widget.remastered) ...[
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Text(
+                  'Załączniki',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: _showAttachmentOptions,
+                  child: const Text('Dodaj'),
+                ),
+              ],
+            ),
+          ],
           if (_note.attachments.isNotEmpty)
             _AttachmentsEditor(
               attachments: _note.attachments,
@@ -481,86 +596,134 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           icon: const Icon(Icons.close_rounded),
         ),
         const SizedBox(width: 4),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.remastered ? 'Edytujesz notatkę' : 'Notatka',
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              if (widget.remastered)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        key: const ValueKey('note-save-status'),
-                        _saveStatus,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                      ),
-                    ),
-                    if (_saveStatus.startsWith('Błąd'))
-                      TextButton(
-                        key: const ValueKey('note-save-retry'),
-                        onPressed: _save,
-                        child: const Text('Ponów'),
-                      ),
-                  ],
-                ),
-            ],
+        Expanded(child: _headerCopy(context)),
+        if (widget.remastered) ...[
+          IconButton(
+            tooltip: _note.pinned ? 'Odepnij notatkę' : 'Przypnij notatkę',
+            onPressed: () {
+              setState(() => _note = _note.copyWith(pinned: !_note.pinned));
+              _scheduleSave();
+            },
+            icon: Icon(_note.pinned ? Icons.push_pin : Icons.push_pin_outlined),
           ),
-        ),
-        if (!widget.remastered)
+          _remasteredMoreMenu(),
+        ] else ...[
           Text(_saveStatus, style: Theme.of(context).textTheme.labelMedium),
-        IconButton(
-          tooltip: _note.reminderAt == null
-              ? 'Ustaw przypomnienie'
-              : 'Zmień przypomnienie',
-          onPressed: _pickReminder,
-          icon: Icon(
-            _note.reminderAt == null
-                ? Icons.notifications_none_outlined
-                : Icons.notifications_active_outlined,
+          IconButton(
+            tooltip: _note.reminderAt == null
+                ? 'Ustaw przypomnienie'
+                : 'Zmień przypomnienie',
+            onPressed: _pickReminder,
+            icon: Icon(
+              _note.reminderAt == null
+                  ? Icons.notifications_none_outlined
+                  : Icons.notifications_active_outlined,
+            ),
           ),
-        ),
-        PopupMenuButton<NoteBlockType>(
-          tooltip: 'Dodaj blok',
-          onSelected: (type) {
-            setState(() => _advancedOpen = true);
-            _addBlock(type);
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(
-              value: NoteBlockType.heading,
-              child: Text('Nagłówek'),
-            ),
-            PopupMenuItem(value: NoteBlockType.quote, child: Text('Cytat')),
-            PopupMenuItem(
-              value: NoteBlockType.checklist,
-              child: Text('Checklista'),
-            ),
-            PopupMenuItem(value: NoteBlockType.table, child: Text('Tabela')),
-          ],
-          icon: const Icon(Icons.add_circle_outline_rounded),
-        ),
-        IconButton(
-          tooltip: 'Przenieś do kosza',
-          onPressed: _moveToTrash,
-          icon: const Icon(Icons.delete_outline_rounded),
-        ),
+          _legacyBlockMenu(),
+          IconButton(
+            tooltip: 'Przenieś do kosza',
+            onPressed: _moveToTrash,
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
+        ],
       ],
     ),
   );
+
+  Widget _headerCopy(BuildContext context) {
+    if (!widget.remastered) {
+      return Text(
+        'Notatka',
+        style: Theme.of(context).textTheme.titleLarge
+            ?.copyWith(fontWeight: FontWeight.w700),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            key: const ValueKey('note-save-status'),
+            _saveStatus,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (_saveStatus.startsWith('Błąd'))
+          TextButton(
+            key: const ValueKey('note-save-retry'),
+            onPressed: _save,
+            child: const Text('Ponów'),
+          ),
+      ],
+    );
+  }
+
+  Widget _legacyBlockMenu() => PopupMenuButton<NoteBlockType>(
+    tooltip: 'Dodaj blok',
+    onSelected: _addAdvancedBlock,
+    itemBuilder: (context) => _blockMenuItems,
+    icon: const Icon(Icons.add_circle_outline_rounded),
+  );
+
+  Widget _remasteredMoreMenu() => PopupMenuButton<_EditorAction>(
+    tooltip: 'Więcej opcji notatki',
+    onSelected: (action) async {
+      switch (action) {
+        case _EditorAction.reminder:
+          await _pickReminder();
+          return;
+        case _EditorAction.labels:
+          await _editLabels();
+          return;
+        case _EditorAction.checklist:
+          _addAdvancedBlock(NoteBlockType.checklist);
+          return;
+        case _EditorAction.table:
+          _addAdvancedBlock(NoteBlockType.table);
+          return;
+        case _EditorAction.archive:
+          setState(
+            () => _note = _note.copyWith(
+              archivedAt: _note.isArchived ? null : DateTime.now(),
+            ),
+          );
+          await _save();
+          return;
+        case _EditorAction.trash:
+          await _moveToTrash();
+          return;
+      }
+    },
+    itemBuilder: (context) => const [
+      PopupMenuItem(
+        value: _EditorAction.reminder,
+        child: Text('Przypomnienie'),
+      ),
+      PopupMenuItem(value: _EditorAction.labels, child: Text('Etykiety')),
+      PopupMenuItem(
+        value: _EditorAction.checklist,
+        child: Text('Dodaj listę kroków'),
+      ),
+      PopupMenuItem(value: _EditorAction.table, child: Text('Dodaj tabelę')),
+      PopupMenuDivider(),
+      PopupMenuItem(value: _EditorAction.archive, child: Text('Archiwizuj')),
+      PopupMenuItem(
+        value: _EditorAction.trash,
+        child: Text('Przenieś do Kosza'),
+      ),
+    ],
+    icon: const Icon(Icons.more_vert_rounded),
+  );
+
+  void _addAdvancedBlock(NoteBlockType type) {
+    setState(() => _advancedOpen = true);
+    _addBlock(type);
+  }
 
   Widget _noteToolbar() => _NoteToolbar(
     note: _note,

@@ -7,14 +7,13 @@ import 'note_library_chrome.dart';
 import 'note_library_state.dart';
 
 typedef NewRemasterNote = void Function({String? folderId});
-typedef SaveRemasterFolder = Future<void> Function(
-  String name,
-  NoteColorKey colorKey,
-);
+typedef SaveRemasterFolder = Future<void> Function(NoteFolderDraft draft);
 typedef RemasterNoteEditorBuilder = Widget Function(
   NoteItem note,
   VoidCallback onClose,
 );
+
+enum _FolderAction { rename, delete }
 
 /// The Notes library keeps only presentation state. Saving and synchronizing
 /// stay with the parent, so switching a filter can never lose an offline edit.
@@ -95,33 +94,105 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
 
   Future<void> _createFolder() async {
     if (widget.onCreateFolder == null) return;
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
+    final draft = await showDialog<NoteFolderDraft>(
+      context: context,
+      builder: (context) => _FolderDialog(
+        title: 'Nowy folder',
+        folders: widget.folders,
+        confirmLabel: 'Utwórz',
+      ),
+    );
+    if (draft == null || !mounted) return;
+    await widget.onCreateFolder!(draft);
+  }
+
+  Future<void> _manageFolders() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('Zarządzaj folderami')),
+            if (widget.folders.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('Nie masz jeszcze folderów.'),
+              ),
+            for (final folder in widget.folders)
+              ListTile(
+                leading: _FolderAvatar(folder: folder),
+                title: Text(folder.displayName),
+                trailing: PopupMenuButton<_FolderAction>(
+                  tooltip: 'Opcje folderu: ${folder.name}',
+                  onSelected: (action) async {
+                    if (action == _FolderAction.rename) {
+                      await _editFolder(folder);
+                    } else {
+                      await _deleteFolder(folder);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: _FolderAction.rename,
+                      child: Text('Edytuj'),
+                    ),
+                    PopupMenuItem(
+                      value: _FolderAction.delete,
+                      child: Text('Usuń folder'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editFolder(NoteFolder folder) async {
+    if (widget.onRenameFolder == null || !mounted) return;
+    final draft = await showDialog<NoteFolderDraft>(
+      context: context,
+      builder: (context) => _FolderDialog(
+        title: 'Edytuj folder',
+        folder: folder,
+        folders: widget.folders,
+        confirmLabel: 'Zapisz',
+      ),
+    );
+    if (draft == null || !mounted) return;
+    await widget.onRenameFolder!(
+      folder.copyWith(
+        name: draft.name,
+        colorKey: draft.colorKey,
+        emoji: draft.emoji,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> _deleteFolder(NoteFolder folder) async {
+    if (widget.onDeleteFolder == null || !mounted) return;
+    final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Nowy folder'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 60,
-          decoration: const InputDecoration(hintText: 'Np. Praca'),
-          onSubmitted: (value) => Navigator.pop(context, value),
-        ),
+        title: const Text('Usunąć folder?'),
+        content: const Text('Notatki pozostaną zapisane w sekcji Bez folderu.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Anuluj'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Utwórz'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Usuń folder'),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (name == null || name.trim().isEmpty || !mounted) return;
-    await widget.onCreateFolder!(name.trim(), NoteColorKey.blue);
+    if (accepted == true && mounted) await widget.onDeleteFolder!(folder);
   }
 
   NoteItem? get _selectedNote =>
@@ -239,6 +310,7 @@ class _RemasterNotesScreenState extends State<RemasterNotesScreen> {
                       _selection.copyWith(scope: scope, folderId: null),
                     ),
                     onCreateFolder: _createFolder,
+                    onManageFolders: _manageFolders,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -339,6 +411,167 @@ class _SyncStatus extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FolderDialog extends StatefulWidget {
+  const _FolderDialog({
+    required this.title,
+    required this.folders,
+    required this.confirmLabel,
+    this.folder,
+  });
+  final String title;
+  final List<NoteFolder> folders;
+  final NoteFolder? folder;
+  final String confirmLabel;
+
+  @override
+  State<_FolderDialog> createState() => _FolderDialogState();
+}
+
+class _FolderDialogState extends State<_FolderDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _emojiController;
+  late NoteColorKey _colorKey;
+  String? _emojiError;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.folder?.name ?? '');
+    _emojiController = TextEditingController(text: widget.folder?.emoji ?? '');
+    _colorKey = widget.folder?.colorKey ?? NoteColorKey.blue;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emojiController.dispose();
+    super.dispose();
+  }
+
+  String? _validateName(String? value) {
+    final name = value?.trim() ?? '';
+    final length = name.characters.length;
+    if (length < 1 || length > 80) return 'Nazwa musi mieć 1–80 znaków.';
+    final duplicate = widget.folders.any(
+      (folder) => folder.id != widget.folder?.id && folder.name.trim() == name,
+    );
+    if (duplicate) return 'Folder o tej nazwie już istnieje.';
+    return null;
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    String? emoji;
+    try {
+      emoji = normalizeFolderEmoji(_emojiController.text);
+    } on FormatException catch (error) {
+      setState(() => _emojiError = error.message);
+      return;
+    }
+    Navigator.pop(
+      context,
+      NoteFolderDraft(
+        name: _nameController.text.trim(),
+        colorKey: _colorKey,
+        emoji: emoji,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: Form(
+      key: _formKey,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              key: const ValueKey('folder-name-field'),
+              controller: _nameController,
+              autofocus: true,
+              maxLength: 80,
+              validator: _validateName,
+              decoration: const InputDecoration(
+                labelText: 'Nazwa folderu',
+                hintText: 'Np. Praca',
+              ),
+              onFieldSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 12),
+            Text('Kolor', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final color in NoteColorKey.values)
+                  ChoiceChip(
+                    key: ValueKey('folder-color-${color.name}'),
+                    label: Text(_folderColorLabel(color)),
+                    selected: _colorKey == color,
+                    onSelected: (_) => setState(() => _colorKey = color),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('folder-emoji-field'),
+              controller: _emojiController,
+              maxLength: 16,
+              decoration: InputDecoration(
+                labelText: 'Emoji (opcjonalnie)',
+                errorText: _emojiError,
+                helperText: 'Jedna emoji, np. 🚗',
+              ),
+              onChanged: (_) {
+                if (_emojiError != null) setState(() => _emojiError = null);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Anuluj'),
+      ),
+      FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
+    ],
+  );
+}
+
+String _folderColorLabel(NoteColorKey color) => switch (color) {
+  NoteColorKey.neutral => 'Neutralny',
+  NoteColorKey.blue => 'Błękit',
+  NoteColorKey.lavender => 'Lawenda',
+  NoteColorKey.mint => 'Mięta',
+  NoteColorKey.peach => 'Koral',
+  NoteColorKey.sand => 'Piasek',
+};
+
+class _FolderAvatar extends StatelessWidget {
+  const _FolderAvatar({required this.folder});
+  final NoteFolder folder;
+
+  @override
+  Widget build(BuildContext context) => folder.emoji == null
+      ? const Icon(Icons.folder_outlined)
+      : Semantics(
+          label: folder.displayName,
+          child: SizedBox.square(
+            dimension: 40,
+            child: Center(
+              child: Text(folder.emoji!, style: const TextStyle(fontSize: 20)),
+            ),
+          ),
+        );
 }
 
 class _LoadingNotes extends StatelessWidget {

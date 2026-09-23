@@ -1,3 +1,5 @@
+import 'package:characters/characters.dart';
+
 import 'note_item.dart';
 
 const _unchangedFolderEmoji = Object();
@@ -50,6 +52,8 @@ class NoteFolder {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  String get displayName => emoji == null ? name : '$emoji $name';
+
   NoteFolder copyWith({
     String? name,
     NoteColorKey? colorKey,
@@ -86,6 +90,27 @@ class NoteFolder {
     'created_at': createdAt.toUtc().toIso8601String(),
     'updated_at': updatedAt.toUtc().toIso8601String(),
   };
+}
+
+class NoteFolderDraft {
+  const NoteFolderDraft({
+    required this.name,
+    required this.colorKey,
+    this.emoji,
+  });
+
+  final String name;
+  final NoteColorKey colorKey;
+  final String? emoji;
+}
+
+String? normalizeFolderEmoji(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return null;
+  if (trimmed.characters.length != 1 || trimmed.runes.length > 16) {
+    throw const FormatException('Wpisz jedną emoji.');
+  }
+  return trimmed;
 }
 
 DateTime? _date(Object? raw) => raw is String ? DateTime.tryParse(raw) : null;

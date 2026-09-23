@@ -49,6 +49,7 @@ import 'notes_screen.dart';
 import 'note_sync_service.dart';
 import 'note_sync_outbox.dart';
 import 'note_folder_sync_outbox.dart';
+import 'note_folder_operations.dart';
 import 'focus_session.dart';
 import 'focus_session_store.dart';
 import 'focus_session_sync_service.dart';
@@ -878,13 +879,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _showSuccessNotice('Google Calendar odłączony');
   }
 
-  Future<void> _createFolder(String name, NoteColorKey colorKey) async {
-    final trimmed = name.trim();
+  Future<void> _createFolder(NoteFolderDraft draft) async {
+    final trimmed = draft.name.trim();
     if (trimmed.isEmpty) return;
     final folder = NoteFolder(
       id: newNoteId(),
       name: trimmed,
-      colorKey: colorKey,
+      colorKey: draft.colorKey,
+      emoji: draft.emoji,
     );
     setState(() => folders.add(folder));
     await _saveLocalFolders();
@@ -906,10 +908,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _deleteFolder(NoteFolder folder) async {
-    final changedNotes = notes
-        .where((item) => item.folderId == folder.id)
-        .map((item) => item.copyWith(folderId: null, updatedAt: DateTime.now()))
-        .toList();
+    final changedNotes = notesMovedOutOfFolder(
+      notes: notes,
+      folderId: folder.id,
+      updatedAt: DateTime.now(),
+    );
     setState(() {
       folders.removeWhere((item) => item.id == folder.id);
       for (final changed in changedNotes) {

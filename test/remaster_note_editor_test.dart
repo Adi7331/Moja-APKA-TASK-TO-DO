@@ -1,4 +1,5 @@
 import 'package:dzien_po_dniu/note_editor_screen.dart';
+import 'package:dzien_po_dniu/note_folder.dart';
 import 'package:dzien_po_dniu/note_item.dart';
 import 'package:dzien_po_dniu/remaster_theme.dart';
 import 'package:flutter/material.dart';
@@ -28,30 +29,43 @@ void main() {
     expect(closed, isTrue);
   });
 
-  testWidgets('remastered note editor presents a focused writing surface', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildRemasterTheme(Brightness.light),
-        home: NoteEditorScreen(
-          remastered: true,
-          note: NoteItem(
-            id: 'note-1',
-            title: 'Plan na tydzień',
-            blocks: [NoteBlock.text(id: 'text-1', text: 'Pierwszy krok')],
+  testWidgets(
+    'remastered editor shows back, save status, pin action and selected folder',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildRemasterTheme(Brightness.light),
+          home: NoteEditorScreen(
+            remastered: true,
+            note: NoteItem(
+              id: 'note-1',
+              title: 'Plan na tydzień',
+              folderId: 'work',
+              blocks: [NoteBlock.text(id: 'text-1', text: 'Pierwszy krok')],
+            ),
+            onSave: (_) async {},
+            onDelete: (_) async {},
+            folders: [NoteFolder(id: 'work', name: 'Praca', emoji: '💼')],
+            onMoveToFolder: (_, _) async {},
           ),
-          onSave: (_) async {},
-          onDelete: (_) async {},
         ),
-      ),
-    );
+      );
 
-    expect(find.byKey(const ValueKey('remaster-note-editor')), findsOneWidget);
-    expect(find.text('Edytujesz notatkę'), findsOneWidget);
-    expect(find.byKey(const ValueKey('note-title-field')), findsOneWidget);
-    expect(find.byKey(const ValueKey('note-save-status')), findsOneWidget);
-  });
+      expect(
+        find.byKey(const ValueKey('remaster-note-editor')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Wróć do notatek'), findsOneWidget);
+      expect(find.byTooltip('Przypnij notatkę'), findsOneWidget);
+      expect(find.text('💼 Praca'), findsOneWidget);
+      expect(find.text('Edytujesz notatkę'), findsNothing);
+      expect(find.byKey(const ValueKey('note-title-field')), findsOneWidget);
+      expect(find.byKey(const ValueKey('note-save-status')), findsOneWidget);
+      await tester.tap(find.text('💼 Praca'));
+      await tester.pumpAndSettle();
+      expect(find.text('💼 Praca'), findsNWidgets(2));
+    },
+  );
 
   testWidgets('secondary blocks live under Więcej opcji with Lista kroków', (
     tester,
@@ -76,6 +90,7 @@ void main() {
     );
 
     expect(find.text('Więcej opcji'), findsOneWidget);
+    await tester.ensureVisible(find.text('Więcej opcji'));
     await tester.tap(find.text('Więcej opcji'));
     await tester.pumpAndSettle();
     expect(find.text('Lista kroków'), findsOneWidget);

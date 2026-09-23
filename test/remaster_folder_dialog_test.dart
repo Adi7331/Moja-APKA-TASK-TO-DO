@@ -5,27 +5,50 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  RemasterNotesScreen screen({
+    List<NoteItem> notes = const [],
+    List<NoteFolder> folders = const [],
+    SaveRemasterFolder? onCreateFolder,
+    Future<void> Function(NoteFolder)? onRenameFolder,
+    Future<void> Function(NoteFolder)? onDeleteFolder,
+  }) => RemasterNotesScreen(
+    notes: notes,
+    folders: folders,
+    onNewNote: ({folderId}) {},
+    onOpenNote: (_) {},
+    onSave: (_) async {},
+    onDelete: (_) async {},
+    onCreateFolder: onCreateFolder,
+    onRenameFolder: onRenameFolder,
+    onDeleteFolder: onDeleteFolder,
+  );
+
+  Future<void> openMore(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Więcej widoków notatek'));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
     'creating a folder closes its dialog before rebuilding the strip',
     (tester) async {
       final folders = <NoteFolder>[];
-      NoteColorKey? selectedColor;
+      NoteFolderDraft? savedDraft;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: StatefulBuilder(
-              builder: (context, setState) => RemasterNotesScreen(
-                notes: const <NoteItem>[],
+              builder: (context, setState) => screen(
                 folders: folders,
-                onNewNote: ({String? folderId}) {},
-                onOpenNote: (_) {},
-                onSave: (_) async {},
-                onDelete: (_) async {},
-                onCreateFolder: (name, color) async {
-                  selectedColor = color;
+                onCreateFolder: (draft) async {
+                  savedDraft = draft;
                   setState(
                     () => folders.add(
-                      NoteFolder(id: name, name: name, colorKey: color),
+                      NoteFolder(
+                        id: draft.name,
+                        name: draft.name,
+                        colorKey: draft.colorKey,
+                        emoji: draft.emoji,
+                      ),
                     ),
                   );
                 },
@@ -35,119 +58,199 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Folder'));
+      await openMore(tester);
+      await tester.tap(find.text('Nowy folder'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).last, 'Samochód');
-      await tester.tap(find.text('Lawenda'));
+      await tester.enterText(
+        find.byKey(const ValueKey('folder-name-field')),
+        'Samochód',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('folder-emoji-field')),
+        '🚗',
+      );
+      await tester.tap(find.byKey(const ValueKey('folder-color-blue')));
       await tester.tap(find.text('Utwórz'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Samochód'), findsOneWidget);
-      expect(selectedColor, NoteColorKey.lavender);
+      expect(find.text('🚗 Samochód'), findsOneWidget);
+      expect(savedDraft?.colorKey, NoteColorKey.blue);
+      expect(savedDraft?.emoji, '🚗');
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('renaming a folder keeps its identity for assigned notes', (
+  testWidgets('editing a folder keeps its identity and allows clearing emoji', (
     tester,
   ) async {
     NoteFolder? renamedFolder;
-    final folder = NoteFolder(id: 'car', name: 'Samochód');
+    final folder = NoteFolder(id: 'car', name: 'Samochód', emoji: '🚗');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: RemasterNotesScreen(
-            notes: const <NoteItem>[],
-            folders: <NoteFolder>[folder],
-            onNewNote: ({String? folderId}) {},
-            onOpenNote: (_) {},
-            onSave: (_) async {},
-            onDelete: (_) async {},
+          body: screen(
+            folders: [folder],
             onRenameFolder: (updated) async => renamedFolder = updated,
           ),
         ),
       ),
     );
 
+    await openMore(tester);
+    await tester.tap(find.text('Zarządzaj folderami'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Opcje folderu: Samochód'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Zmień nazwę folderu'));
+    await tester.tap(find.text('Edytuj'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Auto');
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-name-field')),
+      'Auto',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-emoji-field')),
+      '',
+    );
     await tester.tap(find.text('Zapisz'));
     await tester.pumpAndSettle();
 
     expect(renamedFolder, isNotNull);
     expect(renamedFolder!.id, 'car');
     expect(renamedFolder!.name, 'Auto');
+    expect(renamedFolder!.emoji, isNull);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('folder menu is contained in the same aligned chip as its name', (
+  testWidgets('rejects more than one emoji grapheme without closing', (
     tester,
   ) async {
-    final folder = NoteFolder(id: 'car', name: 'Samochód');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: screen(onCreateFolder: (_) async {})),
+      ),
+    );
+    await openMore(tester);
+    await tester.tap(find.text('Nowy folder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-name-field')),
+      'Podróże',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-emoji-field')),
+      '🚗🏠',
+    );
+    await tester.tap(find.text('Utwórz'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wpisz jedną emoji.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('folder-name-field')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('rejects a duplicate folder name without invoking save', (
+    tester,
+  ) async {
+    var saved = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: RemasterNotesScreen(
-            notes: const <NoteItem>[],
-            folders: <NoteFolder>[folder],
-            onNewNote: ({String? folderId}) {},
-            onOpenNote: (_) {},
-            onSave: (_) async {},
-            onDelete: (_) async {},
-            onRenameFolder: (_) async {},
+          body: screen(
+            folders: [NoteFolder(id: 'work', name: 'Praca')],
+            onCreateFolder: (_) async => saved = true,
           ),
         ),
       ),
     );
+    await openMore(tester);
+    await tester.tap(find.text('Nowy folder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('folder-name-field')),
+      ' Praca ',
+    );
+    await tester.tap(find.text('Utwórz'));
+    await tester.pumpAndSettle();
 
-    final chip = tester.getRect(find.byKey(const ValueKey('folder-chip-car')));
-    final label = tester.getRect(find.text(folder.name));
-    final menu = tester.getRect(find.byTooltip('Opcje folderu: Samochód'));
-
-    expect(chip.contains(label.center), isTrue);
-    expect(chip.contains(menu.center), isTrue);
-    expect(menu.center.dy, closeTo(label.center.dy, 1));
+    expect(find.text('Folder o tej nazwie już istnieje.'), findsOneWidget);
+    expect(saved, isFalse);
+    expect(find.byKey(const ValueKey('folder-name-field')), findsOneWidget);
   });
 
-  testWidgets('folder controls stay within a 390 pixel phone viewport', (
+  testWidgets('deleting a folder asks for confirmation and preserves notes', (
     tester,
   ) async {
-    final folders = <NoteFolder>[
+    NoteFolder? deleted;
+    final folder = NoteFolder(id: 'car', name: 'Samochód');
+    final note = NoteItem(id: 'note-1', title: 'Plan auta', folderId: 'car');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: screen(
+            folders: [folder],
+            notes: [note],
+            onDeleteFolder: (value) async => deleted = value,
+          ),
+        ),
+      ),
+    );
+    await openMore(tester);
+    await tester.tap(find.text('Zarządzaj folderami'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Opcje folderu: Samochód'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń folder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń folder').last);
+    await tester.pumpAndSettle();
+
+    expect(deleted?.id, 'car');
+    expect(note.id, 'note-1');
+    expect(note.title, 'Plan auta');
+    expect(note.folderId, 'car');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('folder filters stay in one horizontally scrollable strip', (
+    tester,
+  ) async {
+    final folders = [
       NoteFolder(id: 'work', name: 'Praca'),
-      NoteFolder(id: 'home', name: 'Dom'),
-      NoteFolder(id: 'health', name: 'Zdrowie'),
-      NoteFolder(id: 'ideas', name: 'Pomysły'),
+      NoteFolder(id: 'car', name: 'Samochód'),
     ];
     await tester.pumpWidget(
       MaterialApp(
-        home: SizedBox(
-          width: 390,
-          height: 844,
-          child: Scaffold(
-            body: RemasterNotesScreen(
-              notes: const <NoteItem>[],
-              folders: folders,
-              onNewNote: ({String? folderId}) {},
-              onOpenNote: (_) {},
-              onSave: (_) async {},
-              onDelete: (_) async {},
-              onRenameFolder: (_) async {},
-            ),
-          ),
-        ),
+        home: Scaffold(body: screen(folders: folders)),
       ),
     );
 
-    final viewport = tester.getRect(find.byType(Scaffold));
-    for (final name in folders.map((folder) => folder.name)) {
-      expect(
-        tester.getRect(find.text(name)).right,
-        lessThanOrEqualTo(viewport.right),
-      );
-    }
+    expect(find.byKey(const ValueKey('notes-filter-strip')), findsOneWidget);
+    expect(find.text('Praca'), findsOneWidget);
+    expect(find.text('Samochód'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'many folder filters do not overflow a 390 pixel phone viewport',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final folders = [
+        NoteFolder(id: 'work', name: 'Praca'),
+        NoteFolder(id: 'home', name: 'Dom'),
+        NoteFolder(id: 'health', name: 'Zdrowie'),
+        NoteFolder(id: 'ideas', name: 'Pomysły'),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: screen(folders: folders)),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('notes-filter-strip')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

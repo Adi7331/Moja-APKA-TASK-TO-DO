@@ -158,8 +158,8 @@ class NotesFilterStrip extends StatelessWidget {
         for (final folder in folders) ...[
           const SizedBox(width: 8),
           _FilterChip(
-            label: folder.name,
-            icon: Icons.folder_outlined,
+            label: folder.displayName,
+            icon: folder.emoji == null ? Icons.folder_outlined : null,
             selected:
                 selection.scope == NoteLibraryScope.all &&
                 selection.folderId == folder.id,
@@ -180,11 +180,13 @@ class NotesOverflowMenu extends StatelessWidget {
   const NotesOverflowMenu({
     required this.onScopeSelected,
     this.onCreateFolder,
+    this.onManageFolders,
     super.key,
   });
 
   final ValueChanged<NoteLibraryScope> onScopeSelected;
   final VoidCallback? onCreateFolder;
+  final VoidCallback? onManageFolders;
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<_NotesMenuAction>(
@@ -200,6 +202,10 @@ class NotesOverflowMenu extends StatelessWidget {
           onScopeSelected(NoteLibraryScope.trash);
         case _NotesMenuAction.createFolder:
           onCreateFolder?.call();
+          return;
+        case _NotesMenuAction.manageFolders:
+          onManageFolders?.call();
+          return;
       }
     },
     itemBuilder: (context) => const [
@@ -230,6 +236,13 @@ class NotesOverflowMenu extends StatelessWidget {
         child: ListTile(
           leading: Icon(Icons.create_new_folder_outlined),
           title: Text('Nowy folder'),
+        ),
+      ),
+      PopupMenuItem(
+        value: _NotesMenuAction.manageFolders,
+        child: ListTile(
+          leading: Icon(Icons.folder_copy_outlined),
+          title: Text('Zarządzaj folderami'),
         ),
       ),
     ],
@@ -289,7 +302,7 @@ class NotesDesktopSidebar extends StatelessWidget {
         for (final folder in folders)
           _SidebarDestination(
             icon: Icons.folder_outlined,
-            label: folder.name,
+            label: folder.displayName,
             count: visibleFolderCount(notes: notes, folderId: folder.id),
             selected:
                 selection.scope == NoteLibraryScope.all &&
@@ -402,7 +415,7 @@ class _SidebarDestination extends StatelessWidget {
   );
 }
 
-enum _NotesMenuAction { reminders, archive, trash, createFolder }
+enum _NotesMenuAction { reminders, archive, trash, createFolder, manageFolders }
 
 class _FilterChip extends StatelessWidget {
   const _FilterChip({
