@@ -14,6 +14,10 @@ create table if not exists public.note_folders (
   unique (user_id, name)
 );
 
+alter table public.note_folders
+  add column if not exists emoji text
+  check (emoji is null or char_length(emoji) between 1 and 16);
+
 alter table public.notes
   add column if not exists folder_id uuid references public.note_folders(id) on delete set null;
 

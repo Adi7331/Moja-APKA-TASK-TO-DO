@@ -16,4 +16,26 @@ void main() {
     expect(restored.name, 'Praca');
     expect(restored.colorKey, NoteColorKey.lavender);
   });
+
+  test('folder emoji survives storage and Supabase row mapping', () {
+    final old = NoteFolder.fromStorage({'id': 'old', 'name': 'Praca'});
+    expect(old.emoji, isNull);
+    expect(
+      NoteFolder.fromSupabaseRow({'id': 'old', 'name': 'Praca'}).emoji,
+      isNull,
+    );
+
+    final folder = NoteFolder(id: 'car', name: 'Samochód', emoji: '🚗');
+    expect(NoteFolder.fromStorage(folder.toStorage()).emoji, '🚗');
+    expect(folder.toStorage()['emoji'], '🚗');
+    expect(folder.toSupabasePayload('owner')['emoji'], '🚗');
+    expect(
+      NoteFolder.fromSupabaseRow({
+        ...folder.toSupabasePayload('owner'),
+        'user_id': 'owner',
+      }).emoji,
+      '🚗',
+    );
+    expect(folder.copyWith(emoji: null).emoji, isNull);
+  });
 }

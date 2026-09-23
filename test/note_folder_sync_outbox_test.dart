@@ -13,9 +13,11 @@ void main() {
       id: 'folder-1',
       name: 'Praca',
       colorKey: NoteColorKey.blue,
+      emoji: '💼',
     );
 
     await store.enqueueUpsert(folder);
+    expect((await store.load()).single.folder.emoji, '💼');
     await store.enqueueDelete(folder);
 
     final pending = await store.load();

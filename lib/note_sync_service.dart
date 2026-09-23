@@ -17,13 +17,17 @@ class NoteSyncService {
   NoteSyncService(this._client);
   final SupabaseClient _client;
 
-  String get _userId => _client.auth.currentUser?.id ?? (throw StateError('Zaloguj się, aby synchronizować notatki.'));
+  String get _userId =>
+      _client.auth.currentUser?.id ??
+      (throw StateError('Zaloguj się, aby synchronizować notatki.'));
 
   Future<List<NoteItem>> loadNotes({bool includeTrash = false}) async {
     final query = _client.from('notes').select().eq('user_id', _userId);
     final rows = includeTrash
         ? await query.order('updated_at', ascending: false)
-        : await query.isFilter('deleted_at', null).order('updated_at', ascending: false);
+        : await query
+              .isFilter('deleted_at', null)
+              .order('updated_at', ascending: false);
     final notes = <NoteItem>[];
     for (final raw in List<Map<String, dynamic>>.from(rows)) {
       final row = Map<String, dynamic>.from(raw);
@@ -33,7 +37,9 @@ class NoteSyncService {
           .eq('note_id', row['id'])
           .order('position');
       final blocks = List<Map<String, dynamic>>.from(blockRows).map((block) {
-        final payload = Map<String, dynamic>.from(block['payload'] as Map? ?? const {});
+        final payload = Map<String, dynamic>.from(
+          block['payload'] as Map? ?? const {},
+        );
         return NoteBlock.fromJson({
           ...payload,
           'id': block['id'],
@@ -56,12 +62,12 @@ class NoteSyncService {
           .toList();
       final labels = labelIds.isEmpty
           ? <String>[]
-          : List<Map<String, dynamic>>.from(await _client
-                .from('note_labels')
-                .select('id, name')
-                .inFilter('id', labelIds))
-            .map((item) => item['name'] as String)
-            .toList();
+          : List<Map<String, dynamic>>.from(
+              await _client
+                  .from('note_labels')
+                  .select('id, name')
+                  .inFilter('id', labelIds),
+            ).map((item) => item['name'] as String).toList();
       notes.add(
         NoteItem(
           id: row['id'] as String,
@@ -80,14 +86,18 @@ class NoteSyncService {
           createdAt: _date(row['created_at']) ?? DateTime.now(),
           updatedAt: _date(row['updated_at']) ?? DateTime.now(),
           attachments: List<Map<String, dynamic>>.from(attachmentRows)
-              .map((item) => NoteAttachment(
-                    id: item['id'] as String,
-                    fileName: item['file_name'] as String? ?? 'plik',
-                    mimeType: item['mime_type'] as String? ?? 'application/octet-stream',
-                    byteSize: (item['byte_size'] as num?)?.toInt() ?? 0,
-                    storagePath: item['storage_path'] as String?,
-                    createdAt: _date(item['created_at']),
-                  ))
+              .map(
+                (item) => NoteAttachment(
+                  id: item['id'] as String,
+                  fileName: item['file_name'] as String? ?? 'plik',
+                  mimeType:
+                      item['mime_type'] as String? ??
+                      'application/octet-stream',
+                  byteSize: (item['byte_size'] as num?)?.toInt() ?? 0,
+                  storagePath: item['storage_path'] as String?,
+                  createdAt: _date(item['created_at']),
+                ),
+              )
               .toList(),
           labels: labels,
           folderId: row['folder_id'] as String?,
@@ -122,23 +132,47 @@ class NoteSyncService {
           .select('id');
       if (rows.isEmpty) throw NoteConflictException(note.id);
     }
-    await _client.from('note_blocks').delete().eq('note_id', note.id).eq('user_id', userId);
+    await _client
+        .from('note_blocks')
+        .delete()
+        .eq('note_id', note.id)
+        .eq('user_id', userId);
     if (note.blocks.isNotEmpty) {
-      await _client.from('note_blocks').insert(note.blocks.map((block) => {
-        'id': block.id,
-        'note_id': note.id,
-        'user_id': userId,
-        'block_type': block.type.name,
-        'payload': block.toJson(),
-        'position': block.position,
-      }).toList());
+      await _client
+          .from('note_blocks')
+          .insert(
+            note.blocks
+                .map(
+                  (block) => {
+                    'id': block.id,
+                    'note_id': note.id,
+                    'user_id': userId,
+                    'block_type': block.type.name,
+                    'payload': block.toJson(),
+                    'position': block.position,
+                  },
+                )
+                .toList(),
+          );
     }
-    await _client.from('note_label_links').delete().eq('note_id', note.id).eq('user_id', userId);
-    for (final label in note.labels.map((value) => value.trim()).where((value) => value.isNotEmpty).toSet()) {
-      final labelRow = await _client.from('note_labels').upsert({
-        'user_id': userId,
-        'name': label,
-      }, onConflict: 'user_id,name').select('id').single();
+    await _client
+        .from('note_label_links')
+        .delete()
+        .eq('note_id', note.id)
+        .eq('user_id', userId);
+    for (final label
+        in note.labels
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()) {
+      final labelRow = await _client
+          .from('note_labels')
+          .upsert({
+            'user_id': userId,
+            'name': label,
+          }, onConflict: 'user_id,name')
+          .select('id')
+          .single();
       await _client.from('note_label_links').insert({
         'note_id': note.id,
         'label_id': labelRow['id'],
@@ -154,19 +188,7 @@ class NoteSyncService {
         .eq('user_id', _userId)
         .order('name');
     return List<Map<String, dynamic>>.from(rows)
-        .map(
-          (row) => NoteFolder(
-            id: row['id'] as String,
-            userId: row['user_id'] as String?,
-            name: row['name'] as String? ?? 'Bez nazwy',
-            colorKey: NoteColorKey.values.firstWhere(
-              (value) => value.name == row['color_key'],
-              orElse: () => NoteColorKey.neutral,
-            ),
-            createdAt: _date(row['created_at']),
-            updatedAt: _date(row['updated_at']),
-          ),
-        )
+        .map(NoteFolder.fromSupabaseRow)
         .toList();
   }
 
@@ -188,6 +210,7 @@ class NoteSyncService {
           userId: _userId,
           name: folder.name,
           colorKey: folder.colorKey,
+          emoji: folder.emoji,
           createdAt: folder.createdAt,
           updatedAt: folder.updatedAt,
         ),
@@ -197,7 +220,11 @@ class NoteSyncService {
 
   Future<void> importLocalNotes(Iterable<NoteItem> notes) async {
     for (final note in notes) {
-      final existing = await _client.from('notes').select('id').eq('id', note.id).maybeSingle();
+      final existing = await _client
+          .from('notes')
+          .select('id')
+          .eq('id', note.id)
+          .maybeSingle();
       if (existing == null) {
         await saveNote(note.copyWith(userId: _userId), expectedRevision: null);
       }
@@ -207,7 +234,9 @@ class NoteSyncService {
   Future<NoteItem> createConflictCopy(NoteItem note) async {
     final copy = note.copyWith(
       id: newNoteId(),
-      title: note.title.isEmpty ? 'Konflikt — notatka' : 'Konflikt — ${note.title}',
+      title: note.title.isEmpty
+          ? 'Konflikt — notatka'
+          : 'Konflikt — ${note.title}',
       conflictOf: note.id,
       revision: 1,
       createdAt: DateTime.now(),
@@ -241,7 +270,11 @@ class NoteSyncService {
     if (paths.isNotEmpty) {
       await _client.storage.from('note-attachments').remove(paths);
     }
-    await _client.from('notes').delete().eq('id', note.id).eq('user_id', userId);
+    await _client
+        .from('notes')
+        .delete()
+        .eq('id', note.id)
+        .eq('user_id', userId);
   }
 
   Future<NoteSettings> loadSettings() async {
@@ -250,14 +283,15 @@ class NoteSyncService {
         .select('trash_retention_days')
         .eq('user_id', _userId)
         .maybeSingle();
-    return NoteSettings.fromJson({'trashRetentionDays': row?['trash_retention_days']});
+    return NoteSettings.fromJson({
+      'trashRetentionDays': row?['trash_retention_days'],
+    });
   }
 
   Future<void> saveSettings(NoteSettings settings) async {
-    await _client.from('note_settings').upsert(
-      settings.toSupabasePayload(_userId),
-      onConflict: 'user_id',
-    );
+    await _client
+        .from('note_settings')
+        .upsert(settings.toSupabasePayload(_userId), onConflict: 'user_id');
   }
 
   Future<NoteAttachment> uploadAttachment({
@@ -270,13 +304,21 @@ class NoteSyncService {
     if (byteSize > noteAttachmentMaxBytes) {
       throw ArgumentError('Załącznik nie może przekraczać 20 MB.');
     }
-    final safeName = attachment.fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    final path = '$userId/$noteId/${attachment.id}/$safeName';
-    await _client.storage.from('note-attachments').upload(
-      path,
-      file,
-      fileOptions: FileOptions(upsert: true, contentType: attachment.mimeType),
+    final safeName = attachment.fileName.replaceAll(
+      RegExp(r'[^A-Za-z0-9._-]'),
+      '_',
     );
+    final path = '$userId/$noteId/${attachment.id}/$safeName';
+    await _client.storage
+        .from('note-attachments')
+        .upload(
+          path,
+          file,
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: attachment.mimeType,
+          ),
+        );
     await _client.from('note_attachments').upsert({
       'id': attachment.id,
       'note_id': noteId,
@@ -316,4 +358,5 @@ class NoteSyncService {
   }
 }
 
-DateTime? _date(Object? raw) => raw is String ? DateTime.tryParse(raw)?.toLocal() : null;
+DateTime? _date(Object? raw) =>
+    raw is String ? DateTime.tryParse(raw)?.toLocal() : null;
