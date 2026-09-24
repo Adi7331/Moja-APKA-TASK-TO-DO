@@ -64,6 +64,7 @@ import 'google_calendar_service.dart';
 import 'organizer_settings.dart';
 import 'android_widget_bridge.dart';
 import 'android_widget_snapshot.dart';
+import 'costs_screen.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 
@@ -114,6 +115,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     defaultValue: 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/latest/download/update.json',
   );
   final _updateGateKey = GlobalKey<UpdateGateState>();
+  final _costsScreenKey = GlobalKey<CostsScreenState>();
   bool localMode = false;
   bool cloudMode = false;
   bool _notesCloudAvailable = false;
@@ -2589,8 +2591,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             notesContent: Builder(
               builder: (context) => _notesWorkspace(context),
             ),
+            costsContent: CostsScreen(
+              key: _costsScreenKey,
+              cloudMode: cloudMode,
+              ownerId: _costsOwnerId(),
+            ),
             onAddTask: () => _showTaskForm(context),
             onAddNote: () => _openNewRemasterNote(),
+            onAddCost: () => _costsScreenKey.currentState?.showAddChooser(),
             onOpenTask: (task) => _showTaskForm(context, task: task),
             onOpenNote: _openStartNote,
             onCompleteTask: (task) =>
@@ -2644,6 +2652,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       },
     ),
   );
+}
+
+String _costsOwnerId() {
+  try {
+    return Supabase.instance.client.auth.currentUser?.id ?? 'local-user';
+  } catch (_) {
+    // Widget tests and isolated local-mode launches may not initialize cloud.
+    return 'local-user';
+  }
 }
 
 ThemeMode _themeModeFromStorage(String? value) => switch (value) {

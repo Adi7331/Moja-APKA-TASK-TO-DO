@@ -11,7 +11,7 @@ import 'calendar_event.dart';
 import 'calendar_store.dart';
 import 'organizer_settings.dart';
 
-enum AppSpace { start, tasks, notes }
+enum AppSpace { start, tasks, notes, costs }
 
 /// Shared shell. Data and mutations remain owned by the existing application.
 class RemasterShell extends StatefulWidget {
@@ -24,8 +24,10 @@ class RemasterShell extends StatefulWidget {
     this.calendarEvents = const [],
     required this.tasksContent,
     required this.notesContent,
+    this.costsContent = const SizedBox.shrink(),
     required this.onAddTask,
     required this.onAddNote,
+    this.onAddCost,
     required this.onOpenTask,
     required this.onOpenNote,
     required this.onCompleteTask,
@@ -62,7 +64,9 @@ class RemasterShell extends StatefulWidget {
   final List<CalendarEvent> calendarEvents;
   final Widget tasksContent;
   final Widget notesContent;
+  final Widget costsContent;
   final VoidCallback onAddTask, onAddNote, onLegacy;
+  final VoidCallback? onAddCost;
   final ValueChanged<TaskItem> onOpenTask, onCompleteTask;
   final ValueChanged<TaskItem> onOpenFocus;
   final ValueChanged<NoteItem> onOpenNote;
@@ -120,6 +124,10 @@ class _RemasterShellState extends State<RemasterShell> {
       widget.onAddNote();
       return;
     }
+    if (_space == AppSpace.costs) {
+      widget.onAddCost?.call();
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -145,6 +153,15 @@ class _RemasterShellState extends State<RemasterShell> {
                 onTap: () {
                   Navigator.pop(sheet);
                   widget.onAddNote();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.payments_outlined),
+                title: const Text('Nowy koszt'),
+                subtitle: const Text('Dodaj wydatek, wpływ lub subskrypcję'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  widget.onAddCost?.call();
                 },
               ),
             ],
@@ -420,6 +437,7 @@ class _RemasterShellState extends State<RemasterShell> {
                                 _home(context),
                                 widget.tasksContent,
                                 widget.notesContent,
+                                widget.costsContent,
                               ],
                             ),
                           ),
@@ -1090,11 +1108,13 @@ String _label(AppSpace space) => switch (space) {
   AppSpace.start => 'Start',
   AppSpace.tasks => 'Zadania',
   AppSpace.notes => 'Notatki',
+  AppSpace.costs => 'Koszty',
 };
 IconData _icon(AppSpace space) => switch (space) {
   AppSpace.start => Icons.space_dashboard_outlined,
   AppSpace.tasks => Icons.check_circle_outline_rounded,
   AppSpace.notes => Icons.notes_rounded,
+  AppSpace.costs => Icons.payments_outlined,
 };
 String _greeting(DateTime now, String? name) {
   final greeting = now.hour >= 18 ? 'Dobry wieczór' : 'Dzień dobry';

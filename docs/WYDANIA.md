@@ -1,5 +1,13 @@
 # Wydania aplikacji
 
+## Wydanie 1.2.0 — Koszty
+
+Moduł Koszty pozwala zapisywać wydatki, wpływy, subskrypcje i własne kategorie. Przegląd pokazuje prognozę płatności na 90 dni, osobno otrzymane i oczekiwane wpływy, opłacone wydatki według kategorii oraz porównanie miesiąc do miesiąca. Subskrypcje mają miesięczny i roczny odpowiednik kosztu, a tryb prognozy zapisuje się lokalnie na urządzeniu.
+
+## Podgląd przebudowy Notatek
+
+Android i Windows otrzymują bibliotekę pastelowych kart, nowy edytor oraz kontekst folderów na desktopie.
+
 Notatki mają teraz czytelniejsze, stałe kolory z kontrastowym tekstem, polską datę i godzinę ostatniej zmiany oraz kolejność od najnowszych (przypięte pozostają na górze). Foldery można tworzyć i edytować, także ustawiając jedną emoji. Edytor ma widoczne `Gotowe`, które zamyka go po zapisaniu; przy błędzie pozwala ponowić zapis. Wąski ekran i duży tekst nie ściskają przycisków ani nagłówka załączników.
 
 Od wersji `1.1.1` aplikacja sprawdza plik `update.json` dołączony do najnowszego GitHub Release. Android pobiera paczkę ZIP, a następnie otwiera systemowy instalator zawartego APK.

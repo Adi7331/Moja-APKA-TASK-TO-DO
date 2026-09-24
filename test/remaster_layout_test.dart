@@ -10,8 +10,45 @@ import 'package:dzien_po_dniu/remaster_shell.dart';
 import 'package:dzien_po_dniu/remaster_theme.dart';
 import 'package:dzien_po_dniu/task_item.dart';
 import 'package:dzien_po_dniu/note_item.dart';
+import 'package:dzien_po_dniu/note_folder.dart';
+import 'package:dzien_po_dniu/remaster_notes_screen.dart';
 
 void main() {
+  Widget notesLibrary() => RemasterNotesScreen(
+    greetingName: 'Adrian',
+    notes: [
+      NoteItem(
+        id: 'week',
+        title: 'Plan na tydzień',
+        pinned: true,
+        folderId: 'work',
+        blocks: [
+          NoteBlock.text(id: 'week-text', text: 'Cele i zadania na dziś.'),
+        ],
+      ),
+      NoteItem(
+        id: 'shop',
+        title: 'Zakupy do domu',
+        folderId: 'home',
+        blocks: const [
+          NoteBlock.checklist(
+            id: 'shop-list',
+            items: [NoteChecklistItem(id: 'milk', text: 'Mleko')],
+          ),
+        ],
+      ),
+      NoteItem(id: 'ideas', title: 'Pomysły na rozwój'),
+    ],
+    folders: [
+      NoteFolder(id: 'work', name: 'Praca'),
+      NoteFolder(id: 'home', name: 'Dom'),
+    ],
+    onNewNote: ({folderId}) {},
+    onOpenNote: (_) {},
+    onSave: (_) async {},
+    onDelete: (_) async {},
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     await initializeDateFormatting('pl_PL');
@@ -58,9 +95,13 @@ void main() {
                     name: 'Adrian',
                     syncStatus: 'Lokalnie',
                     tasks: const [],
-                    notes: const [],
+                    notes: [
+                      NoteItem(id: 'week', title: 'Plan na tydzień'),
+                      NoteItem(id: 'shop', title: 'Zakupy do domu'),
+                      NoteItem(id: 'ideas', title: 'Pomysły na rozwój'),
+                    ],
                     tasksContent: const Center(child: Text('Lista zadań')),
-                    notesContent: const Center(child: Text('Lista notatek')),
+                    notesContent: notesLibrary(),
                     onAddTask: () => added++,
                     onAddNote: () {},
                     onOpenTask: (_) {},
@@ -81,6 +122,16 @@ void main() {
             );
             await tester.tap(find.byKey(const ValueKey('remaster-now')));
             expect(added, 1);
+            expect(tester.takeException(), isNull);
+            RemasterShell.select(
+              tester.element(find.byKey(const ValueKey('remaster-now'))),
+              AppSpace.notes,
+            );
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('notes-filter-strip')),
+              findsOneWidget,
+            );
             expect(tester.takeException(), isNull);
             if (scale == 1 && (size.width == 390 || size.width == 1366)) {
               await tester.pumpWidget(const SizedBox.shrink());

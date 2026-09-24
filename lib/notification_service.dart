@@ -284,6 +284,42 @@ class NotificationService {
     );
   }
 
+  Future<void> scheduleCostReminder({
+    required String id,
+    required String title,
+    required int amountCents,
+    required DateTime when,
+    required int daysBefore,
+  }) async {
+    if (!_isInitialized || !when.isAfter(DateTime.now())) return;
+    final amount = (amountCents / 100).toStringAsFixed(2).replaceAll('.', ',');
+    await _plugin.zonedSchedule(
+      id: costReminderNotificationId(id, daysBefore),
+      title: 'Zbliża się płatność: $title',
+      body: '$amount zł · płatność za $daysBefore ${daysBefore == 1 ? 'dzień' : 'dni'}',
+      scheduledDate: tz.TZDateTime.from(when, tz.local),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'cost_reminders',
+          'Przypomnienia o płatnościach',
+          channelDescription: 'Przypomnienia o nadchodzących kosztach i subskrypcjach',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'cost:$id',
+    );
+  }
+
+  Future<void> cancelCostReminders(String id) async {
+    if (!_isInitialized) return;
+    await Future.wait([
+      _plugin.cancel(id: costReminderNotificationId(id, 3)),
+      _plugin.cancel(id: costReminderNotificationId(id, 1)),
+    ]);
+  }
+
   Future<void> cancel(String taskId) async {
     if (!_isInitialized) return;
     await Future.wait([
@@ -328,6 +364,8 @@ class NotificationService {
 
 int _noteNotificationId(String noteId) => noteId.hashCode ^ 0x4e4f5445;
 int focusNotificationId(String taskId) => taskId.hashCode ^ 0x464f4355;
+int costReminderNotificationId(String id, int daysBefore) =>
+    id.hashCode ^ 0x434f5354 ^ daysBefore;
 const dailyPlanNotificationId = 0x4441494c;
 
 int dailyPlanNotificationIdForOccurrence(int occurrence) =>

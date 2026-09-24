@@ -31,10 +31,32 @@ void main() {
     expect(find.text('Dostępna aktualizacja 1.1.0'), findsOneWidget);
     expect(find.text('Aktualizuj teraz'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Zamknij informację o aktualizacji'));
+    await tester.tap(
+      find.bySemanticsLabel('Zamknij informację o aktualizacji'),
+    );
     await tester.pump();
 
     expect(find.text('Dostępna aktualizacja 1.1.0'), findsNothing);
+  });
+
+  testWidgets('renders an update notice from MaterialApp builder', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => UpdateGate(
+          currentVersion: '1.0.0',
+          platform: UpdatePlatform.android,
+          checkForUpdate: () async => release,
+          openDownload: (_) async => true,
+          child: child ?? const SizedBox.shrink(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Dostępna aktualizacja 1.1.0'), findsOneWidget);
   });
 
   testWidgets('does not show an update notice without a system download', (
