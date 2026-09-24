@@ -28,7 +28,7 @@ void RegisterDzienPoDniuProtocol() {
   const std::wstring command = L"\"" + executable + L"\" \"%1\"";
 
   SetCurrentUserRegistryValue(base_key, nullptr,
-                              L"URL:Dzień po dniu protocol");
+                              L"URL:Dni\u00F3wka protocol");
   SetCurrentUserRegistryValue(base_key, L"URL Protocol", L"");
   SetCurrentUserRegistryValue(base_key + L"\\shell\\open\\command", nullptr,
                               command);
@@ -66,7 +66,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"dzien_po_dniu", origin, size)) {
+  if (!window.Create(L"Dni\u00F3wka", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

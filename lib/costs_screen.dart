@@ -19,15 +19,93 @@ enum _CostsSection { overview, subscriptions, history }
 
 enum _NewCostKind { expense, income, subscription }
 
+class CostsSectionPicker extends StatelessWidget {
+  const CostsSectionPicker({
+    super.key,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  static const _labels = ['Przegląd', 'Subskrypcje', 'Historia'];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (largeText || constraints.maxWidth < 290) {
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var index = 0; index < _labels.length; index++)
+                ChoiceChip(
+                  label: Text(_labels[index], maxLines: 1, softWrap: false),
+                  selected: selectedIndex == index,
+                  onSelected: (_) => onSelected(index),
+                ),
+            ],
+          );
+        }
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.outline),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Row(
+              children: [
+                for (var index = 0; index < _labels.length; index++)
+                  Expanded(
+                    child: Semantics(
+                      selected: selectedIndex == index,
+                      button: true,
+                      child: Material(
+                        color: selectedIndex == index
+                            ? scheme.secondaryContainer
+                            : scheme.surface,
+                        child: InkWell(
+                          onTap: () => onSelected(index),
+                          child: SizedBox(
+                            height: 48,
+                            child: Center(
+                              child: Text(
+                                _labels[index],
+                                maxLines: 1,
+                                softWrap: false,
+                                style: Theme.of(context).textTheme.labelMedium,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class CostsScreen extends StatefulWidget {
   const CostsScreen({
     super.key,
     required this.cloudMode,
     required this.ownerId,
+    this.onSnapshotChanged,
   });
 
   final bool cloudMode;
   final String ownerId;
+  final ValueChanged<CostSnapshot>? onSnapshotChanged;
 
   @override
   State<CostsScreen> createState() => CostsScreenState();
@@ -74,6 +152,7 @@ class CostsScreenState extends State<CostsScreen> {
       _snapshot = snapshot;
       _loading = false;
     });
+    widget.onSnapshotChanged?.call(snapshot);
     if (widget.cloudMode) await _connectCloud();
   }
 
@@ -160,7 +239,10 @@ class CostsScreenState extends State<CostsScreen> {
       categories: categories.values.toList(),
     );
     await _store?.save(snapshot);
-    if (mounted) setState(() => _snapshot = snapshot);
+    if (mounted) {
+      setState(() => _snapshot = snapshot);
+      widget.onSnapshotChanged?.call(snapshot);
+    }
   }
 
   Future<void> _flushOutbox() async {
@@ -203,6 +285,7 @@ class CostsScreenState extends State<CostsScreen> {
       _snapshot = snapshot;
       _syncLabel = 'Zapisano lokalnie';
     });
+    widget.onSnapshotChanged?.call(snapshot);
     final outbox = _outbox;
     if (outbox == null) return;
     try {
@@ -704,31 +787,24 @@ class CostsScreenState extends State<CostsScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 16, 0),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          child: CostsSectionPicker(
+            selectedIndex: _section.index,
+            onSelected: (index) =>
+                setState(() => _section = _CostsSection.values[index]),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
           child: Row(
             children: [
               Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SegmentedButton<_CostsSection>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: _CostsSection.overview,
-                        label: Text('Przegląd'),
-                      ),
-                      ButtonSegment(
-                        value: _CostsSection.subscriptions,
-                        label: Text('Subskrypcje'),
-                      ),
-                      ButtonSegment(
-                        value: _CostsSection.history,
-                        label: Text('Historia'),
-                      ),
-                    ],
-                    selected: {_section},
-                    onSelectionChanged: (selection) =>
-                        setState(() => _section = selection.first),
+                child: Text(
+                  _syncLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -738,20 +814,6 @@ class CostsScreenState extends State<CostsScreen> {
                 icon: const Icon(Icons.category_outlined),
               ),
             ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              _syncLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
           ),
         ),
         Expanded(

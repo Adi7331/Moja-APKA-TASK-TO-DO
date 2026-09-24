@@ -2,6 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'calendar_event.dart';
+import 'calendar_store.dart';
+
+CalendarConnectionStatus calendarStatusForError(Object error) {
+  if (error is CalendarTransportException) {
+    if (error.statusCode == 401) return CalendarConnectionStatus.expired;
+    if (error.statusCode == 403) {
+      return CalendarConnectionStatus.permissionDenied;
+    }
+  }
+  return CalendarConnectionStatus.offline;
+}
 
 abstract interface class CalendarTransport {
   Future<Map<String, dynamic>> get(Uri uri, String accessToken);

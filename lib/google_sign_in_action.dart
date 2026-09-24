@@ -5,6 +5,29 @@ const googleCalendarReadOnlyScopes =
     'https://www.googleapis.com/auth/calendar.calendarlist.readonly '
     'https://www.googleapis.com/auth/calendar.events.readonly';
 
+/// An OAuth launch must not be completed with the provider token that was
+/// already present before Chrome opened. A fresh signed-in callback is the
+/// authoritative result; resume is only a fallback when its token changed.
+class CalendarOAuthAttempt {
+  CalendarOAuthAttempt(this.baselineProviderToken);
+
+  final String? baselineProviderToken;
+  bool _consumed = false;
+
+  bool acceptSignedInToken(String? token) => _accept(token);
+
+  bool acceptResumedToken(String? token) {
+    if (token == baselineProviderToken) return false;
+    return _accept(token);
+  }
+
+  bool _accept(String? token) {
+    if (_consumed || token == null || token.isEmpty) return false;
+    _consumed = true;
+    return true;
+  }
+}
+
 abstract interface class GoogleSignInAction {
   Future<void> start();
 

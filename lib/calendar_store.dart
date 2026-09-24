@@ -17,6 +17,7 @@ enum CalendarConnectionStatus {
   connected,
   offline,
   expired,
+  permissionDenied,
 }
 
 class CalendarStore {

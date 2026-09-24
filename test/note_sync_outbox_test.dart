@@ -42,4 +42,22 @@ void main() {
     expect(pending, hasLength(1));
     expect(pending.single.kind, NoteSyncOperationKind.delete);
   });
+
+  test('repeated offline edits retain the first cloud base revision', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = NoteSyncOutbox(await SharedPreferences.getInstance());
+    await store.enqueue(
+      NoteItem(id: 'same', title: 'First', revision: 4),
+      expectedRevision: 3,
+      includeFolderId: false,
+    );
+    await store.enqueue(
+      NoteItem(id: 'same', title: 'Latest', revision: 5),
+      expectedRevision: 4,
+      includeFolderId: false,
+    );
+    final pending = (await store.load()).single;
+    expect(pending.note.title, 'Latest');
+    expect(pending.expectedRevision, 3);
+  });
 }

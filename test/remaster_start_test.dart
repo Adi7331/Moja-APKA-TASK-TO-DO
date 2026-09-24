@@ -20,9 +20,9 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Kreacje');
       await tester.pumpAndSettle();
       expect(find.text('Wykosić trawnik'), findsNothing);
-      await tester.tap(find.text('Zadania').last);
+      await tester.tap(find.byTooltip('Zadania').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Start').last);
+      await tester.tap(find.byTooltip('Start').last);
       await tester.pumpAndSettle();
       expect(find.text('Kreacje'), findsOneWidget);
       await tester.tap(find.byTooltip('Ukończ zadanie').first);
@@ -34,7 +34,9 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('remaster is the default interface for local mode', (tester) async {
+  testWidgets('remaster is the default interface for local mode', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
@@ -43,5 +45,21 @@ void main() {
     expect(find.byType(RemasterShell), findsOneWidget);
     expect(find.byTooltip('Podgląd nowego interfejsu'), findsNothing);
     expect(find.text('Wróć do poprzedniego wyglądu'), findsNothing);
+  });
+
+  testWidgets('desktop navigation uses the Dniówka display name', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({'ui_remaster_v2': true});
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dniówka'), findsOneWidget);
+    expect(find.byKey(const ValueKey('brand-mark')), findsOneWidget);
   });
 }
