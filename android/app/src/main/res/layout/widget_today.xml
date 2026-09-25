@@ -4,29 +4,30 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="#171B22">
+    android:padding="14dp"
+    android:background="@drawable/widget_sticky_background">
     <TextView
+        android:id="@+id/widget_today_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Dzisiaj"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
+        android:textColor="@color/widget_text"
+        android:textSize="16sp"
         android:textStyle="bold" />
     <TextView
         android:id="@+id/widget_today_count"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:textColor="#AFC7FF"
-        android:textSize="13sp" />
+        android:textColor="@color/widget_accent"
+        android:textSize="12sp" />
     <TextView
         android:id="@+id/widget_today_tasks"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:ellipsize="end"
         android:maxLines="3"
-        android:textColor="#E7EAF0"
-        android:textSize="14sp" />
+        android:textColor="@color/widget_subtle"
+        android:textSize="13sp" />
 </LinearLayout>

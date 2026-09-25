@@ -179,12 +179,16 @@ class UpdateGateState extends State<UpdateGate> {
                                     : 'Aktualizuj teraz',
                               ),
                             ),
-                            IconButton(
-                              tooltip: 'Zamknij informację o aktualizacji',
-                              onPressed: _downloading
-                                  ? null
-                                  : () => setState(() => _dismissed = true),
-                              icon: const Icon(Icons.close_rounded),
+                            Semantics(
+                              label: 'Zamknij informację o aktualizacji',
+                              button: true,
+                              child: IconButton(
+                                tooltip: null,
+                                onPressed: _downloading
+                                    ? null
+                                    : () => setState(() => _dismissed = true),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
                             ),
                           ],
                         ),

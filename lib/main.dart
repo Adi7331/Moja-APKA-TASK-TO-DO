@@ -64,6 +64,8 @@ import 'google_calendar_service.dart';
 import 'organizer_settings.dart';
 import 'android_widget_bridge.dart';
 import 'android_widget_snapshot.dart';
+import 'costs_screen.dart';
+import 'local_cost_store.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 
@@ -114,6 +116,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     defaultValue: 'https://github.com/Adi7331/Moja-APKA-TASK-TO-DO/releases/latest/download/update.json',
   );
   final _updateGateKey = GlobalKey<UpdateGateState>();
+  GlobalKey<CostsScreenState> _costsScreenKey = GlobalKey<CostsScreenState>();
+  String? _costsOwnerForKey;
+  CostSnapshot _costSnapshot = const CostSnapshot();
   bool localMode = false;
   bool cloudMode = false;
   bool _notesCloudAvailable = false;
@@ -159,6 +164,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       CalendarConnectionStatus.disconnected;
   String? _calendarAccessToken;
   bool _calendarAuthorizationPending = false;
+  CalendarOAuthAttempt? _calendarOAuthAttempt;
   final _androidWidgetBridge = AndroidWidgetBridge();
   String? _selectedAndroidWidgetNoteId;
   List<GoogleCalendarInfo> _availableCalendars = const [];
@@ -274,7 +280,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       _authSubscription = auth.onAuthStateChange.listen((state) {
         if (_calendarAuthorizationPending &&
-            state.session?.providerToken?.isNotEmpty == true) {
+            state.event == AuthChangeEvent.signedIn &&
+            _calendarOAuthAttempt?.acceptSignedInToken(
+                  state.session?.providerToken,
+                ) ==
+                true) {
           unawaited(_finishCalendarConnection(state.session!.providerToken));
         }
         if (state.session != null && !cloudMode) {
@@ -299,7 +309,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     unawaited(_refreshNotificationPermissionStatus());
     if (!_calendarAuthorizationPending) return;
     final token = Supabase.instance.client.auth.currentSession?.providerToken;
-    if (token?.isNotEmpty == true) {
+    if (_calendarOAuthAttempt?.acceptResumedToken(token) == true) {
       unawaited(_finishCalendarConnection(token));
     }
   }
@@ -656,11 +666,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   CalendarConnectionStatus _calendarStatusForError(Object error) {
-    if (error is CalendarTransportException &&
-        (error.statusCode == 401 || error.statusCode == 403)) {
-      return CalendarConnectionStatus.expired;
-    }
-    return CalendarConnectionStatus.offline;
+    return calendarStatusForError(error);
   }
 
   Future<void> _startCalendarConnection() async {
@@ -668,12 +674,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _showSuccessNotice('Zaloguj się, aby połączyć Google Calendar.');
       return;
     }
+    if (_calendarAuthorizationPending) return;
+    _calendarOAuthAttempt = CalendarOAuthAttempt(
+      Supabase.instance.client.auth.currentSession?.providerToken,
+    );
     if (mounted) setState(() => _calendarAuthorizationPending = true);
     await _setCalendarStatus(CalendarConnectionStatus.connecting);
     try {
       await SupabaseCalendarConnectionAction(Supabase.instance.client).start();
     } catch (_) {
       await _setCalendarStatus(CalendarConnectionStatus.disconnected);
+      _calendarOAuthAttempt = null;
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
         'Nie udało się otworzyć połączenia z Google Calendar.',
@@ -683,6 +694,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _finishCalendarConnection(String? providerToken) async {
     if (providerToken == null || providerToken.isEmpty) {
+      _calendarOAuthAttempt = null;
       await _setCalendarStatus(CalendarConnectionStatus.disconnected);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
@@ -703,6 +715,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (!mounted) return;
       await _chooseCalendars(_availableCalendars);
       await _setCalendarStatus(CalendarConnectionStatus.connected);
+      _calendarOAuthAttempt = null;
       if (mounted) setState(() => _calendarAuthorizationPending = false);
     } catch (error) {
       final status = _calendarStatusForError(error);
@@ -711,6 +724,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await _clearCalendarCredentials();
       }
       await _setCalendarStatus(status);
+      _calendarOAuthAttempt = null;
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice('Nie udało się pobrać listy kalendarzy.');
     }
@@ -1346,8 +1360,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() {
         cloudMode = true;
-        _syncStatus = 'Zsynchronizowano';
+        _syncStatus = 'Synchronizowanie…';
       });
+      await _refreshSyncStatusFromOutboxes();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -1405,6 +1420,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
         await outbox.remove(operation.id);
       } on NoteConflictException {
+        if (operation.note.deletedAt != null) {
+          try {
+            await _resolveTrashedNoteConflict(operation.note);
+            await outbox.remove(operation.id);
+            continue;
+          } catch (_) {
+            // Keep the tombstone queued so a later retry cannot resurrect it.
+            break;
+          }
+        }
         final conflict = await _noteSync.createConflictCopy(operation.note);
         await outbox.remove(operation.id);
         if (!mounted) continue;
@@ -1506,14 +1531,54 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _refreshCloudNotes() async {
     try {
       await _loadCloudNotes();
-      if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+      await _refreshSyncStatusFromOutboxes();
     } catch (_) {
       if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
     }
   }
 
+  Future<void> _resolveTrashedNoteConflict(NoteItem tombstone) async {
+    final remote = (await _noteSync.loadNotes(includeTrash: true))
+        .where((item) => item.id == tombstone.id)
+        .firstOrNull;
+    if (remote == null) {
+      if (mounted) {
+        setState(() => notes.removeWhere((item) => item.id == tombstone.id));
+      }
+    } else {
+      final resolved = remote.deletedAt != null
+          ? remote
+          : prepareNoteForTrash(
+              tombstone,
+              current: remote,
+              deletedAt: tombstone.deletedAt!,
+            );
+      if (remote.deletedAt == null) {
+        await _noteSync.saveNote(
+          resolved,
+          expectedRevision: remote.revision,
+          includeFolderId: _foldersCloudAvailable,
+        );
+      }
+      if (mounted) {
+        setState(() {
+          final index = notes.indexWhere((item) => item.id == tombstone.id);
+          if (index == -1) {
+            notes.add(resolved);
+          } else {
+            notes[index] = resolved;
+          }
+        });
+      }
+    }
+    await _saveLocalNotes();
+    _refreshAndroidWidgets();
+  }
+
   Future<void> _saveNote(NoteItem note) async {
-    final isNew = !notes.any((item) => item.id == note.id);
+    final current = notes.where((item) => item.id == note.id).firstOrNull;
+    final isNew = current == null;
+    note = prepareNoteForSave(note, current: current);
     if (mounted) {
       setState(() {
         final index = notes.indexWhere((item) => item.id == note.id);
@@ -1547,6 +1612,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           },
         );
       } on NoteConflictException {
+        if (note.deletedAt != null) {
+          try {
+            await _resolveTrashedNoteConflict(note);
+            await _noteSyncOutbox?.remove(note.id);
+            await _refreshSyncStatusFromOutboxes();
+          } catch (_) {
+            await _noteSyncOutbox?.enqueue(
+              note,
+              expectedRevision: note.revision - 1,
+              includeFolderId: _foldersCloudAvailable,
+            );
+            if (mounted) {
+              setState(() => _syncStatus = 'Czeka na synchronizację');
+            }
+          }
+          await NotificationService.instance.cancelNote(note.id);
+          _refreshAndroidWidgets();
+          return;
+        }
         final conflict = await _noteSync.createConflictCopy(note);
         if (mounted) {
           setState(() {
@@ -1653,9 +1737,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _deleteNote(NoteItem note) async {
-    final trashed = note.copyWith(
+    final current = notes.where((item) => item.id == note.id).firstOrNull;
+    final trashed = prepareNoteForTrash(
+      note,
+      current: current,
       deletedAt: DateTime.now(),
-      updatedAt: DateTime.now(),
     );
     await _saveNote(trashed);
   }
@@ -1880,6 +1966,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _notesMode = false;
       _syncStatus = 'Lokalnie';
       _selectedAndroidWidgetNoteId = null;
+      _costSnapshot = const CostSnapshot();
     });
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove('android_widget_selected_note_id');
@@ -2579,18 +2666,35 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           );
         }
         if (_remasterPreview) {
+          final costsOwnerId = _costsOwnerId();
+          if (_costsOwnerForKey != costsOwnerId) {
+            _costsOwnerForKey = costsOwnerId;
+            _costsScreenKey = GlobalKey<CostsScreenState>();
+            _costSnapshot = const CostSnapshot();
+          }
           return RemasterShell(
             tasks: tasks,
             notes: notes,
             calendarEvents: calendarEvents,
+            costSnapshot: _costSnapshot,
             tasksContent: Builder(
               builder: (context) => _tasksWorkspace(context),
             ),
             notesContent: Builder(
               builder: (context) => _notesWorkspace(context),
             ),
+            costsContent: CostsScreen(
+              key: _costsScreenKey,
+              cloudMode: cloudMode,
+              ownerId: costsOwnerId,
+              onSnapshotChanged: (snapshot) {
+                if (!mounted || _costsOwnerId() != costsOwnerId) return;
+                setState(() => _costSnapshot = snapshot);
+              },
+            ),
             onAddTask: () => _showTaskForm(context),
             onAddNote: () => _openNewRemasterNote(),
+            onAddCost: () => _costsScreenKey.currentState?.showAddChooser(),
             onOpenTask: (task) => _showTaskForm(context, task: task),
             onOpenNote: _openStartNote,
             onCompleteTask: (task) =>
@@ -2644,6 +2748,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       },
     ),
   );
+}
+
+String _costsOwnerId() {
+  try {
+    return Supabase.instance.client.auth.currentUser?.id ?? 'local-user';
+  } catch (_) {
+    // Widget tests and isolated local-mode launches may not initialize cloud.
+    return 'local-user';
+  }
 }
 
 ThemeMode _themeModeFromStorage(String? value) => switch (value) {

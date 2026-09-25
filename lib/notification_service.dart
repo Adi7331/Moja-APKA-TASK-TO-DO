@@ -21,7 +21,7 @@ class NotificationService {
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         windows: WindowsInitializationSettings(
-          appName: 'Dzień po dniu',
+          appName: 'Dniówka',
           appUserModelId: 'pl.dzienpodniu.taskapp',
           guid: 'b6ce9851-cad2-45c4-903a-c93e236173e6',
         ),
@@ -56,11 +56,13 @@ class NotificationService {
   /// reminders use the safe inexact fallback.
   Future<bool> requestPermissions({bool exactAlarm = false}) async {
     if (!_isInitialized) return false;
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android == null) return true;
-    final notifications = await android.requestNotificationsPermission() ??
-        false;
+    final notifications =
+        await android.requestNotificationsPermission() ?? false;
     if (!notifications) return false;
     if (exactAlarm) {
       await android.requestExactAlarmsPermission();
@@ -73,16 +75,20 @@ class NotificationService {
   /// does not provide a query API.
   Future<bool?> areNotificationsEnabled() async {
     if (!_isInitialized) return null;
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android == null) return true;
     return android.areNotificationsEnabled();
   }
 
   Future<void> openNotificationSettings() async {
     if (!_isInitialized) return;
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await android?.openAppNotificationSettings();
   }
 
@@ -91,7 +97,7 @@ class NotificationService {
     await _plugin.show(
       id: 'test'.hashCode,
       title: 'Przypomnienia działają',
-      body: 'To jest testowe powiadomienie z Dzień po dniu.',
+      body: 'To jest testowe powiadomienie z Dniówki.',
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'task_reminders',
@@ -244,9 +250,7 @@ class NotificationService {
   Future<void> cancelOverdueTaskReminders(String taskId) async {
     if (!_isInitialized) return;
     await Future.wait([
-      for (var index = 0;
-        index < overdueReminderOccurrenceCount;
-        index++)
+      for (var index = 0; index < overdueReminderOccurrenceCount; index++)
         _plugin.cancel(id: overdueReminderNotificationId(taskId, index)),
     ]);
   }
@@ -282,6 +286,44 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: 'note:$noteId',
     );
+  }
+
+  Future<void> scheduleCostReminder({
+    required String id,
+    required String title,
+    required int amountCents,
+    required DateTime when,
+    required int daysBefore,
+  }) async {
+    if (!_isInitialized || !when.isAfter(DateTime.now())) return;
+    final amount = (amountCents / 100).toStringAsFixed(2).replaceAll('.', ',');
+    await _plugin.zonedSchedule(
+      id: costReminderNotificationId(id, daysBefore),
+      title: 'Zbliża się płatność: $title',
+      body:
+          '$amount zł · płatność za $daysBefore ${daysBefore == 1 ? 'dzień' : 'dni'}',
+      scheduledDate: tz.TZDateTime.from(when, tz.local),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'cost_reminders',
+          'Przypomnienia o płatnościach',
+          channelDescription:
+              'Przypomnienia o nadchodzących kosztach i subskrypcjach',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'cost:$id',
+    );
+  }
+
+  Future<void> cancelCostReminders(String id) async {
+    if (!_isInitialized) return;
+    await Future.wait([
+      _plugin.cancel(id: costReminderNotificationId(id, 3)),
+      _plugin.cancel(id: costReminderNotificationId(id, 1)),
+    ]);
   }
 
   Future<void> cancel(String taskId) async {
@@ -328,6 +370,8 @@ class NotificationService {
 
 int _noteNotificationId(String noteId) => noteId.hashCode ^ 0x4e4f5445;
 int focusNotificationId(String taskId) => taskId.hashCode ^ 0x464f4355;
+int costReminderNotificationId(String id, int daysBefore) =>
+    id.hashCode ^ 0x434f5354 ^ daysBefore;
 const dailyPlanNotificationId = 0x4441494c;
 
 int dailyPlanNotificationIdForOccurrence(int occurrence) =>

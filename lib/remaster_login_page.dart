@@ -119,9 +119,8 @@ class _RemasterLoginPageState extends State<RemasterLoginPage> {
               googleLoading: _googleLoading,
               emailLoading: _emailLoading,
               onGoogle: _startGoogle,
-              onEmailExpand: () => setState(
-                () => _emailExpanded = !_emailExpanded,
-              ),
+              onEmailExpand: () =>
+                  setState(() => _emailExpanded = !_emailExpanded),
               onEmailSignIn: _signInWithEmail,
               onEmailSignUp: _signUpWithEmail,
               onLocalMode: widget.onLocalMode,
@@ -131,10 +130,7 @@ class _RemasterLoginPageState extends State<RemasterLoginPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    scheme.surface,
-                    scheme.surfaceContainerLowest,
-                  ],
+                  colors: [scheme.surface, scheme.surfaceContainerLowest],
                 ),
               ),
               child: Center(
@@ -153,7 +149,11 @@ class _RemasterLoginPageState extends State<RemasterLoginPage> {
                         : SingleChildScrollView(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [welcome, const SizedBox(height: 32), form],
+                              children: [
+                                welcome,
+                                const SizedBox(height: 32),
+                                form,
+                              ],
                             ),
                           ),
                   ),
@@ -179,37 +179,28 @@ class _WelcomePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
+          Image.asset(
+            'assets/branding/dniowka-mark.png',
+            key: const ValueKey('brand-mark'),
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              Icons.radio_button_checked_rounded,
-              color: scheme.onPrimaryContainer,
-            ),
+            semanticLabel: 'Dniówka',
           ),
           const SizedBox(height: 24),
-          Text('Dzień po dniu', style: Theme.of(context).textTheme.titleLarge),
+          Text('Dniówka', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           Text(
             'Mniej chaosu.\nWięcej miejsca na to, co ważne.',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  height: 1.08,
-                ),
+            style: Theme.of(context).textTheme.displaySmall
+                ?.copyWith(fontWeight: FontWeight.w700, height: 1.08),
           ),
           const SizedBox(height: 16),
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: wide ? 430 : 560),
             child: Text(
               'Zadania, notatki i Twój plan — bezpiecznie synchronizowane między urządzeniami.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    height: 1.5,
-                  ),
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
             ),
           ),
         ],
@@ -236,7 +227,11 @@ class _SignInCard extends StatelessWidget {
   final TextEditingController email, password;
   final String? error;
   final bool emailExpanded, googleLoading, emailLoading;
-  final VoidCallback onGoogle, onEmailExpand, onEmailSignIn, onEmailSignUp, onLocalMode;
+  final VoidCallback onGoogle,
+      onEmailExpand,
+      onEmailSignIn,
+      onEmailSignUp,
+      onLocalMode;
 
   @override
   Widget build(BuildContext context) {
@@ -249,7 +244,10 @@ class _SignInCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Zaloguj się', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Zaloguj się',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 8),
             Text(
               'Wybierz sposób, który jest dla Ciebie wygodny.',
@@ -325,7 +323,9 @@ class _SignInCard extends StatelessWidget {
                             style: FilledButton.styleFrom(
                               minimumSize: const Size.fromHeight(48),
                             ),
-                            child: Text(emailLoading ? 'Logowanie…' : 'Zaloguj e-mail'),
+                            child: Text(
+                              emailLoading ? 'Logowanie…' : 'Zaloguj e-mail',
+                            ),
                           ),
                           TextButton(
                             onPressed: emailLoading ? null : onEmailSignUp,
@@ -340,10 +340,7 @@ class _SignInCard extends StatelessWidget {
               const SizedBox(height: 16),
               Semantics(
                 liveRegion: true,
-                child: Text(
-                  error!,
-                  style: TextStyle(color: scheme.error),
-                ),
+                child: Text(error!, style: TextStyle(color: scheme.error)),
               ),
             ],
           ],

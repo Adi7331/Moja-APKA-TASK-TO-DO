@@ -196,7 +196,9 @@ class RemasterSettingsScreen extends StatelessWidget {
                                 label: Text(
                                   calendarStatus ==
                                               CalendarConnectionStatus
-                                                  .expired ||
+                                              .expired ||
+                                          calendarStatus ==
+                                              CalendarConnectionStatus.permissionDenied ||
                                           calendarStatus ==
                                               CalendarConnectionStatus.offline
                                       ? 'Połącz ponownie'
@@ -445,6 +447,7 @@ IconData _calendarStatusIcon(
     CalendarConnectionStatus.connected => Icons.event_available_rounded,
     CalendarConnectionStatus.offline => Icons.cloud_off_rounded,
     CalendarConnectionStatus.expired => Icons.lock_clock_outlined,
+    CalendarConnectionStatus.permissionDenied => Icons.gpp_bad_outlined,
     CalendarConnectionStatus.disconnected => Icons.event_outlined,
     CalendarConnectionStatus.connecting => Icons.sync_rounded,
   };
@@ -461,6 +464,7 @@ String _calendarStatusTitle(
     CalendarConnectionStatus.connected => 'Kalendarz połączony',
     CalendarConnectionStatus.offline => 'Kalendarz offline',
     CalendarConnectionStatus.expired => 'Połączenie z Calendar wygasło',
+    CalendarConnectionStatus.permissionDenied => 'Brak dostępu do Google Calendar',
     CalendarConnectionStatus.disconnected => 'Kalendarz nie jest połączony',
     CalendarConnectionStatus.connecting => 'Łączenie z Google Calendar…',
   };
@@ -482,6 +486,7 @@ String _calendarStatusDescription(
           ? 'Pokazuję $cachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
           : 'Brak połączenia z Google. Połącz ponownie, aby pobrać wydarzenia.',
     CalendarConnectionStatus.expired => 'Google wymaga ponownego połączenia. Zapisane wydarzenia pozostają na tym urządzeniu.',
+    CalendarConnectionStatus.permissionDenied => 'Google odmówił dostępu. Sprawdź zgodę na odczyt kalendarzy i wydarzeń oraz konfigurację Calendar API. Zapisane wydarzenia pozostają na urządzeniu.',
     CalendarConnectionStatus.disconnected =>
       cachedEventCount > 0
           ? 'Masz $cachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'

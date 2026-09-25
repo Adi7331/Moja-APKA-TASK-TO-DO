@@ -3,6 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dzien_po_dniu/google_sign_in_action.dart';
 
 void main() {
+  test('calendar reconnect ignores the provider token from the old session', () {
+    final attempt = CalendarOAuthAttempt('stale-token');
+
+    expect(attempt.acceptResumedToken('stale-token'), isFalse);
+    expect(attempt.acceptResumedToken('new-token'), isTrue);
+    expect(attempt.acceptResumedToken('new-token'), isFalse);
+  });
+
+  test('calendar reconnect accepts one new sign-in callback', () {
+    final attempt = CalendarOAuthAttempt('stale-token');
+
+    expect(attempt.acceptSignedInToken('stale-token'), isTrue);
+    expect(attempt.acceptSignedInToken('stale-token'), isFalse);
+  });
+
   test('starts Google OAuth with the fixed application callback', () async {
     final calls = <String>[];
     final action = GoogleSignInAction.forTesting((redirectTo) async {

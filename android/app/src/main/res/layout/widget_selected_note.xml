@@ -4,16 +4,27 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="#202631">
+    android:padding="14dp"
+    android:background="@drawable/widget_sticky_background">
+    <TextView
+        android:id="@+id/widget_note_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="NOTATKA"
+        android:textAllCaps="true"
+        android:letterSpacing="0.12"
+        android:textColor="@color/widget_accent"
+        android:textSize="10sp"
+        android:textStyle="bold" />
     <TextView
         android:id="@+id/widget_note_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
         android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="#FFFFFF"
-        android:textSize="17sp"
+        android:maxLines="2"
+        android:textColor="@color/widget_text"
+        android:textSize="16sp"
         android:textStyle="bold" />
     <TextView
         android:id="@+id/widget_note_preview"
@@ -22,6 +33,6 @@
         android:layout_marginTop="8dp"
         android:ellipsize="end"
         android:maxLines="5"
-        android:textColor="#E7EAF0"
-        android:textSize="14sp" />
+        android:textColor="@color/widget_subtle"
+        android:textSize="13sp" />
 </LinearLayout>

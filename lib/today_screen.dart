@@ -183,7 +183,7 @@ class _DesktopNavigation extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Dzień po dniu',
+                    'Dniówka',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall
@@ -767,29 +767,29 @@ class _SyncIndicator extends StatelessWidget {
 
 class _HeaderMenuAction {
   const _HeaderMenuAction.view(this.view)
-      : opensWeek = false,
-        opensNotes = false,
-        signsOut = false;
+    : opensWeek = false,
+      opensNotes = false,
+      signsOut = false;
   const _HeaderMenuAction.week()
-      : view = null,
-        opensWeek = true,
-        opensNotes = false,
-        signsOut = false;
+    : view = null,
+      opensWeek = true,
+      opensNotes = false,
+      signsOut = false;
   const _HeaderMenuAction.notes()
-      : view = null,
-        opensWeek = false,
-        opensNotes = true,
-        signsOut = false;
+    : view = null,
+      opensWeek = false,
+      opensNotes = true,
+      signsOut = false;
   const _HeaderMenuAction.signOut()
-      : view = null,
-        opensWeek = false,
-        opensNotes = false,
-        signsOut = true;
+    : view = null,
+      opensWeek = false,
+      opensNotes = false,
+      signsOut = true;
   const _HeaderMenuAction.settings()
-      : view = null,
-        opensWeek = false,
-        opensNotes = false,
-        signsOut = false;
+    : view = null,
+      opensWeek = false,
+      opensNotes = false,
+      signsOut = false;
 
   final TaskView? view;
   final bool opensWeek;
@@ -921,7 +921,9 @@ class _FocusCard extends StatelessWidget {
     final isEmpty = task == null;
     return Semantics(
       button: true,
-      label: isEmpty ? 'Dodaj pierwsze zadanie' : 'Otwórz tryb skupienia: $text',
+      label: isEmpty
+          ? 'Dodaj pierwsze zadanie'
+          : 'Otwórz tryb skupienia: $text',
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -933,7 +935,9 @@ class _FocusCard extends StatelessWidget {
             ],
           ),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: .45)),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: .45),
+          ),
         ),
         child: Material(
           color: Colors.transparent,
@@ -956,31 +960,42 @@ class _FocusCard extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.center_focus_strong, size: 16, color: scheme.onSecondaryContainer),
+                            Icon(
+                              Icons.center_focus_strong,
+                              size: 16,
+                              color: scheme.onSecondaryContainer,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               'TERAZ',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onSecondaryContainer,
-                              ),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSecondaryContainer,
+                                  ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 7),
                         Text(
                           text,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSecondaryContainer,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSecondaryContainer,
+                              ),
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          isEmpty ? 'Zacznij spokojnie od małego kroku.' : 'Najbliższy termin w Twoim planie.',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSecondaryContainer.withValues(alpha: .82),
-                          ),
+                          isEmpty
+                              ? 'Zacznij spokojnie od małego kroku.'
+                              : 'Najbliższy termin w Twoim planie.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: scheme.onSecondaryContainer.withValues(
+                                  alpha: .82,
+                                ),
+                              ),
                         ),
                       ],
                     ),
@@ -989,13 +1004,17 @@ class _FocusCard extends StatelessWidget {
                     width: 48,
                     height: 48,
                     child: IconButton.filled(
-                      tooltip: isEmpty ? 'Dodaj pierwsze zadanie' : 'Otwórz tryb skupienia',
+                      tooltip: isEmpty
+                          ? 'Dodaj pierwsze zadanie'
+                          : 'Otwórz tryb skupienia',
                       onPressed: onOpen,
                       style: IconButton.styleFrom(
                         backgroundColor: scheme.primary,
                         foregroundColor: scheme.onPrimary,
                       ),
-                      icon: Icon(isEmpty ? Icons.add_task : Icons.arrow_forward),
+                      icon: Icon(
+                        isEmpty ? Icons.add_task : Icons.arrow_forward,
+                      ),
                     ),
                   ),
                 ],

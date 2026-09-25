@@ -10,8 +10,11 @@ import 'suggestion_engine.dart';
 import 'calendar_event.dart';
 import 'calendar_store.dart';
 import 'organizer_settings.dart';
+import 'local_cost_store.dart';
+import 'start_cost_card.dart';
+import 'app_navigation_icon.dart';
 
-enum AppSpace { start, tasks, notes }
+enum AppSpace { start, tasks, notes, costs }
 
 /// Shared shell. Data and mutations remain owned by the existing application.
 class RemasterShell extends StatefulWidget {
@@ -24,8 +27,11 @@ class RemasterShell extends StatefulWidget {
     this.calendarEvents = const [],
     required this.tasksContent,
     required this.notesContent,
+    this.costsContent = const SizedBox.shrink(),
+    this.costSnapshot = const CostSnapshot(),
     required this.onAddTask,
     required this.onAddNote,
+    this.onAddCost,
     required this.onOpenTask,
     required this.onOpenNote,
     required this.onCompleteTask,
@@ -62,7 +68,10 @@ class RemasterShell extends StatefulWidget {
   final List<CalendarEvent> calendarEvents;
   final Widget tasksContent;
   final Widget notesContent;
+  final Widget costsContent;
+  final CostSnapshot costSnapshot;
   final VoidCallback onAddTask, onAddNote, onLegacy;
+  final VoidCallback? onAddCost;
   final ValueChanged<TaskItem> onOpenTask, onCompleteTask;
   final ValueChanged<TaskItem> onOpenFocus;
   final ValueChanged<NoteItem> onOpenNote;
@@ -120,6 +129,10 @@ class _RemasterShellState extends State<RemasterShell> {
       widget.onAddNote();
       return;
     }
+    if (_space == AppSpace.costs) {
+      widget.onAddCost?.call();
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -145,6 +158,15 @@ class _RemasterShellState extends State<RemasterShell> {
                 onTap: () {
                   Navigator.pop(sheet);
                   widget.onAddNote();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.payments_outlined),
+                title: const Text('Nowy koszt'),
+                subtitle: const Text('Dodaj wydatek, wpływ lub subskrypcję'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  widget.onAddCost?.call();
                 },
               ),
             ],
@@ -278,14 +300,17 @@ class _RemasterShellState extends State<RemasterShell> {
                               child: expanded
                                   ? Row(
                                       children: [
-                                        const Icon(
-                                          Icons.radio_button_checked_rounded,
-                                          size: 25,
+                                        Image.asset(
+                                          'assets/branding/dniowka-mark.png',
+                                          key: const ValueKey('brand-mark'),
+                                          width: 32,
+                                          height: 32,
+                                          semanticLabel: 'Dniówka',
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
-                                            'Dzień po dniu',
+                                            'Dniówka',
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .titleSmall,
@@ -293,9 +318,12 @@ class _RemasterShellState extends State<RemasterShell> {
                                         ),
                                       ],
                                     )
-                                  : const Icon(
-                                      Icons.radio_button_checked_rounded,
-                                      size: 25,
+                                  : Image.asset(
+                                      'assets/branding/dniowka-mark.png',
+                                      key: const ValueKey('brand-mark'),
+                                      width: 32,
+                                      height: 32,
+                                      semanticLabel: 'Dniówka',
                                     ),
                             ),
                             Expanded(
@@ -310,7 +338,8 @@ class _RemasterShellState extends State<RemasterShell> {
                                         ),
                                         child: _NavItem(
                                           label: _label(space),
-                                          icon: _icon(space),
+                                          navigationSymbol: AppNavigationSymbol
+                                              .values[space.index],
                                           expanded: expanded,
                                           selected: _space == space,
                                           onTap: () => _select(space),
@@ -420,6 +449,7 @@ class _RemasterShellState extends State<RemasterShell> {
                                 _home(context),
                                 widget.tasksContent,
                                 widget.notesContent,
+                                widget.costsContent,
                               ],
                             ),
                           ),
@@ -430,18 +460,7 @@ class _RemasterShellState extends State<RemasterShell> {
                 ),
               ),
               bottomNavigationBar: compact
-                  ? NavigationBar(
-                      selectedIndex: _space.index,
-                      onDestinationSelected: (value) =>
-                          _select(AppSpace.values[value]),
-                      destinations: [
-                        for (final space in AppSpace.values)
-                          NavigationDestination(
-                            icon: Icon(_icon(space)),
-                            label: _label(space),
-                          ),
-                      ],
-                    )
+                  ? RemasterBottomBar(selected: _space, onSelected: _select)
                   : null,
               floatingActionButton: FloatingActionButton(
                 tooltip: 'Dodaj',
@@ -640,6 +659,10 @@ class _RemasterShellState extends State<RemasterShell> {
                 ),
           ],
         );
+        final costCard = StartCostCard(
+          snapshot: widget.costSnapshot,
+          onOpenCosts: () => _select(AppSpace.costs),
+        );
         return SingleChildScrollView(
           controller: _scroll,
           padding: EdgeInsets.fromLTRB(
@@ -795,7 +818,19 @@ class _RemasterShellState extends State<RemasterShell> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 3, child: plan),
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              plan,
+                              if (query.isEmpty) ...[
+                                const SizedBox(height: 24),
+                                costCard,
+                              ],
+                            ],
+                          ),
+                        ),
                         const SizedBox(width: 24),
                         Expanded(flex: 2, child: noteCards),
                       ],
@@ -803,6 +838,10 @@ class _RemasterShellState extends State<RemasterShell> {
                   else ...[
                     plan,
                     const SizedBox(height: 24),
+                    if (query.isEmpty) ...[
+                      costCard,
+                      const SizedBox(height: 24),
+                    ],
                     noteCards,
                   ],
                 ],
@@ -869,18 +908,30 @@ class _NextCalendarEvent extends StatelessWidget {
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
-    required this.icon,
+    this.icon,
+    this.navigationSymbol,
     required this.expanded,
     required this.selected,
     required this.onTap,
-  });
+  }) : assert(icon != null || navigationSymbol != null);
   final String label;
-  final IconData icon;
+  final IconData? icon;
+  final AppNavigationSymbol? navigationSymbol;
   final bool expanded, selected;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final iconColor = selected
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
+    Widget mark() => navigationSymbol != null
+        ? AppNavigationIcon(
+            symbol: navigationSymbol!,
+            color: iconColor,
+            selected: selected,
+          )
+        : Icon(icon, color: iconColor);
     return Tooltip(
       message: label,
       child: Semantics(
@@ -898,12 +949,7 @@ class _NavItem extends StatelessWidget {
               child: expanded
                   ? Row(
                       children: [
-                        Icon(
-                          icon,
-                          color: selected
-                              ? scheme.onPrimaryContainer
-                              : scheme.onSurfaceVariant,
-                        ),
+                        mark(),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -920,13 +966,7 @@ class _NavItem extends StatelessWidget {
                         ),
                       ],
                     )
-                  : Icon(
-                      icon,
-                      semanticLabel: label,
-                      color: selected
-                          ? scheme.onPrimaryContainer
-                          : scheme.onSurfaceVariant,
-                    ),
+                  : mark(),
             ),
           ),
         ),
@@ -1090,12 +1130,83 @@ String _label(AppSpace space) => switch (space) {
   AppSpace.start => 'Start',
   AppSpace.tasks => 'Zadania',
   AppSpace.notes => 'Notatki',
+  AppSpace.costs => 'Koszty',
 };
-IconData _icon(AppSpace space) => switch (space) {
-  AppSpace.start => Icons.space_dashboard_outlined,
-  AppSpace.tasks => Icons.check_circle_outline_rounded,
-  AppSpace.notes => Icons.notes_rounded,
-};
+
+/// Four compact destinations inspired by the supplied pill navigation.
+/// Labels stay available to accessibility services and long-press tooltips.
+class RemasterBottomBar extends StatelessWidget {
+  const RemasterBottomBar({
+    super.key,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final AppSpace selected;
+  final ValueChanged<AppSpace> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+        child: Material(
+          color: scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(32),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            height: 64,
+            child: Row(
+              children: [
+                for (final space in AppSpace.values)
+                  Expanded(
+                    child: Semantics(
+                      label: _label(space),
+                      button: true,
+                      selected: selected == space,
+                      child: Tooltip(
+                        message: _label(space),
+                        child: InkWell(
+                          excludeFromSemantics: true,
+                          onTap: () => onSelected(space),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 56,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: selected == space
+                                      ? scheme.primary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const Spacer(),
+                              AppNavigationIcon(
+                                symbol: AppNavigationSymbol.values[space.index],
+                                selected: selected == space,
+                                color: selected == space
+                                    ? scheme.primary
+                                    : scheme.onSurfaceVariant,
+                              ),
+                              const Spacer(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 String _greeting(DateTime now, String? name) {
   final greeting = now.hour >= 18 ? 'Dobry wieczór' : 'Dzień dobry';
   return name == null || name.trim().isEmpty

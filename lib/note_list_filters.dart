@@ -48,55 +48,240 @@ class NoteListFilters extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      TextField(
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact = constraints.maxWidth < 660;
+      final searchField = TextField(
         key: const ValueKey('notes-search'),
         controller: search,
         onChanged: onQueryChanged,
         textInputAction: TextInputAction.search,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           hintText: 'Szukaj w notatkach',
-          prefixIcon: Icon(Icons.search_rounded),
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Wyczyść wyszukiwanie',
+                  onPressed: () {
+                    search.clear();
+                    onQueryChanged('');
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
         ),
-      ),
-      if (isLoading ||
-          (syncStatus != null && syncStatus!.trim().isNotEmpty)) ...[
-        const SizedBox(height: 8),
-        _SyncStatus(
-          status: isLoading ? 'Ładowanie notatek…' : syncStatus!,
-          onRetry: onRetrySync,
-          isLoading: isLoading,
-        ),
-      ],
-      const SizedBox(height: 12),
-      _Composer(
-        selectedFolderId: selectedFolderId,
-        onNewNote: onNewNote,
-        onNewChecklist: onNewChecklist,
-        onNewImage: onNewImage,
-        onNewFile: onNewFile,
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        key: const ValueKey('notes-section-filter'),
-        spacing: 8,
-        runSpacing: 8,
+      );
+      final createButton = FilledButton.icon(
+        key: const ValueKey('notes-create-primary'),
+        onPressed: () => onNewNote(folderId: selectedFolderId),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Nowa notatka'),
+      );
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final entry in sections.entries)
-            ChoiceChip(
-              label: Text(entry.value),
-              selected: selectedSection == entry.key,
-              onSelected: (_) => onSectionChanged(entry.key),
+          if (compact)
+            searchField
+          else
+            Row(
+              children: [
+                Expanded(child: searchField),
+                const SizedBox(width: 12),
+                createButton,
+                const SizedBox(width: 4),
+                _MoreCreateActions(
+                  selectedFolderId: selectedFolderId,
+                  onNewChecklist: onNewChecklist,
+                  onNewImage: onNewImage,
+                  onNewFile: onNewFile,
+                ),
+              ],
             ),
+          if (isLoading ||
+              (syncStatus != null && syncStatus!.trim().isNotEmpty)) ...[
+            const SizedBox(height: 12),
+            _SyncStatus(
+              status: isLoading ? 'Ładowanie notatek…' : syncStatus!,
+              onRetry: onRetrySync,
+              isLoading: isLoading,
+            ),
+          ],
+          const SizedBox(height: 16),
+          SingleChildScrollView(
+            key: const ValueKey('notes-section-filter'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final entry in sections.entries) ...[
+                  _SectionTab(
+                    label: entry.value,
+                    selected: selectedSection == entry.key,
+                    onTap: () => onSectionChanged(entry.key),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
+          if (folderContent != null || labelContent != null) ...[
+            const SizedBox(height: 12),
+            if (folderContent != null) ...[
+              _FilterHeading(
+                icon: Icons.folder_open_outlined,
+                label: 'FOLDERY',
+              ),
+              const SizedBox(height: 6),
+              folderContent!,
+            ],
+            if (labelContent != null) ...[
+              const SizedBox(height: 10),
+              _FilterHeading(icon: Icons.sell_outlined, label: 'ETYKIETY'),
+              const SizedBox(height: 6),
+              labelContent!,
+            ],
+          ],
         ],
+      );
+    },
+  );
+}
+
+class _SectionTab extends StatelessWidget {
+  const _SectionTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Material(
+        color: selected ? scheme.secondaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selected) ...[
+                    Icon(Icons.check_rounded, size: 16, color: scheme.primary),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: selected
+                          ? scheme.onSecondaryContainer
+                          : scheme.onSurfaceVariant,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      if (folderContent != null) ...[
-        const SizedBox(height: 12),
-        folderContent!,
-      ],
-      if (labelContent != null) ...[const SizedBox(height: 12), labelContent!],
+    );
+  }
+}
+
+class _FilterHeading extends StatelessWidget {
+  const _FilterHeading({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+      const SizedBox(width: 7),
+      Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          letterSpacing: 1,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ],
+  );
+}
+
+class _MoreCreateActions extends StatelessWidget {
+  const _MoreCreateActions({
+    required this.selectedFolderId,
+    this.onNewChecklist,
+    this.onNewImage,
+    this.onNewFile,
+  });
+
+  final String? selectedFolderId;
+  final NoteListCreate? onNewChecklist;
+  final NoteListCreate? onNewImage;
+  final NoteListCreate? onNewFile;
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: 'Więcej sposobów tworzenia',
+    icon: const Icon(Icons.more_horiz_rounded),
+    onSelected: (value) {
+      switch (value) {
+        case 'checklist':
+          onNewChecklist?.call(folderId: selectedFolderId);
+          break;
+        case 'image':
+          onNewImage?.call(folderId: selectedFolderId);
+          break;
+        case 'file':
+          onNewFile?.call(folderId: selectedFolderId);
+          break;
+      }
+    },
+    itemBuilder: (context) => [
+      if (onNewChecklist != null)
+        const PopupMenuItem(
+          value: 'checklist',
+          child: ListTile(
+            leading: Icon(Icons.checklist_rounded),
+            title: Text('Nowa checklista'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      if (onNewImage != null)
+        const PopupMenuItem(
+          value: 'image',
+          child: ListTile(
+            leading: Icon(Icons.image_outlined),
+            title: Text('Dodaj zdjęcie'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      if (onNewFile != null)
+        const PopupMenuItem(
+          value: 'file',
+          child: ListTile(
+            leading: Icon(Icons.attach_file_rounded),
+            title: Text('Dodaj plik'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
     ],
   );
 }
@@ -170,69 +355,6 @@ class _SyncStatus extends StatelessWidget {
                     label: const Text('Ponów'),
                   ),
                 ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Composer extends StatelessWidget {
-  const _Composer({
-    required this.selectedFolderId,
-    required this.onNewNote,
-    required this.onNewChecklist,
-    required this.onNewImage,
-    required this.onNewFile,
-  });
-
-  final String? selectedFolderId;
-  final NoteListCreate onNewNote;
-  final NoteListCreate? onNewChecklist;
-  final NoteListCreate? onNewImage;
-  final NoteListCreate? onNewFile;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: () => onNewNote(folderId: selectedFolderId),
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 6, 8),
-          child: Row(
-            children: [
-              const Expanded(child: Text('Utwórz notatkę…')),
-              IconButton(
-                tooltip: 'Utwórz checklistę',
-                onPressed: onNewChecklist == null
-                    ? null
-                    : () => onNewChecklist!(folderId: selectedFolderId),
-                icon: const Icon(Icons.check_box_outlined),
-              ),
-              IconButton(
-                tooltip: 'Dodaj zdjęcie do notatki',
-                onPressed: onNewImage == null
-                    ? null
-                    : () => onNewImage!(folderId: selectedFolderId),
-                icon: const Icon(Icons.image_outlined),
-              ),
-              IconButton(
-                tooltip: 'Dodaj plik do notatki',
-                onPressed: onNewFile == null
-                    ? null
-                    : () => onNewFile!(folderId: selectedFolderId),
-                icon: const Icon(Icons.attach_file_rounded),
-              ),
-              IconButton(
-                tooltip: 'Utwórz notatkę',
-                onPressed: () => onNewNote(folderId: selectedFolderId),
-                icon: const Icon(Icons.add_rounded),
-              ),
             ],
           ),
         ),

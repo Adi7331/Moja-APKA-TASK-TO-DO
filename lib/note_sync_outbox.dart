@@ -71,13 +71,16 @@ class NoteSyncOutbox {
     required bool includeFolderId,
   }) async {
     final items = await load();
+    final index = items.indexWhere((item) => item.id == note.id);
+    final previous = index == -1 ? null : items[index];
     final pending = PendingNoteSync(
       id: note.id,
       note: note,
-      expectedRevision: expectedRevision,
+      expectedRevision: previous?.kind == NoteSyncOperationKind.save
+          ? previous!.expectedRevision
+          : expectedRevision,
       includeFolderId: includeFolderId,
     );
-    final index = items.indexWhere((item) => item.id == note.id);
     if (index == -1) {
       items.add(pending);
     } else {

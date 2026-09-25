@@ -18,7 +18,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Dzień po dniu'), findsOneWidget);
+    expect(find.text('Dniówka'), findsOneWidget);
+    expect(find.byKey(const ValueKey('brand-mark')), findsOneWidget);
     expect(find.text('Kontynuuj z Google'), findsOneWidget);
     expect(find.text('Tryb lokalny'), findsOneWidget);
 

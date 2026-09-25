@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Dniówka — organizer z zakładkami zadań, notatek i kosztów</title>
+  <rect width="512" height="512" rx="116" fill="#2369ED"/>
+  <!-- The warm page stack remains visible above and behind the cover. -->
+  <path d="M119 91c0-12 10-22 22-22h204c17 0 31 14 31 31v310c0 18-14 32-32 32H142c-13 0-23-10-23-23z" fill="#FFF6E7"/>
+  <path d="M140 93h195c10 0 19 8 19 18v302c0 10-9 19-19 19H140z" fill="#E8E4DE"/>
+  <!-- Three sturdy tabs, each carrying one purpose. -->
+  <path d="M349 150h76c13 0 23 10 23 23v51c0 13-10 23-23 23h-76z" fill="#BFD5FF"/>
+  <path d="M349 250h76c13 0 23 10 23 23v51c0 13-10 23-23 23h-76z" fill="#F09375"/>
+  <path d="M349 350h76c13 0 23 10 23 23v51c0 13-10 23-23 23h-76z" fill="#FFD26D"/>
+  <path d="m377 197 12 12 24-27" fill="none" stroke="#182A4D" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M375 290h48m-48 19h36" fill="none" stroke="#182A4D" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="398" cy="397" r="21" fill="none" stroke="#182A4D" stroke-width="9"/>
+  <path d="M398 383v28m-10-22h17m-17 16h17" fill="none" stroke="#182A4D" stroke-width="5" stroke-linecap="round"/>
+  <!-- Navy cover and cobalt binding have one strong silhouette at 48 px. -->
+  <path d="M84 105c0-23 18-41 41-41h197c18 0 33 15 33 33v327c0 17-14 31-31 31H125c-23 0-41-18-41-41z" fill="#172B51"/>
+  <path d="M88 105c0-23 18-41 41-41h190v391H125c-21 0-37-16-37-37z" fill="#1B315A"/>
+  <rect x="307" y="81" width="35" height="369" rx="16" fill="#3D83FF"/>
+</svg>

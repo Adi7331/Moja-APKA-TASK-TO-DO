@@ -1,7 +1,19 @@
 import 'package:dzien_po_dniu/google_calendar_service.dart';
+import 'package:dzien_po_dniu/calendar_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('forbidden Calendar response is not mislabeled as expired token', () {
+    expect(
+      calendarStatusForError(CalendarTransportException(403, 'forbidden')),
+      CalendarConnectionStatus.permissionDenied,
+    );
+    expect(
+      calendarStatusForError(CalendarTransportException(401, 'expired')),
+      CalendarConnectionStatus.expired,
+    );
+  });
+
   test('calendar service loads selectable calendars', () async {
     final transport = _FakeTransport({
       'calendarList': {
