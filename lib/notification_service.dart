@@ -1,14 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'reminder_schedule.dart';
+import 'task_item.dart';
 
 class NotificationService {
   NotificationService._();
   static final instance = NotificationService._();
   final _plugin = FlutterLocalNotificationsPlugin();
+  static const _taskDigestChannel = MethodChannel('dzien_po_dniu/task_digest');
   var _isInitialized = false;
   void Function(NotificationResponse response)? onResponse;
   NotificationResponse? _launchResponse;
@@ -110,6 +115,26 @@ class NotificationService {
     );
   }
 
+  Future<void> showTaskDigest(List<TaskItem> tasks) async {
+    if (!_isInitialized || tasks.isEmpty) return;
+    final digest = formatTaskDigest(tasks);
+    await _plugin.show(
+      id: taskDigestNotificationId(0),
+      title: digest.title,
+      body: digest.body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'task_digest',
+          'Przypomnienia o zadaniach',
+          channelDescription: 'Zbiorcze przypomnienia o zadaniach na dziś',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+      payload: 'task-digest',
+    );
+  }
+
   Future<void> scheduleDailyPlan({
     required bool enabled,
     required int hour,
@@ -154,6 +179,70 @@ class NotificationService {
     await Future.wait([
       for (var index = 0; index < dailyPlanOccurrenceCount; index++)
         _plugin.cancel(id: dailyPlanNotificationIdForOccurrence(index)),
+    ]);
+  }
+
+  /// Schedules one grouped reminder per configured interval for a bounded
+  /// rolling window. Existing notifications are replaced before rebuilding,
+  /// so changing tasks or settings cannot leave duplicate alarms behind.
+  Future<void> scheduleTaskDigest({
+    required bool enabled,
+    required int intervalMinutes,
+    required int startMinute,
+    required int endMinute,
+    required List<TaskItem> tasks,
+  }) async {
+    if (Platform.isAndroid) {
+      await _taskDigestChannel.invokeMethod<void>('schedule', {
+        'enabled': enabled,
+        'interval': intervalMinutes,
+        'start': startMinute,
+        'end': endMinute,
+      });
+      return;
+    }
+    await cancelTaskDigest();
+    if (!_isInitialized || !enabled) return;
+    final eligible = tasksForTaskDigest(tasks, now: DateTime.now());
+    if (eligible.isEmpty) return;
+    final times = taskDigestTimes(
+      now: DateTime.now(),
+      intervalMinutes: intervalMinutes,
+      startMinute: startMinute,
+      endMinute: endMinute,
+    );
+    if (times.isEmpty) return;
+    final digest = formatTaskDigest(eligible);
+    for (var index = 0; index < times.length; index++) {
+      await _plugin.zonedSchedule(
+        id: taskDigestNotificationId(index),
+        title: digest.title,
+        body: digest.body,
+        scheduledDate: tz.TZDateTime.from(times[index], tz.local),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'task_digest',
+            'Przypomnienia o zadaniach',
+            channelDescription: 'Zbiorcze przypomnienia o zadaniach na dziś',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'task-digest',
+      );
+    }
+  }
+
+  Future<void> cancelTaskDigest() async {
+    if (Platform.isAndroid) {
+      await _taskDigestChannel.invokeMethod<void>('cancel');
+      return;
+    }
+    if (!_isInitialized) return;
+    await Future.wait([
+      for (var index = 0; index < taskDigestOccurrenceCount; index++)
+        _plugin.cancel(id: taskDigestNotificationId(index)),
     ]);
   }
 
@@ -376,3 +465,5 @@ const dailyPlanNotificationId = 0x4441494c;
 
 int dailyPlanNotificationIdForOccurrence(int occurrence) =>
     dailyPlanNotificationId ^ occurrence;
+const taskDigestOccurrenceCount = 96;
+int taskDigestNotificationId(int occurrence) => 0x54444700 ^ occurrence;

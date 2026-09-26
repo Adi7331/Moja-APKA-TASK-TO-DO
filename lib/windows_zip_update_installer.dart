@@ -23,27 +23,34 @@ class WindowsZipUpdateInstaller {
     Future<void> Function(File file, String script)? writeHelper,
     Future<void> Function(String executable, List<String> arguments)?
     launchHelper,
-  }) : _download = download ?? _downloadPackage,
+    Future<bool> Function(File ready, File result, Duration timeout)?
+    waitForHelperReady,
+  }) : _downloadOverride = download,
        _applicationSupportDirectory =
            applicationSupportDirectory ?? getApplicationSupportDirectory,
        _fileExists = fileExists ?? _fileExistsOnDisk,
        _directoryWritable = directoryWritable ?? _writeDeleteProbe,
        _writeHelper = writeHelper ?? _writeHelperToDisk,
-       _launchHelper = launchHelper ?? _launchDetachedPowerShell;
+       _launchHelper = launchHelper ?? _launchDetachedPowerShell,
+       _waitForHelperReady = waitForHelperReady ?? _waitForHelperReadyOnDisk;
 
-  final Future<void> Function(Uri url, File destination) _download;
+  final Future<void> Function(Uri url, File destination)? _downloadOverride;
   final Future<Directory> Function() _applicationSupportDirectory;
   final Future<bool> Function(File file) _fileExists;
   final Future<bool> Function(Directory directory) _directoryWritable;
   final Future<void> Function(File file, String script) _writeHelper;
   final Future<void> Function(String executable, List<String> arguments)
   _launchHelper;
+  final Future<bool> Function(File ready, File result, Duration timeout)
+  _waitForHelperReady;
 
   Future<WindowsUpdateStartResult> start(
     Uri url, {
     required int parentPid,
     required String executablePath,
     bool? isWindows,
+    void Function(int receivedBytes, int? totalBytes)? onProgress,
+    Duration helperReadyTimeout = const Duration(seconds: 45),
   }) async {
     if (!(isWindows ?? Platform.isWindows)) {
       return const WindowsUpdateStartResult.failed(
@@ -89,10 +96,28 @@ class WindowsZipUpdateInstaller {
       final zipFile = File(
         '${updatesDirectory.path}${Platform.pathSeparator}dzien-po-dniu-update.zip',
       );
+      final updateId = DateTime.now().microsecondsSinceEpoch.toString();
+      final readyFile = File(
+        '${updatesDirectory.path}${Platform.pathSeparator}ready-$updateId',
+      );
+      final acknowledgementFile = File(
+        '${updatesDirectory.path}${Platform.pathSeparator}started-$updateId',
+      );
+      final resultFile = File(
+        '${updatesDirectory.path}${Platform.pathSeparator}result-$updateId.json',
+      );
+      final lastResultFile = File(
+        '${updatesDirectory.path}${Platform.pathSeparator}last-update-result.json',
+      );
       final helperFile = File(
         '${updatesDirectory.path}${Platform.pathSeparator}apply-windows-update.ps1',
       );
-      await _download(url, zipFile);
+      await zipFile.parent.create(recursive: true);
+      if (_downloadOverride != null) {
+        await _downloadOverride(url, zipFile);
+      } else {
+        await _downloadPackage(url, zipFile, onProgress: onProgress);
+      }
       await _writeHelper(helperFile, _replacementScript);
       await _launchHelper('powershell.exe', <String>[
         '-NoProfile',
@@ -108,13 +133,92 @@ class WindowsZipUpdateInstaller {
         installDirectory.path,
         '--exe-name',
         'dzien_po_dniu.exe',
+        '--ready-marker',
+        readyFile.path,
+        '--ack-marker',
+        acknowledgementFile.path,
+        '--result-file',
+        resultFile.path,
+        '--last-result-file',
+        lastResultFile.path,
       ]);
+      final ready = await _waitForHelperReady(
+        readyFile,
+        resultFile,
+        helperReadyTimeout,
+      );
+      if (!ready) {
+        final failure = await _readFailure(resultFile);
+        return WindowsUpdateStartResult.failed(
+          failure ?? 'Nie udało się przygotować plików aktualizacji przed zamknięciem aplikacji.',
+        );
+      }
       return const WindowsUpdateStartResult.started();
-    } on Object {
-      return const WindowsUpdateStartResult.failed(
-        'Nie udało się przygotować aktualizacji.',
+    } on Object catch (error) {
+      return WindowsUpdateStartResult.failed(
+        'Nie udało się przygotować aktualizacji: ${_safeError(error)}',
       );
     }
+  }
+
+  Future<String?> consumePreviousFailure() async {
+    try {
+      final support = await _applicationSupportDirectory();
+      final updates = Directory(
+        '${support.path}${Platform.pathSeparator}updates',
+      );
+      final result = File(
+        '${updates.path}${Platform.pathSeparator}last-update-result.json',
+      );
+      final seen = File(
+        '${updates.path}${Platform.pathSeparator}last-update-result-seen',
+      );
+      if (!await result.exists()) return null;
+      final value = jsonDecode(await result.readAsString());
+      if (value is! Map || value['status'] != 'failed') return null;
+      final time = value['time'] as String?;
+      if (time == null ||
+          (await seen.exists() && await seen.readAsString() == time)) {
+        return null;
+      }
+      await seen.writeAsString(time, flush: true);
+      return value['message'] as String? ??
+          'Przywrócono poprzednią wersję po błędzie aktualizacji.';
+    } on Object {
+      return null;
+    }
+  }
+
+  static Future<bool> _waitForHelperReadyOnDisk(
+    File readyFile,
+    File resultFile,
+    Duration timeout,
+  ) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (await readyFile.exists()) return true;
+      if (await resultFile.exists()) return false;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    return readyFile.exists();
+  }
+
+  static Future<String?> _readFailure(File resultFile) async {
+    try {
+      if (!await resultFile.exists()) return null;
+      final result = jsonDecode(await resultFile.readAsString());
+      if (result is Map && result['status'] == 'failed') {
+        return result['message'] as String?;
+      }
+    } on Object {
+      return null;
+    }
+    return null;
+  }
+
+  static String _safeError(Object error) {
+    final text = error.toString().replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+    return text.length > 180 ? '${text.substring(0, 180)}…' : text;
   }
 
   static bool _isGitHubReleaseZip(Uri url) =>
@@ -151,7 +255,11 @@ class WindowsZipUpdateInstaller {
     }
   }
 
-  static Future<void> _downloadPackage(Uri url, File destination) async {
+  static Future<void> _downloadPackage(
+    Uri url,
+    File destination, {
+    void Function(int receivedBytes, int? totalBytes)? onProgress,
+  }) async {
     await destination.parent.create(recursive: true);
     final client = HttpClient();
     try {
@@ -164,8 +272,21 @@ class WindowsZipUpdateInstaller {
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException('Nie udało się pobrać aktualizacji.');
       }
+      final totalBytes = response.contentLength > 0
+          ? response.contentLength
+          : null;
       final sink = destination.openWrite();
-      await response.pipe(sink);
+      var receivedBytes = 0;
+      try {
+        await for (final chunk in response) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          onProgress?.call(receivedBytes, totalBytes);
+        }
+        await sink.flush();
+      } finally {
+        await sink.close();
+      }
     } finally {
       client.close(force: true);
     }
@@ -211,8 +332,16 @@ $parentPid = $parsedParentPid
 $zip = Get-RequiredArgument '--zip'
 $installDir = Get-RequiredArgument '--install-dir'
 $exeName = Get-RequiredArgument '--exe-name'
+$readyMarker = Get-RequiredArgument '--ready-marker'
+$ackMarker = Get-RequiredArgument '--ack-marker'
+$resultFile = Get-RequiredArgument '--result-file'
+$lastResultFile = Get-RequiredArgument '--last-result-file'
 $zipPath = [System.IO.Path]::GetFullPath($zip)
 $installPath = [System.IO.Path]::GetFullPath($installDir)
+$readyPath = [System.IO.Path]::GetFullPath($readyMarker)
+$ackPath = [System.IO.Path]::GetFullPath($ackMarker)
+$resultPath = [System.IO.Path]::GetFullPath($resultFile)
+$lastResultPath = [System.IO.Path]::GetFullPath($lastResultFile)
 $parentPath = [System.IO.Directory]::GetParent($installPath).FullName
 $stagingPath = Join-Path -Path $parentPath -ChildPath ('.dzien-po-dniu-staging-' + [Guid]::NewGuid().ToString('N'))
 $backupPath = $installPath + '-previous'
@@ -220,12 +349,18 @@ $stagingCreated = $false
 $backupCreated = $false
 $replacementActivated = $false
 $activationSucceeded = $false
+function Write-UpdateResult([string]$status, [string]$message) {
+  $record = @{ status = $status; message = $message; time = [DateTimeOffset]::Now.ToString('o') } | ConvertTo-Json -Compress
+  $temporary = $resultPath + '.tmp'
+  [System.IO.File]::WriteAllText($temporary, $record, [System.Text.UTF8Encoding]::new($false))
+  Move-Item -LiteralPath $temporary -Destination $resultPath -Force
+  $lastTemporary = $lastResultPath + '.tmp'
+  [System.IO.File]::WriteAllText($lastTemporary, $record, [System.Text.UTF8Encoding]::new($false))
+  Move-Item -LiteralPath $lastTemporary -Destination $lastResultPath -Force
+}
 
 try {
-  while (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
-    Start-Sleep -Milliseconds 250
-  }
-
+  if (!(Test-Path -LiteralPath $zipPath -PathType Leaf)) { throw 'Nie znaleziono pobranego archiwum ZIP.' }
   if (!(Test-Path -LiteralPath $installPath -PathType Container)) {
     throw 'Katalog instalacji nie istnieje.'
   }
@@ -240,6 +375,11 @@ try {
   if (!(Test-Path -LiteralPath $stagedExe -PathType Leaf)) {
     throw 'Archiwum aktualizacji nie zawiera pliku wykonywalnego.'
   }
+  [System.IO.File]::WriteAllText($readyPath, 'ready', [System.Text.UTF8Encoding]::new($false))
+
+  while (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
+    Start-Sleep -Milliseconds 250
+  }
 
   Move-Item -LiteralPath $installPath -Destination $backupPath
   $backupCreated = $true
@@ -247,8 +387,15 @@ try {
   $stagingCreated = $false
   $replacementActivated = $true
 
-  Start-Process -FilePath (Join-Path -Path $installPath -ChildPath $exeName) -WorkingDirectory $installPath
+  $newProcess = Start-Process -PassThru -FilePath (Join-Path -Path $installPath -ChildPath $exeName) -WorkingDirectory $installPath -ArgumentList @('--dpp-update-ack=' + $ackPath)
+  $ackDeadline = [DateTime]::UtcNow.AddSeconds(60)
+  while (!(Test-Path -LiteralPath $ackPath) -and [DateTime]::UtcNow -lt $ackDeadline) {
+    if ($newProcess.HasExited) { throw 'Nowa wersja zamknęła się przed potwierdzeniem uruchomienia.' }
+    Start-Sleep -Milliseconds 250
+  }
+  if (!(Test-Path -LiteralPath $ackPath)) { throw 'Nowa wersja nie potwierdziła poprawnego uruchomienia.' }
   $activationSucceeded = $true
+  Write-UpdateResult 'success' 'Aktualizacja została uruchomiona.'
 }
 catch {
   if ($backupCreated -and (Test-Path -LiteralPath $backupPath)) {
@@ -262,13 +409,13 @@ catch {
       $backupCreated = $false
     }
   }
-  throw
+  Write-UpdateResult 'failed' ([string]$_.Exception.Message)
 }
 finally {
   if ($stagingCreated -and (Test-Path -LiteralPath $stagingPath)) {
     Remove-Item -LiteralPath $stagingPath -Recurse -Force
   }
-  if (Test-Path -LiteralPath $zipPath) {
+  if ($activationSucceeded -and (Test-Path -LiteralPath $zipPath)) {
     Remove-Item -LiteralPath $zipPath -Force
   }
   if ($activationSucceeded -and $backupCreated -and (Test-Path -LiteralPath $backupPath)) {

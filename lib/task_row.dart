@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'task_item.dart';
+import 'task_appearance.dart';
 import 'task_status_control.dart';
 
 class TaskRow extends StatelessWidget {
@@ -26,6 +27,8 @@ class TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final background = TaskAppearance.background(context, task.colorKey);
+    final foreground = TaskAppearance.foreground(context, task.colorKey);
     final progress = task.subtaskCount == 0
         ? null
         : task.completedSubtaskCount / task.subtaskCount;
@@ -37,131 +40,145 @@ class TaskRow extends StatelessWidget {
       child: AnimatedScale(
         scale: task.isDone ? 0.995 : 1,
         duration: const Duration(milliseconds: 120),
-        child: Material(
-          color: scheme.surfaceContainerLow,
-          child: InkWell(
-            onTap: onOpen,
-            hoverColor: scheme.primary.withValues(alpha: 0.04),
-            focusColor: scheme.primary.withValues(alpha: 0.08),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: IconButton(
-                      tooltip: task.isDone
-                          ? 'Zadanie ukończone'
-                          : 'Oznacz jako zrobione',
-                      onPressed: task.isDone ? null : onComplete,
-                      icon: Icon(
-                        task.isDone
-                            ? Icons.check_circle
-                            : Icons.circle_outlined,
-                        color: task.isDone ? scheme.primary : scheme.outline,
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: scheme.copyWith(
+              onSurface: foreground,
+              onSurfaceVariant: foreground.withValues(alpha: .8),
+            ),
+          ),
+          child: Material(
+            color: background,
+            child: InkWell(
+              onTap: onOpen,
+              hoverColor: scheme.primary.withValues(alpha: 0.04),
+              focusColor: scheme.primary.withValues(alpha: 0.08),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: IconButton(
+                        tooltip: task.isDone
+                            ? 'Zadanie ukończone'
+                            : 'Oznacz jako zrobione',
+                        onPressed: task.isDone ? null : onComplete,
+                        icon: Icon(
+                          task.isDone
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          color: task.isDone ? scheme.primary : scheme.outline,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          task.title,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                decoration: task.isDone
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
-                                color: task.isDone
-                                    ? scheme.onSurfaceVariant
-                                    : null,
-                              ),
-                        ),
-                        if (task.priority == 'high') ...[
-                          const SizedBox(height: 6),
-                          _TaskTag(
-                            label: 'Wysoki priorytet',
-                            icon: Icons.priority_high_rounded,
-                            backgroundColor: scheme.errorContainer,
-                            foregroundColor: scheme.onErrorContainer,
-                          ),
-                        ],
-                        if (task.note.isNotEmpty) ...[
-                          const SizedBox(height: 6),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            task.note,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: scheme.onSurfaceVariant),
+                            '${task.emoji?.isNotEmpty == true ? '${task.emoji} ' : ''}${task.title}',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  decoration: task.isDone
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                  color: task.isDone
+                                      ? foreground.withValues(alpha: .76)
+                                      : foreground,
+                                ),
                           ),
-                        ],
-                        const SizedBox(height: 5),
-                        Text(
-                          _metadata(),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 8),
-                        TaskStatusControl(
-                          status: task.status,
-                          onStatusSelected: onStatusSelected,
-                        ),
-                        if (progress != null) ...[
-                          const SizedBox(height: 9),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(
-                                    value: progress,
+                          if (task.priority == 'high') ...[
+                            const SizedBox(height: 6),
+                            _TaskTag(
+                              label: 'Wysoki priorytet',
+                              icon: Icons.priority_high_rounded,
+                              backgroundColor: scheme.errorContainer,
+                              foregroundColor: scheme.onErrorContainer,
+                            ),
+                          ],
+                          if (task.note.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              task.note,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: foreground.withValues(alpha: .8),
+                                  ),
+                            ),
+                          ],
+                          const SizedBox(height: 5),
+                          Text(
+                            _metadata(),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: foreground.withValues(alpha: .8),
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          TaskStatusControl(
+                            status: task.status,
+                            onStatusSelected: onStatusSelected,
+                          ),
+                          if (progress != null) ...[
+                            const SizedBox(height: 9),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: LinearProgressIndicator(
+                                      value: progress,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${task.completedSubtaskCount} z ${task.subtaskCount} kroków',
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${task.completedSubtaskCount} z ${task.subtaskCount} kroków',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  if (!task.isDone && togglePin != null)
+                    if (!task.isDone && togglePin != null)
+                      _TaskActionButton(
+                        key: ValueKey('pin-task-${task.id}'),
+                        tooltip: task.pinnedToday
+                            ? 'Odepnij z planu dnia'
+                            : 'Przypnij do planu dnia',
+                        onPressed: togglePin,
+                        icon: task.pinnedToday
+                            ? Icons.push_pin
+                            : Icons.push_pin_outlined,
+                      ),
+                    if (!task.isDone && postpone != null)
+                      _TaskActionButton(
+                        key: ValueKey('postpone-task-${task.id}'),
+                        tooltip: 'Odłóż zadanie',
+                        onPressed: postpone,
+                        icon: Icons.snooze_outlined,
+                      ),
                     _TaskActionButton(
-                      key: ValueKey('pin-task-${task.id}'),
-                      tooltip: task.pinnedToday
-                          ? 'Odepnij z planu dnia'
-                          : 'Przypnij do planu dnia',
-                      onPressed: togglePin,
-                      icon: task.pinnedToday
-                          ? Icons.push_pin
-                          : Icons.push_pin_outlined,
+                      key: ValueKey('delete-task-${task.id}'),
+                      tooltip: 'Usuń zadanie',
+                      onPressed: onDelete,
+                      icon: Icons.delete_outline,
+                      destructive: true,
                     ),
-                  if (!task.isDone && postpone != null)
-                    _TaskActionButton(
-                      key: ValueKey('postpone-task-${task.id}'),
-                      tooltip: 'Odłóż zadanie',
-                      onPressed: postpone,
-                      icon: Icons.snooze_outlined,
-                    ),
-                  _TaskActionButton(
-                    key: ValueKey('delete-task-${task.id}'),
-                    tooltip: 'Usuń zadanie',
-                    onPressed: onDelete,
-                    icon: Icons.delete_outline,
-                    destructive: true,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

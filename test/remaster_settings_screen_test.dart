@@ -9,7 +9,7 @@ void main() {
     'settings keeps appearance and sign out in one predictable view',
     (tester) async {
       tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.physicalSize = const Size(800, 1800);
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.view.resetPhysicalSize);
       ThemeMode? selected;
@@ -29,6 +29,11 @@ void main() {
 
       expect(find.text('Konto i ustawienia'), findsOneWidget);
       expect(find.text('Zsynchronizowano'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Ciemny'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Ciemny'));
       expect(selected, ThemeMode.dark);
       await tester.scrollUntilVisible(
@@ -120,15 +125,21 @@ void main() {
       ),
     );
 
-    expect(find.text('Wyłączone domyślnie — włącz, gdy tego potrzebujesz.'),
-        findsOneWidget);
+    expect(
+      find.text('Wyłączone domyślnie — włącz, gdy tego potrzebujesz.'),
+      findsOneWidget,
+    );
+    final digestToggle = find.ancestor(
+      of: find.text('Przypomnienia o zadaniach'),
+      matching: find.byType(SwitchListTile),
+    );
     await tester.scrollUntilVisible(
-      find.byType(SwitchListTile),
+      find.text('Przypomnienia o zadaniach'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.byType(SwitchListTile));
-    expect(changed?.dailyPlanEnabled, isTrue);
+    await tester.tap(digestToggle);
+    expect(changed?.taskRemindersEnabled, isTrue);
     await tester.scrollUntilVisible(
       find.text('Wyślij test'),
       300,

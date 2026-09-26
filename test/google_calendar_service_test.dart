@@ -14,6 +14,56 @@ void main() {
     );
   });
 
+  test('classifies Calendar API disabled separately from OAuth denial', () {
+    final error = CalendarTransportException.fromResponse(403, '''
+      {"error":{"errors":[{"reason":"accessNotConfigured"}],"code":403}}
+    ''');
+
+    expect(error.reason, 'accessNotConfigured');
+    expect(calendarStatusForError(error), CalendarConnectionStatus.apiDisabled);
+  });
+
+  test('classifies missing Calendar scopes and quota errors separately', () {
+    final scopes = CalendarTransportException.fromResponse(403, '''
+      {"error":{"errors":[{"reason":"insufficientPermissions"}],"code":403}}
+    ''');
+    final rateLimited = CalendarTransportException.fromResponse(403, '''
+      {"error":{"errors":[{"reason":"rateLimitExceeded"}],"code":403}}
+    ''');
+    final tooManyRequests = CalendarTransportException.fromResponse(429, '''
+      {"error":{"errors":[{"reason":"rateLimitExceeded"}],"code":429}}
+    ''');
+
+    expect(
+      calendarStatusForError(scopes),
+      CalendarConnectionStatus.missingScopes,
+    );
+    expect(
+      calendarStatusForError(rateLimited),
+      CalendarConnectionStatus.rateLimited,
+    );
+    expect(
+      calendarStatusForError(tooManyRequests),
+      CalendarConnectionStatus.rateLimited,
+    );
+  });
+
+  test(
+    'does not expose response messages or arbitrary error body in exception',
+    () {
+      final error = CalendarTransportException.fromResponse(403, '''
+      {"error":{"errors":[{"reason":"domainPolicy","message":"private account detail"}],"message":"private body"}}
+    ''');
+
+      expect(error.reason, 'domainPolicy');
+      expect(error.toString(), isNot(contains('private')));
+      expect(
+        calendarStatusForError(error),
+        CalendarConnectionStatus.accountRestricted,
+      );
+    },
+  );
+
   test('calendar service loads selectable calendars', () async {
     final transport = _FakeTransport({
       'calendarList': {

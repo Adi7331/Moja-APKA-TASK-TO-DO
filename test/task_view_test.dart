@@ -16,22 +16,42 @@ void main() {
     );
   });
 
-  test(
-    'hides completed tasks due today outside the completed view',
-    () {
-      final doneToday = TaskItem(
-        id: 'done-today',
-        title: 'Wysłane',
-        status: 'done',
-        dueAt: DateTime(2026, 9, 1, 16),
-      );
+  test('inbox includes undated tasks even when they have a category', () {
+    final categorized = TaskItem(
+      id: 'categorized-undated',
+      title: 'Pomysł z pracy',
+      status: 'todo',
+      category: 'Praca',
+      categoryId: 'work',
+    );
+    final dated = TaskItem(
+      id: 'categorized-dated',
+      title: 'Termin z pracy',
+      status: 'todo',
+      category: 'Praca',
+      categoryId: 'work',
+      dueAt: DateTime(2026, 9, 3, 9),
+    );
 
-      expect(
-        tasksForView([doneToday], TaskView.today, DateTime(2026, 9, 1)),
-        isEmpty,
-      );
-    },
-  );
+    expect(
+      tasksForView([categorized, dated], TaskView.inbox, DateTime(2026, 9, 1)),
+      [categorized],
+    );
+  });
+
+  test('hides completed tasks due today outside the completed view', () {
+    final doneToday = TaskItem(
+      id: 'done-today',
+      title: 'Wysłane',
+      status: 'done',
+      dueAt: DateTime(2026, 9, 1, 16),
+    );
+
+    expect(
+      tasksForView([doneToday], TaskView.today, DateTime(2026, 9, 1)),
+      isEmpty,
+    );
+  });
 
   test('sorts upcoming active tasks from the nearest date', () {
     final later = TaskItem(
@@ -63,12 +83,39 @@ void main() {
     );
   });
 
-  test('daily plan excludes completed pinned tasks and keeps three open tasks', () {
-    const first = TaskItem(id: 'first', title: 'Pierwsze', status: 'todo', pinnedToday: true);
-    const done = TaskItem(id: 'done', title: 'Gotowe', status: 'done', pinnedToday: true);
-    const second = TaskItem(id: 'second', title: 'Drugie', status: 'todo', pinnedToday: true);
-    const third = TaskItem(id: 'third', title: 'Trzecie', status: 'todo', pinnedToday: true);
+  test(
+    'daily plan excludes completed pinned tasks and keeps three open tasks',
+    () {
+      const first = TaskItem(
+        id: 'first',
+        title: 'Pierwsze',
+        status: 'todo',
+        pinnedToday: true,
+      );
+      const done = TaskItem(
+        id: 'done',
+        title: 'Gotowe',
+        status: 'done',
+        pinnedToday: true,
+      );
+      const second = TaskItem(
+        id: 'second',
+        title: 'Drugie',
+        status: 'todo',
+        pinnedToday: true,
+      );
+      const third = TaskItem(
+        id: 'third',
+        title: 'Trzecie',
+        status: 'todo',
+        pinnedToday: true,
+      );
 
-    expect(pinnedTodayTasks([first, done, second, third]), [first, second, third]);
-  });
+      expect(pinnedTodayTasks([first, done, second, third]), [
+        first,
+        second,
+        third,
+      ]);
+    },
+  );
 }

@@ -21,7 +21,7 @@ List<TaskItem> tasksForView(List<TaskItem> tasks, TaskView view, DateTime now) {
     TaskView.inbox =>
       tasks
           .where((task) => !task.isDone)
-          .where((task) => task.category == 'Skrzynka' && task.dueAt == null)
+          .where((task) => task.dueAt == null)
           .toList(),
     TaskView.upcoming =>
       tasks

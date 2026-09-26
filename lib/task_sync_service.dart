@@ -22,12 +22,14 @@ class TaskSyncService {
     String title, {
     String? id,
     String note = '',
-    String category = 'Skrzynka',
+    String category = 'Bez kategorii',
     String? categoryId,
     String priority = 'medium',
     DateTime? dueAt,
     DateTime? reminderAt,
     String? sourceNoteId,
+    String? emoji,
+    String? colorKey,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) {
@@ -41,11 +43,13 @@ class TaskSyncService {
           'title': title,
           'note': note,
           'category': category,
-          'category_id': ?categoryId,
+          'category_id': categoryId,
           'priority': priority,
           'due_at': dueAt?.toUtc().toIso8601String(),
           'reminder_at': reminderAt?.toUtc().toIso8601String(),
           'source_note_id': sourceNoteId,
+          'emoji': emoji,
+          'color_key': colorKey,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         })
         .select()
@@ -95,6 +99,8 @@ class TaskSyncService {
     required String priority,
     required DateTime? dueAt,
     DateTime? reminderAt,
+    String? emoji,
+    String? colorKey,
   }) => _client
       .from('tasks')
       .update({
@@ -105,6 +111,8 @@ class TaskSyncService {
         'priority': priority,
         'due_at': dueAt?.toUtc().toIso8601String(),
         'reminder_at': reminderAt?.toUtc().toIso8601String(),
+        'emoji': emoji,
+        'color_key': colorKey,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       })
       .eq('id', id);
@@ -223,8 +231,7 @@ class TaskSyncService {
   Future<void> syncSubtasks(String taskId, List<SubtaskItem> desired) async {
     final remote = await loadSubtasks(taskId);
     final remoteById = {
-      for (final row in remote)
-        row['id'] as String: SubtaskItem.fromRow(row),
+      for (final row in remote) row['id'] as String: SubtaskItem.fromRow(row),
     };
     final desiredIds = desired.map((item) => item.id).toSet();
     for (final item in remoteById.values) {

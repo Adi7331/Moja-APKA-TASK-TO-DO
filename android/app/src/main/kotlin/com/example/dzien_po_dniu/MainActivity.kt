@@ -18,8 +18,41 @@ import java.util.Locale
 import java.util.zip.ZipInputStream
 
 class MainActivity : FlutterActivity() {
+    private var taskDigestChannel: MethodChannel? = null
+    private var pendingOpenToday = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        taskDigestChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TASK_DIGEST_CHANNEL)
+        taskDigestChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "schedule" -> {
+                    val arguments = call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()
+                    TaskDigestScheduler.update(
+                        this,
+                        arguments["enabled"] as? Boolean ?: false,
+                        arguments["interval"] as? Int ?: 60,
+                        arguments["start"] as? Int ?: 540,
+                        arguments["end"] as? Int ?: 1260,
+                    )
+                    result.success(null)
+                }
+                "cancel" -> {
+                    TaskDigestScheduler.update(this, false, 60, 540, 1260)
+                    result.success(null)
+                }
+                "consumeOpenToday" -> {
+                    result.success(pendingOpenToday || intent?.getBooleanExtra("open_today", false) == true)
+                    pendingOpenToday = false
+                    intent?.removeExtra("open_today")
+                }
+                else -> result.notImplemented()
+            }
+        }
+        if (intent?.getBooleanExtra("open_today", false) == true) {
+            pendingOpenToday = true
+            intent?.removeExtra("open_today")
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, UPDATE_CHANNEL)
             .setMethodCallHandler { call, result ->
                 if (call.method != "installZip") {
@@ -52,6 +85,16 @@ class MainActivity : FlutterActivity() {
                     result.error("widgets_update_failed", error.message, null)
                 }
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_today", false)) {
+            pendingOpenToday = true
+            intent.removeExtra("open_today")
+            taskDigestChannel?.invokeMethod("openToday", null)
+        }
     }
 
     private fun updateWidgetSnapshot(arguments: Map<*, *>?) {
@@ -130,6 +173,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val UPDATE_CHANNEL = "dzien_po_dniu/update"
         const val WIDGETS_CHANNEL = "dzien_po_dniu/widgets"
+        const val TASK_DIGEST_CHANNEL = "dzien_po_dniu/task_digest"
         const val WIDGETS_PREFERENCES = "android_widgets"
         const val BUFFER_SIZE = 8192
         const val MAX_APK_BYTES = 200L * 1024L * 1024L

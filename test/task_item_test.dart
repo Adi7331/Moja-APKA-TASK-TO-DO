@@ -17,6 +17,39 @@ void main() {
     expect(task.isDone, isFalse);
   });
 
+  test('treats a task without a category id as uncategorized', () {
+    final task = TaskItem.fromRow({
+      'id': 'legacy-inbox',
+      'title': 'Stare zadanie',
+      'status': 'todo',
+      'category': 'Skrzynka',
+      'category_id': null,
+    });
+
+    expect(task.categoryId, isNull);
+    expect(task.category, 'Bez kategorii');
+  });
+
+  test('round-trips task emoji and color with local and cloud payloads', () {
+    final task = TaskItem(
+      id: 'styled-task',
+      title: 'Spacer',
+      status: 'todo',
+      category: 'Bez kategorii',
+      emoji: '🚶',
+      colorKey: 'mint',
+    );
+
+    final restored = TaskItem.fromStorage(task.toStorage());
+    final payload = task.toSupabasePayload();
+
+    expect(restored.emoji, '🚶');
+    expect(restored.colorKey, 'mint');
+    expect(payload['emoji'], '🚶');
+    expect(payload['color_key'], 'mint');
+    expect(payload, containsPair('category_id', null));
+  });
+
   test('round-trips a locally stored task including its due date', () {
     final original = TaskItem(
       id: 'local-4',
@@ -68,14 +101,23 @@ void main() {
       'completedAt': '2026-09-06T18:00:00.000',
     });
 
-    expect(restored.toStorage(), containsPair('reminderAt', '2026-09-07T08:45:00.000'));
-    expect(restored.toStorage(), containsPair('repeatRule', {
-      'unit': 'week',
-      'interval': 1,
-      'weekdays': [1, 4],
-    }));
+    expect(
+      restored.toStorage(),
+      containsPair('reminderAt', '2026-09-07T08:45:00.000'),
+    );
+    expect(
+      restored.toStorage(),
+      containsPair('repeatRule', {
+        'unit': 'week',
+        'interval': 1,
+        'weekdays': [1, 4],
+      }),
+    );
     expect(restored.toStorage(), containsPair('pinnedToday', true));
-    expect(restored.toStorage(), containsPair('completedAt', '2026-09-06T18:00:00.000'));
+    expect(
+      restored.toStorage(),
+      containsPair('completedAt', '2026-09-06T18:00:00.000'),
+    );
   });
 
   test('creates a Supabase payload using database organizer field names', () {
@@ -84,7 +126,11 @@ void main() {
       'title': 'Przegląd tygodnia',
       'status': 'done',
       'reminderAt': '2026-09-07T00:00:00.000',
-      'repeatRule': {'unit': 'week', 'interval': 1, 'weekdays': [1]},
+      'repeatRule': {
+        'unit': 'week',
+        'interval': 1,
+        'weekdays': [1],
+      },
       'pinnedToday': false,
       'completedAt': '2026-09-06T18:00:00.000',
     });
@@ -93,13 +139,20 @@ void main() {
       'title': 'Przegląd tygodnia',
       'status': 'done',
       'note': '',
-      'category': 'Skrzynka',
+      'category': 'Bez kategorii',
+      'category_id': null,
       'priority': 'medium',
       'due_at': null,
       'reminder_at': '2026-09-06T22:00:00.000Z',
-      'repeat_rule': {'unit': 'week', 'interval': 1, 'weekdays': [1]},
+      'repeat_rule': {
+        'unit': 'week',
+        'interval': 1,
+        'weekdays': [1],
+      },
       'pinned_today': false,
       'completed_at': '2026-09-06T16:00:00.000Z',
+      'emoji': null,
+      'color_key': null,
     });
   });
 

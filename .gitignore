@@ -2,6 +2,7 @@
 .superpowers/
 .worktrees/
 .dart_tool/
+android/.kotlin/
 .idea/
 .vscode/
 .packages

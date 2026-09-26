@@ -33,7 +33,7 @@
 
 ### Task 1: Task categories and visual metadata
 
-**Files:** `lib/task_item.dart`, `lib/task_editor.dart`, `lib/task_sync_service.dart`, `lib/task_view.dart`, task row/card widgets, `supabase/schema.sql` plus migration generated with Supabase CLI if installed; tests in `test/task_item_test.dart`, `test/task_editor_test.dart`, `test/task_view_test.dart`, sync/outbox tests.
+**Files:** `lib/task_item.dart`, `lib/task_editor.dart`, `lib/task_sync_service.dart`, `lib/task_view.dart`, task row/card widgets, `supabase/schema.sql`, and `supabase/task_appearance.sql`; tests in `test/task_item_test.dart`, `test/remaster_task_editor_test.dart`, `test/task_view_test.dart`, sync/outbox and migration tests.
 
 **Interfaces:** `TaskItem` and `TaskDraft` expose nullable `emoji` and `colorKey`. `categoryId` is the source of truth; user-facing label resolves to “Bez kategorii” for null.
 
@@ -41,7 +41,7 @@
 - [ ] Add failing tests for inbox filtering independent of category and for editor selection of no category.
 - [ ] Implement model/draft, explicit-null sync payload, neutral legacy defaults and six-color metadata.
 - [ ] Add editor appearance controls and apply metadata to task row, Start and weekly task cards in light/dark themes.
-- [ ] Generate a nullable-column migration, preserve RLS, run focused tests and existing model/view tests.
+- [ ] Add idempotent SQL Editor migration for nullable appearance columns, preserve existing RLS, run focused tests and existing model/view tests.
 
 ### Task 2: Google Calendar error diagnosis and connection status
 
@@ -87,3 +87,11 @@
 - [ ] Build Windows and a signed Android APK when release signing material is available; do not expose or print secret values.
 - [ ] Run an end-to-end update from current package to candidate and verify rollback by intentionally preventing first-start acknowledgement.
 - [ ] Summarize delivered platform behavior, test/build outcomes and any remaining device-only checks; do not push or publish without a separate user request.
+
+## Verification status — 2026-09-26
+
+- Implemented task `emoji`/`colorKey`, explicit-null category sync, inbox filtering, Google Calendar error-reason mapping, per-device digest settings, Android boot/time-change rescheduling, Windows tray/autostart, and the staged Windows updater.
+- `flutter analyze --no-pub`: no issues. Full `flutter test --no-pub --concurrency=1 --reporter compact`: 314 tests passed.
+- Built Windows Release and Android Release 1.2.2; APK signature verified with `apksigner` (one signer, APK Signature Scheme v2). Test artifacts are on F: under `F:\dniowka-codex-20260926`.
+- Not performed: applying the Supabase migration to the live project, live OAuth/Calendar account checks, reboot/notification checks on a physical Android device, Windows tray/sleep checks in the user's installed app, and a two-version updater/rollback run. These require remote project access or device/installation testing; do not treat them as verified.
+- No GitHub push or release was performed.
