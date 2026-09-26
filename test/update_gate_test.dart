@@ -133,7 +133,7 @@ void main() {
       await tester.tap(find.text('Aktualizuj teraz'));
       await tester.pump();
 
-      expect(find.text('Pobieranie…'), findsOneWidget);
+      expect(find.text('Aktualizuję…'), findsOneWidget);
 
       pendingStart.complete(
         const WindowsUpdateStartResult.failed(

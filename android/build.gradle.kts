@@ -5,10 +5,12 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
-        .dir("../../build")
-        .get()
+val configuredBuildRoot = System.getenv("DNIOWKA_BUILD_ROOT")
+val newBuildDir: Directory = if (configuredBuildRoot.isNullOrBlank()) {
+    rootProject.layout.buildDirectory.dir("../../build").get()
+} else {
+    rootProject.layout.dir(rootProject.provider { file(configuredBuildRoot) }).get()
+}
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {

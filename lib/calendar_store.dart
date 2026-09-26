@@ -18,6 +18,10 @@ enum CalendarConnectionStatus {
   offline,
   expired,
   permissionDenied,
+  missingScopes,
+  apiDisabled,
+  accountRestricted,
+  rateLimited,
 }
 
 class CalendarStore {

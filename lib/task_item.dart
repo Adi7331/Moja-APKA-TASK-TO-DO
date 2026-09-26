@@ -9,7 +9,7 @@ class TaskItem {
     required this.title,
     required this.status,
     this.note = '',
-    this.category = 'Skrzynka',
+    this.category = 'Bez kategorii',
     this.categoryId,
     this.priority = 'medium',
     this.dueAt,
@@ -19,59 +19,72 @@ class TaskItem {
     this.completedAt,
     this.subtasks = const [],
     this.sourceNoteId,
+    this.emoji,
+    this.colorKey,
   });
 
   factory TaskItem.fromRow(Map<String, dynamic> row) => TaskItem(
-        id: row['id'] as String,
-        title: row['title'] as String,
-        status: row['status'] as String? ?? 'todo',
-        note: row['note'] as String? ?? '',
-        category: row['category'] as String? ?? 'Skrzynka',
-        categoryId: row['category_id'] as String?,
-        priority: row['priority'] as String? ?? 'medium',
-        dueAt: row['due_at'] == null
-            ? null
-            : DateTime.tryParse(row['due_at'] as String)?.toLocal(),
-        reminderAt: row['reminder_at'] == null
-            ? null
-            : DateTime.tryParse(row['reminder_at'] as String)?.toLocal(),
-        repeatRule: _readRepeatRule(row['repeat_rule']),
-        pinnedToday: row['pinned_today'] as bool? ?? false,
-        completedAt: row['completed_at'] == null
-            ? null
-            : DateTime.tryParse(row['completed_at'] as String)?.toLocal(),
-        subtasks: (row['subtasks'] as List<dynamic>? ?? const [])
-            .map((item) => SubtaskItem.fromRow(
-                Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        sourceNoteId: row['source_note_id'] as String?,
-      );
+    id: row['id'] as String,
+    title: row['title'] as String,
+    status: row['status'] as String? ?? 'todo',
+    note: row['note'] as String? ?? '',
+    categoryId: row['category_id'] as String?,
+    category: row['category_id'] == null
+        ? 'Bez kategorii'
+        : row['category'] as String? ?? 'Bez kategorii',
+    priority: row['priority'] as String? ?? 'medium',
+    dueAt: row['due_at'] == null
+        ? null
+        : DateTime.tryParse(row['due_at'] as String)?.toLocal(),
+    reminderAt: row['reminder_at'] == null
+        ? null
+        : DateTime.tryParse(row['reminder_at'] as String)?.toLocal(),
+    repeatRule: _readRepeatRule(row['repeat_rule']),
+    pinnedToday: row['pinned_today'] as bool? ?? false,
+    completedAt: row['completed_at'] == null
+        ? null
+        : DateTime.tryParse(row['completed_at'] as String)?.toLocal(),
+    subtasks: (row['subtasks'] as List<dynamic>? ?? const [])
+        .map(
+          (item) => SubtaskItem.fromRow(Map<String, dynamic>.from(item as Map)),
+        )
+        .toList(),
+    sourceNoteId: row['source_note_id'] as String?,
+    emoji: row['emoji'] as String?,
+    colorKey: row['color_key'] as String?,
+  );
 
   factory TaskItem.fromStorage(Map<String, dynamic> stored) => TaskItem(
-        id: stored['id'] as String,
-        title: stored['title'] as String,
-        status: stored['status'] as String? ?? 'todo',
-        note: stored['note'] as String? ?? '',
-        category: stored['category'] as String? ?? 'Skrzynka',
-        categoryId: stored['categoryId'] as String?,
-        priority: stored['priority'] as String? ?? 'medium',
-        dueAt: stored['dueAt'] == null
-            ? null
-            : DateTime.tryParse(stored['dueAt'] as String),
-        reminderAt: stored['reminderAt'] == null
-            ? null
-            : DateTime.tryParse(stored['reminderAt'] as String),
-        repeatRule: _readRepeatRule(stored['repeatRule']),
-        pinnedToday: stored['pinnedToday'] as bool? ?? false,
-        completedAt: stored['completedAt'] == null
-            ? null
-            : DateTime.tryParse(stored['completedAt'] as String),
-        subtasks: (stored['subtasks'] as List<dynamic>? ?? const [])
-            .map((item) => SubtaskItem.fromStorage(
-                Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        sourceNoteId: stored['sourceNoteId'] as String?,
-      );
+    id: stored['id'] as String,
+    title: stored['title'] as String,
+    status: stored['status'] as String? ?? 'todo',
+    note: stored['note'] as String? ?? '',
+    categoryId: stored['categoryId'] as String?,
+    category: stored['categoryId'] == null
+        ? 'Bez kategorii'
+        : stored['category'] as String? ?? 'Bez kategorii',
+    priority: stored['priority'] as String? ?? 'medium',
+    dueAt: stored['dueAt'] == null
+        ? null
+        : DateTime.tryParse(stored['dueAt'] as String),
+    reminderAt: stored['reminderAt'] == null
+        ? null
+        : DateTime.tryParse(stored['reminderAt'] as String),
+    repeatRule: _readRepeatRule(stored['repeatRule']),
+    pinnedToday: stored['pinnedToday'] as bool? ?? false,
+    completedAt: stored['completedAt'] == null
+        ? null
+        : DateTime.tryParse(stored['completedAt'] as String),
+    subtasks: (stored['subtasks'] as List<dynamic>? ?? const [])
+        .map(
+          (item) =>
+              SubtaskItem.fromStorage(Map<String, dynamic>.from(item as Map)),
+        )
+        .toList(),
+    sourceNoteId: stored['sourceNoteId'] as String?,
+    emoji: stored['emoji'] as String?,
+    colorKey: stored['colorKey'] as String?,
+  );
 
   final String id;
   final String title;
@@ -87,6 +100,8 @@ class TaskItem {
   final DateTime? completedAt;
   final List<SubtaskItem> subtasks;
   final String? sourceNoteId;
+  final String? emoji;
+  final String? colorKey;
 
   bool get isDone => status == 'done';
   int get subtaskCount => subtasks.length;
@@ -107,64 +122,72 @@ class TaskItem {
     Object? completedAt = _unset,
     List<SubtaskItem>? subtasks,
     Object? sourceNoteId = _unset,
+    Object? emoji = _unset,
+    Object? colorKey = _unset,
   }) => TaskItem(
-        id: id ?? this.id,
-        title: title ?? this.title,
-        status: status ?? this.status,
-        note: note ?? this.note,
-        category: category ?? this.category,
-        categoryId: identical(categoryId, _unset)
-            ? this.categoryId
-            : categoryId as String?,
-        priority: priority ?? this.priority,
-        dueAt: identical(dueAt, _unset) ? this.dueAt : dueAt as DateTime?,
-        reminderAt: identical(reminderAt, _unset)
-            ? this.reminderAt
-            : reminderAt as DateTime?,
-        repeatRule: identical(repeatRule, _unset)
-            ? this.repeatRule
-            : repeatRule as RepeatRule?,
-        pinnedToday: pinnedToday ?? this.pinnedToday,
-        completedAt: identical(completedAt, _unset)
-            ? this.completedAt
-            : completedAt as DateTime?,
-        subtasks: subtasks ?? this.subtasks,
-        sourceNoteId: identical(sourceNoteId, _unset)
-            ? this.sourceNoteId
-            : sourceNoteId as String?,
-      );
+    id: id ?? this.id,
+    title: title ?? this.title,
+    status: status ?? this.status,
+    note: note ?? this.note,
+    category: category ?? this.category,
+    categoryId: identical(categoryId, _unset)
+        ? this.categoryId
+        : categoryId as String?,
+    priority: priority ?? this.priority,
+    dueAt: identical(dueAt, _unset) ? this.dueAt : dueAt as DateTime?,
+    reminderAt: identical(reminderAt, _unset)
+        ? this.reminderAt
+        : reminderAt as DateTime?,
+    repeatRule: identical(repeatRule, _unset)
+        ? this.repeatRule
+        : repeatRule as RepeatRule?,
+    pinnedToday: pinnedToday ?? this.pinnedToday,
+    completedAt: identical(completedAt, _unset)
+        ? this.completedAt
+        : completedAt as DateTime?,
+    subtasks: subtasks ?? this.subtasks,
+    sourceNoteId: identical(sourceNoteId, _unset)
+        ? this.sourceNoteId
+        : sourceNoteId as String?,
+    emoji: identical(emoji, _unset) ? this.emoji : emoji as String?,
+    colorKey: identical(colorKey, _unset) ? this.colorKey : colorKey as String?,
+  );
 
   Map<String, dynamic> toStorage() => {
-        'id': id,
-        'title': title,
-        'status': status,
-        'note': note,
-        'category': category,
-        'categoryId': categoryId,
-        'priority': priority,
-        'dueAt': dueAt?.toIso8601String(),
-        'reminderAt': reminderAt?.toIso8601String(),
-        'repeatRule': repeatRule?.toJson(),
-        'pinnedToday': pinnedToday,
-        'completedAt': completedAt?.toIso8601String(),
-        'subtasks': subtasks.map((step) => step.toStorage()).toList(),
-        'sourceNoteId': sourceNoteId,
-      };
+    'id': id,
+    'title': title,
+    'status': status,
+    'note': note,
+    'category': category,
+    'categoryId': categoryId,
+    'priority': priority,
+    'dueAt': dueAt?.toIso8601String(),
+    'reminderAt': reminderAt?.toIso8601String(),
+    'repeatRule': repeatRule?.toJson(),
+    'pinnedToday': pinnedToday,
+    'completedAt': completedAt?.toIso8601String(),
+    'subtasks': subtasks.map((step) => step.toStorage()).toList(),
+    'sourceNoteId': sourceNoteId,
+    'emoji': emoji,
+    'colorKey': colorKey,
+  };
 
   Map<String, dynamic> toSupabasePayload() => {
-        'title': title,
-        'status': status,
-        'note': note,
-        'category': category,
-        if (categoryId != null) 'category_id': categoryId,
-        'priority': priority,
-        'due_at': dueAt?.toUtc().toIso8601String(),
-        'reminder_at': reminderAt?.toUtc().toIso8601String(),
-        'repeat_rule': repeatRule?.toJson(),
-        'pinned_today': pinnedToday,
-        'completed_at': completedAt?.toUtc().toIso8601String(),
-        if (sourceNoteId != null) 'source_note_id': sourceNoteId,
-      };
+    'title': title,
+    'status': status,
+    'note': note,
+    'category': category,
+    'category_id': categoryId,
+    'priority': priority,
+    'due_at': dueAt?.toUtc().toIso8601String(),
+    'reminder_at': reminderAt?.toUtc().toIso8601String(),
+    'repeat_rule': repeatRule?.toJson(),
+    'pinned_today': pinnedToday,
+    'completed_at': completedAt?.toUtc().toIso8601String(),
+    if (sourceNoteId != null) 'source_note_id': sourceNoteId,
+    'emoji': emoji,
+    'color_key': colorKey,
+  };
 
   static RepeatRule? _readRepeatRule(Object? raw) {
     if (raw is! Map) return null;

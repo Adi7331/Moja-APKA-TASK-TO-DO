@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'remaster_theme.dart';
 import 'calendar_event.dart';
 import 'task_item.dart';
+import 'task_appearance.dart';
 import 'weekly_calendar.dart' show tasksByDay, weekDays;
 
 class RemasterWeeklyCalendarScreen extends StatefulWidget {
@@ -378,45 +379,61 @@ class _WeekTask extends StatelessWidget {
   final ValueChanged<TaskItem> onOpen;
   final void Function(TaskItem, DateTime) onMove;
   @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainer,
-    borderRadius: BorderRadius.circular(14),
-    child: InkWell(
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = TaskAppearance.foreground(context, task.colorKey);
+    return Material(
+      color: TaskAppearance.background(context, task.colorKey),
       borderRadius: BorderRadius.circular(14),
-      onTap: () => onOpen(task),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 4, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              task.isDone ? Icons.check_circle_rounded : Icons.circle_outlined,
-              size: 18,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: scheme.copyWith(
+            onSurface: foreground,
+            onSurfaceVariant: foreground.withValues(alpha: .8),
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => onOpen(task),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 4, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  task.isDone
+                      ? Icons.check_circle_rounded
+                      : Icons.circle_outlined,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${task.emoji?.isNotEmpty == true ? '${task.emoji} ' : ''}${task.title}',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                PopupMenuButton<DateTime>(
+                  tooltip: 'Przenieś zadanie',
+                  onSelected: (day) => onMove(task, day),
+                  itemBuilder: (context) => days
+                      .map(
+                        (day) => PopupMenuItem(
+                          value: day,
+                          child: Text(_dayFull(day)),
+                        ),
+                      )
+                      .toList(),
+                  icon: const Icon(Icons.more_horiz_rounded),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                task.title,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            PopupMenuButton<DateTime>(
-              tooltip: 'Przenieś zadanie',
-              onSelected: (day) => onMove(task, day),
-              itemBuilder: (context) => days
-                  .map(
-                    (day) =>
-                        PopupMenuItem(value: day, child: Text(_dayFull(day))),
-                  )
-                  .toList(),
-              icon: const Icon(Icons.more_horiz_rounded),
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _CalendarBlock extends StatelessWidget {

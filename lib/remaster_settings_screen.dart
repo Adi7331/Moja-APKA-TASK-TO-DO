@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'organizer_settings.dart';
 import 'calendar_store.dart';
@@ -196,9 +199,22 @@ class RemasterSettingsScreen extends StatelessWidget {
                                 label: Text(
                                   calendarStatus ==
                                               CalendarConnectionStatus
-                                              .expired ||
+                                                  .expired ||
                                           calendarStatus ==
-                                              CalendarConnectionStatus.permissionDenied ||
+                                              CalendarConnectionStatus
+                                                  .permissionDenied ||
+                                          calendarStatus ==
+                                              CalendarConnectionStatus
+                                                  .missingScopes ||
+                                          calendarStatus ==
+                                              CalendarConnectionStatus
+                                                  .apiDisabled ||
+                                          calendarStatus ==
+                                              CalendarConnectionStatus
+                                                  .accountRestricted ||
+                                          calendarStatus ==
+                                              CalendarConnectionStatus
+                                                  .rateLimited ||
                                           calendarStatus ==
                                               CalendarConnectionStatus.offline
                                       ? 'Połącz ponownie'
@@ -322,11 +338,78 @@ class _ReminderSettingsCard extends StatelessWidget {
     );
   }
 
+  Future<void> _pickDigestTime(
+    BuildContext context, {
+    required bool start,
+  }) async {
+    final minute = start
+        ? settings.taskReminderStartMinute
+        : settings.taskReminderEndMinute;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minute ~/ 60, minute: minute % 60),
+      helpText: start ? 'Początek przypomnień' : 'Koniec przypomnień',
+      cancelText: 'Anuluj',
+      confirmText: 'Ustaw',
+    );
+    if (picked == null) return;
+    final value = picked.hour * 60 + picked.minute;
+    onChanged?.call(
+      _copy(
+        taskReminderStartMinute: start ? value : null,
+        taskReminderEndMinute: start ? null : value,
+      ),
+    );
+  }
+
+  Future<int?> _pickCustomInterval(BuildContext context) async {
+    final controller = TextEditingController(
+      text: settings.taskReminderIntervalMinutes.toString(),
+    );
+    final value = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Własny odstęp'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(
+            labelText: 'Minuty (15–1440)',
+            suffixText: 'min',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final minutes = int.tryParse(controller.text);
+              if (minutes == null || minutes < 15 || minutes > 1440) return;
+              Navigator.pop(context, minutes);
+            },
+            child: const Text('Zapisz'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return value;
+  }
+
   OrganizerSettings _copy({
     bool? dailyPlanEnabled,
     int? dailyPlanHour,
     int? dailyPlanMinute,
     int? overdueReminderIntervalMinutes,
+    bool? taskRemindersEnabled,
+    int? taskReminderIntervalMinutes,
+    int? taskReminderStartMinute,
+    int? taskReminderEndMinute,
+    bool? windowsStartWithSystem,
   }) => OrganizerSettings(
     defaultReminderMinutes: settings.defaultReminderMinutes,
     defaultSnoozeMinutes: settings.defaultSnoozeMinutes,
@@ -338,6 +421,15 @@ class _ReminderSettingsCard extends StatelessWidget {
     overdueReminderIntervalMinutes:
         overdueReminderIntervalMinutes ??
         settings.overdueReminderIntervalMinutes,
+    taskRemindersEnabled: taskRemindersEnabled ?? settings.taskRemindersEnabled,
+    taskReminderIntervalMinutes:
+        taskReminderIntervalMinutes ?? settings.taskReminderIntervalMinutes,
+    taskReminderStartMinute:
+        taskReminderStartMinute ?? settings.taskReminderStartMinute,
+    taskReminderEndMinute:
+        taskReminderEndMinute ?? settings.taskReminderEndMinute,
+    windowsStartWithSystem:
+        windowsStartWithSystem ?? settings.windowsStartWithSystem,
   );
 
   @override
@@ -375,30 +467,109 @@ class _ReminderSettingsCard extends StatelessWidget {
                   child: Text(time),
                 ),
               ),
-            ListTile(
+            const Divider(height: 28),
+            SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Zaległe zadania'),
-              subtitle: const Text('Jak często ponawiać przypomnienie'),
-              trailing: DropdownButton<int>(
-                value: settings.overdueReminderIntervalMinutes,
-                items: const [
-                  DropdownMenuItem(value: 0, child: Text('Wyłączone')),
-                  DropdownMenuItem(value: 30, child: Text('30 min')),
-                  DropdownMenuItem(value: 60, child: Text('1 godz.')),
-                  DropdownMenuItem(value: 120, child: Text('2 godz.')),
+              title: const Text('Przypomnienia o zadaniach'),
+              subtitle: Text(
+                settings.taskRemindersEnabled
+                    ? 'Jedno zbiorcze przypomnienie o zadaniach na dziś i zaległych.'
+                    : 'Domyślnie wyłączone. Ustawienia zapisują się na tym urządzeniu.',
+              ),
+              value: settings.taskRemindersEnabled,
+              onChanged: onChanged == null
+                  ? null
+                  : (value) => onChanged!(_copy(taskRemindersEnabled: value)),
+            ),
+            if (settings.taskRemindersEnabled) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.repeat_rounded),
+                title: const Text('Powtarzaj co'),
+                trailing: DropdownButton<int>(
+                  value:
+                      const [
+                        15,
+                        30,
+                        60,
+                        120,
+                      ].contains(settings.taskReminderIntervalMinutes)
+                      ? settings.taskReminderIntervalMinutes
+                      : -1,
+                  items: [
+                    const DropdownMenuItem(value: 15, child: Text('15 min')),
+                    const DropdownMenuItem(value: 30, child: Text('30 min')),
+                    const DropdownMenuItem(value: 60, child: Text('1 godz.')),
+                    const DropdownMenuItem(value: 120, child: Text('2 godz.')),
+                    if (!const [
+                      15,
+                      30,
+                      60,
+                      120,
+                    ].contains(settings.taskReminderIntervalMinutes))
+                      DropdownMenuItem(
+                        value: -1,
+                        child: Text(
+                          '${settings.taskReminderIntervalMinutes} min',
+                        ),
+                      ),
+                    const DropdownMenuItem(value: -2, child: Text('Własny…')),
+                  ],
+                  onChanged: onChanged == null
+                      ? null
+                      : (value) async {
+                          if (value == -2) {
+                            final custom = await _pickCustomInterval(context);
+                            if (custom != null) {
+                              onChanged!(
+                                _copy(taskReminderIntervalMinutes: custom),
+                              );
+                            }
+                          } else if (value != null && value > 0) {
+                            onChanged!(
+                              _copy(taskReminderIntervalMinutes: value),
+                            );
+                          }
+                        },
+                ),
+              ),
+              Row(
+                children: [
+                  const Expanded(child: Text('Dozwolone godziny')),
+                  TextButton(
+                    onPressed: onChanged == null
+                        ? null
+                        : () => _pickDigestTime(context, start: true),
+                    child: Text(_minuteLabel(settings.taskReminderStartMinute)),
+                  ),
+                  const Text('–'),
+                  TextButton(
+                    onPressed: onChanged == null
+                        ? null
+                        : () => _pickDigestTime(context, start: false),
+                    child: Text(_minuteLabel(settings.taskReminderEndMinute)),
+                  ),
                 ],
+              ),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Jeśli godzina końca jest wcześniejsza, cisza obowiązuje do niej następnego dnia.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+            if (Platform.isWindows)
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Uruchamiaj z Windowsem'),
+                subtitle: const Text('Opcjonalne; domyślnie wyłączone.'),
+                value: settings.windowsStartWithSystem,
                 onChanged: onChanged == null
                     ? null
-                    : (value) {
-                        if (value != null) {
-                          onChanged!(
-                            _copy(overdueReminderIntervalMinutes: value),
-                          );
-                        }
-                      },
+                    : (value) =>
+                          onChanged!(_copy(windowsStartWithSystem: value)),
               ),
-            ),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
@@ -430,6 +601,9 @@ class _ReminderSettingsCard extends StatelessWidget {
   }
 }
 
+String _minuteLabel(int minutes) =>
+    '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+
 String _themeLabel(ThemeMode mode) => switch (mode) {
   ThemeMode.system => 'Systemowy',
   ThemeMode.light => 'Jasny',
@@ -448,6 +622,11 @@ IconData _calendarStatusIcon(
     CalendarConnectionStatus.offline => Icons.cloud_off_rounded,
     CalendarConnectionStatus.expired => Icons.lock_clock_outlined,
     CalendarConnectionStatus.permissionDenied => Icons.gpp_bad_outlined,
+    CalendarConnectionStatus.missingScopes => Icons.lock_outline_rounded,
+    CalendarConnectionStatus.apiDisabled => Icons.power_off_rounded,
+    CalendarConnectionStatus.accountRestricted =>
+      Icons.admin_panel_settings_outlined,
+    CalendarConnectionStatus.rateLimited => Icons.hourglass_top_rounded,
     CalendarConnectionStatus.disconnected => Icons.event_outlined,
     CalendarConnectionStatus.connecting => Icons.sync_rounded,
   };
@@ -464,7 +643,14 @@ String _calendarStatusTitle(
     CalendarConnectionStatus.connected => 'Kalendarz połączony',
     CalendarConnectionStatus.offline => 'Kalendarz offline',
     CalendarConnectionStatus.expired => 'Połączenie z Calendar wygasło',
-    CalendarConnectionStatus.permissionDenied => 'Brak dostępu do Google Calendar',
+    CalendarConnectionStatus.permissionDenied =>
+      'Odmowa dostępu do Google Calendar',
+    CalendarConnectionStatus.missingScopes => 'Brak zgody na odczyt kalendarza',
+    CalendarConnectionStatus.apiDisabled =>
+      'Google Calendar API jest wyłączone',
+    CalendarConnectionStatus.accountRestricted =>
+      'Konto ogranicza dostęp do Calendar',
+    CalendarConnectionStatus.rateLimited => 'Limit zapytań Google Calendar',
     CalendarConnectionStatus.disconnected => 'Kalendarz nie jest połączony',
     CalendarConnectionStatus.connecting => 'Łączenie z Google Calendar…',
   };
@@ -486,7 +672,11 @@ String _calendarStatusDescription(
           ? 'Pokazuję $cachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'
           : 'Brak połączenia z Google. Połącz ponownie, aby pobrać wydarzenia.',
     CalendarConnectionStatus.expired => 'Google wymaga ponownego połączenia. Zapisane wydarzenia pozostają na tym urządzeniu.',
-    CalendarConnectionStatus.permissionDenied => 'Google odmówił dostępu. Sprawdź zgodę na odczyt kalendarzy i wydarzeń oraz konfigurację Calendar API. Zapisane wydarzenia pozostają na urządzeniu.',
+    CalendarConnectionStatus.permissionDenied => 'Google odmówił dostępu. Sprawdź ustawienia konta i spróbuj połączyć ponownie. Zapisane wydarzenia pozostają na urządzeniu.',
+    CalendarConnectionStatus.missingScopes => 'Brakuje zgody OAuth na odczyt listy kalendarzy lub wydarzeń. Połącz ponownie i zaakceptuj wymagane zakresy. Zapisane wydarzenia pozostają na urządzeniu.',
+    CalendarConnectionStatus.apiDisabled => 'Włącz Google Calendar API w projekcie Google Cloud użytym do logowania OAuth. Zapisane wydarzenia pozostają na urządzeniu.',
+    CalendarConnectionStatus.accountRestricted => 'Konto lub administrator Google Workspace blokuje dostęp. Sprawdź politykę konta albo użyj konta z dostępem do kalendarza.',
+    CalendarConnectionStatus.rateLimited => 'Google chwilowo ograniczył liczbę zapytań. Spróbuj ponownie później; zapisane wydarzenia pozostają na urządzeniu.',
     CalendarConnectionStatus.disconnected =>
       cachedEventCount > 0
           ? 'Masz $cachedEventCount zapisanych blokad offline. Połącz ponownie, aby je odświeżyć.'

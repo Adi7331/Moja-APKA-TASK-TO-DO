@@ -4,6 +4,7 @@ import 'subtask_item.dart';
 import 'repeat_rule.dart';
 import 'task_category.dart';
 import 'task_item.dart';
+import 'task_appearance.dart';
 
 class TaskDraft {
   const TaskDraft({
@@ -16,6 +17,8 @@ class TaskDraft {
     required this.reminderAt,
     required this.repeatRule,
     required this.subtasks,
+    this.emoji,
+    this.colorKey,
   });
 
   final String title;
@@ -27,6 +30,8 @@ class TaskDraft {
   final DateTime? reminderAt;
   final RepeatRule? repeatRule;
   final List<SubtaskItem> subtasks;
+  final String? emoji;
+  final String? colorKey;
 }
 
 Future<void> showTaskEditor(
@@ -60,7 +65,9 @@ Future<void> showTaskEditor(
     showDragHandle: remastered,
     useSafeArea: remastered,
     builder: (sheetContext) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+      ),
       child: form,
     ),
   );
@@ -85,6 +92,7 @@ class _TaskEditorForm extends StatefulWidget {
 class _TaskEditorFormState extends State<_TaskEditorForm> {
   late final TextEditingController _title;
   late final TextEditingController _note;
+  late final TextEditingController _emojiController;
   final _newStep = TextEditingController();
   late String _category;
   String? _categoryId;
@@ -93,6 +101,8 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
   late DateTime? _reminderAt;
   late RepeatRule? _repeatRule;
   late List<SubtaskItem> _subtasks;
+  String? _emoji;
+  String? _colorKey;
   var _showMore = false;
   var _saving = false;
   String? _error;
@@ -102,8 +112,11 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
     super.initState();
     _title = TextEditingController(text: widget.task?.title ?? '');
     _note = TextEditingController(text: widget.task?.note ?? '');
-    _category = widget.task?.category ?? 'Skrzynka';
+    _emoji = widget.task?.emoji;
+    _emojiController = TextEditingController(text: _emoji ?? '');
+    _colorKey = widget.task?.colorKey ?? 'neutral';
     _categoryId = widget.task?.categoryId;
+    _category = _categoryName(_categoryId);
     _priority = widget.task?.priority ?? 'medium';
     _dueAt = widget.task?.dueAt;
     _reminderAt = widget.task?.reminderAt;
@@ -115,191 +128,370 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
   void dispose() {
     _title.dispose();
     _note.dispose();
+    _emojiController.dispose();
     _newStep.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => SafeArea(
-        child: SingleChildScrollView(
-          key: widget.remastered
-              ? const ValueKey('remaster-task-editor')
-              : null,
-          padding: EdgeInsets.fromLTRB(
-            widget.remastered ? 24 : 20,
-            widget.remastered ? 24 : 20,
-            widget.remastered ? 24 : 20,
-            24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    child: SingleChildScrollView(
+      key: widget.remastered ? const ValueKey('remaster-task-editor') : null,
+      padding: EdgeInsets.fromLTRB(
+        widget.remastered ? 24 : 20,
+        widget.remastered ? 24 : 20,
+        widget.remastered ? 24 : 20,
+        24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(children: [
-                if (widget.remastered) ...[
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      Icons.add_task_rounded,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
+              if (widget.remastered) ...[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  child: Icon(
+                    Icons.add_task_rounded,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.task == null ? 'Nowe zadanie' : 'Edytuj zadanie',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    if (widget.remastered) ...[
+                      const SizedBox(height: 2),
                       Text(
-                        widget.task == null ? 'Nowe zadanie' : 'Edytuj zadanie',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      if (widget.remastered) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Następny krok',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Zamknij',
-                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ]),
-              const SizedBox(height: 20),
-              TextField(
-                key: const ValueKey('task-title-input'),
-                controller: _title,
-                autofocus: true,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(labelText: 'Tytuł'),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                key: const ValueKey('task-description-input'),
-                controller: _note,
-                minLines: 5,
-                maxLines: 8,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(labelText: 'Opis (opcjonalnie)'),
-              ),
-              const SizedBox(height: 20),
-              Text('Termin', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 6),
-              OutlinedButton.icon(
-                onPressed: _saving ? null : _pickDueDate,
-                icon: const Icon(Icons.calendar_today_outlined),
-                label: Text(_dueLabel()),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  ActionChip(
-                    key: const ValueKey('due-today'),
-                    avatar: const Icon(Icons.today_outlined, size: 17),
-                    label: const Text('Na dziś'),
-                    onPressed: _saving ? null : () => _setQuickDueDate(0),
-                  ),
-                  ActionChip(
-                    key: const ValueKey('due-tomorrow'),
-                    avatar: const Icon(Icons.wb_sunny_outlined, size: 17),
-                    label: const Text('Jutro'),
-                    onPressed: _saving ? null : () => _setQuickDueDate(1),
-                  ),
-                  ActionChip(
-                    key: const ValueKey('due-none'),
-                    avatar: const Icon(Icons.event_busy_outlined, size: 17),
-                    label: const Text('Bez terminu'),
-                    onPressed: _saving ? null : () => setState(() => _dueAt = null),
-                  ),
-                ],
-              ),
-              TextButton.icon(
-                onPressed: _saving ? null : () => setState(() => _showMore = !_showMore),
-                icon: Icon(_showMore ? Icons.expand_less : Icons.expand_more),
-                label: Text(_showMore ? 'Mniej opcji' : 'Więcej opcji'),
-              ),
-              if (_showMore) ...[
-                Column(children: [
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String?>(
-                    initialValue: _categoryId,
-                    decoration: const InputDecoration(labelText: 'Kategoria'),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Bez kategorii'),
-                      ),
-                      ...widget.categories.map(
-                        (category) => DropdownMenuItem<String?>(
-                          value: category.id,
-                          child: Text(
-                            [if (category.emoji?.isNotEmpty ?? false) category.emoji!, category.name].join(' '),
-                          ),
+                        'Następny krok',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
-                    onChanged: _saving
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Zamknij',
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            key: const ValueKey('task-title-input'),
+            controller: _title,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(labelText: 'Tytuł'),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            key: const ValueKey('task-description-input'),
+            controller: _note,
+            minLines: 5,
+            maxLines: 8,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(labelText: 'Opis (opcjonalnie)'),
+          ),
+          const SizedBox(height: 20),
+          Text('Termin', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: _saving ? null : _pickDueDate,
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: Text(_dueLabel()),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              ActionChip(
+                key: const ValueKey('due-today'),
+                avatar: const Icon(Icons.today_outlined, size: 17),
+                label: const Text('Na dziś'),
+                onPressed: _saving ? null : () => _setQuickDueDate(0),
+              ),
+              ActionChip(
+                key: const ValueKey('due-tomorrow'),
+                avatar: const Icon(Icons.wb_sunny_outlined, size: 17),
+                label: const Text('Jutro'),
+                onPressed: _saving ? null : () => _setQuickDueDate(1),
+              ),
+              ActionChip(
+                key: const ValueKey('due-none'),
+                avatar: const Icon(Icons.event_busy_outlined, size: 17),
+                label: const Text('Bez terminu'),
+                onPressed: _saving ? null : () => setState(() => _dueAt = null),
+              ),
+            ],
+          ),
+          TextButton.icon(
+            onPressed: _saving
+                ? null
+                : () => setState(() => _showMore = !_showMore),
+            icon: Icon(_showMore ? Icons.expand_less : Icons.expand_more),
+            label: Text(_showMore ? 'Mniej opcji' : 'Więcej opcji'),
+          ),
+          if (_showMore) ...[
+            Column(
+              children: [
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Wygląd zadania',
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const ValueKey('task-emoji-input'),
+                  controller: _emojiController,
+                  maxLength: 8,
+                  textCapitalization: TextCapitalization.none,
+                  decoration: InputDecoration(
+                    labelText: 'Emoji',
+                    hintText: 'np. 🏃',
+                    counterText: '',
+                    suffixIcon: _emoji == null || _emoji!.isEmpty
                         ? null
-                        : (value) => setState(() {
-                            _categoryId = value;
-                            _category = widget.categories
-                                    .where((category) => category.id == value)
-                                    .firstOrNull
-                                    ?.name ??
-                                'Skrzynka';
-                          }),
+                        : IconButton(
+                            key: const ValueKey('clear-task-emoji'),
+                            tooltip: 'Usuń emoji',
+                            onPressed: _saving
+                                ? null
+                                : () => setState(() {
+                                    _emoji = null;
+                                    _emojiController.clear();
+                                  }),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
                   ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: _priority,
-                    decoration: const InputDecoration(labelText: 'Priorytet'),
-                    items: const [
-                      DropdownMenuItem(value: 'low', child: Text('Niski')),
-                      DropdownMenuItem(value: 'medium', child: Text('Średni')),
-                      DropdownMenuItem(value: 'high', child: Text('Wysoki')),
-                    ],
-                    onChanged: _saving ? null : (value) => setState(() => _priority = value!),
+                  onChanged: (value) => setState(
+                    () => _emoji = value.trim().isEmpty ? null : value.trim(),
                   ),
-                  const SizedBox(height: 14),
-                  Text('Powtarzanie', style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 8, runSpacing: 6, children: [
-                    ChoiceChip(key: const ValueKey('repeat-none'), label: const Text('Nie powtarzaj'), selected: _repeatRule == null, onSelected: _saving ? null : (_) => setState(() => _repeatRule = null)),
-                    ChoiceChip(key: const ValueKey('repeat-daily'), label: const Text('Codziennie'), selected: _repeatRule?.unit == RepeatUnit.day, onSelected: _saving ? null : (_) => setState(() => _repeatRule = const RepeatRule.daily())),
-                    ChoiceChip(key: const ValueKey('repeat-weekly'), label: const Text('Co tydzień'), selected: _repeatRule?.unit == RepeatUnit.week, onSelected: _saving ? null : (_) => setState(() => _repeatRule = const RepeatRule(unit: RepeatUnit.week))),
-                    ChoiceChip(key: const ValueKey('repeat-monthly'), label: const Text('Co miesiąc'), selected: _repeatRule?.unit == RepeatUnit.month, onSelected: _saving ? null : (_) => setState(() => _repeatRule = const RepeatRule(unit: RepeatUnit.month))),
-                  ]),
-                  const SizedBox(height: 14),
-                  Text('Przypomnienie', style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 8, runSpacing: 6, children: [
-                    ChoiceChip(key: const ValueKey('reminder-none'), label: const Text('Brak'), selected: _reminderAt == null, onSelected: _saving ? null : (_) => setState(() => _reminderAt = null)),
-                    ChoiceChip(key: const ValueKey('reminder-due'), label: const Text('W terminie'), selected: _reminderAt != null && _reminderAt == _dueAt, onSelected: _saving ? null : (_) => setState(() => _reminderAt = _dueAt)),
-                  ]),
-                  const SizedBox(height: 20),
-                  Text('Lista kroków', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  ..._subtasks.map(_stepRow),
-                  Row(children: [
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Kolor karty',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    for (final key in TaskAppearance.colorKeys)
+                      Tooltip(
+                        message: TaskAppearance.labels[key]!,
+                        child: Semantics(
+                          button: true,
+                          selected: _colorKey == key,
+                          label: TaskAppearance.labels[key],
+                          child: InkWell(
+                            key: ValueKey('task-color-$key'),
+                            onTap: _saving
+                                ? null
+                                : () => setState(() => _colorKey = key),
+                            customBorder: const CircleBorder(),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: TaskAppearance.swatch(context, key),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: _colorKey == key
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context)
+                                            .colorScheme
+                                            .outlineVariant,
+                                  width: _colorKey == key ? 3 : 1,
+                                ),
+                              ),
+                              child: _colorKey == key
+                                  ? Icon(
+                                      Icons.check_rounded,
+                                      size: 18,
+                                      color: TaskAppearance.foreground(
+                                        context,
+                                        key,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  initialValue: _categoryId,
+                  decoration: const InputDecoration(labelText: 'Kategoria'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Bez kategorii'),
+                    ),
+                    ...widget.categories.map(
+                      (category) => DropdownMenuItem<String?>(
+                        value: category.id,
+                        child: Text(
+                          [
+                            if (category.emoji?.isNotEmpty ?? false)
+                              category.emoji!,
+                            category.name,
+                          ].join(' '),
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() {
+                          _categoryId = value;
+                          _category =
+                              widget.categories
+                                  .where((category) => category.id == value)
+                                  .firstOrNull
+                                  ?.name ??
+                              'Bez kategorii';
+                        }),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _priority,
+                  decoration: const InputDecoration(labelText: 'Priorytet'),
+                  items: const [
+                    DropdownMenuItem(value: 'low', child: Text('Niski')),
+                    DropdownMenuItem(value: 'medium', child: Text('Średni')),
+                    DropdownMenuItem(value: 'high', child: Text('Wysoki')),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _priority = value!),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Powtarzanie',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      key: const ValueKey('repeat-none'),
+                      label: const Text('Nie powtarzaj'),
+                      selected: _repeatRule == null,
+                      onSelected: _saving
+                          ? null
+                          : (_) => setState(() => _repeatRule = null),
+                    ),
+                    ChoiceChip(
+                      key: const ValueKey('repeat-daily'),
+                      label: const Text('Codziennie'),
+                      selected: _repeatRule?.unit == RepeatUnit.day,
+                      onSelected: _saving
+                          ? null
+                          : (_) => setState(
+                              () => _repeatRule = const RepeatRule.daily(),
+                            ),
+                    ),
+                    ChoiceChip(
+                      key: const ValueKey('repeat-weekly'),
+                      label: const Text('Co tydzień'),
+                      selected: _repeatRule?.unit == RepeatUnit.week,
+                      onSelected: _saving
+                          ? null
+                          : (_) => setState(
+                              () => _repeatRule = const RepeatRule(
+                                unit: RepeatUnit.week,
+                              ),
+                            ),
+                    ),
+                    ChoiceChip(
+                      key: const ValueKey('repeat-monthly'),
+                      label: const Text('Co miesiąc'),
+                      selected: _repeatRule?.unit == RepeatUnit.month,
+                      onSelected: _saving
+                          ? null
+                          : (_) => setState(
+                              () => _repeatRule = const RepeatRule(
+                                unit: RepeatUnit.month,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Przypomnienie',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      key: const ValueKey('reminder-none'),
+                      label: const Text('Brak'),
+                      selected: _reminderAt == null,
+                      onSelected: _saving
+                          ? null
+                          : (_) => setState(() => _reminderAt = null),
+                    ),
+                    ChoiceChip(
+                      key: const ValueKey('reminder-due'),
+                      label: const Text('W terminie'),
+                      selected: _reminderAt != null && _reminderAt == _dueAt,
+                      onSelected: _saving
+                          ? null
+                          : (_) => setState(() => _reminderAt = _dueAt),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Lista kroków',
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                ..._subtasks.map(_stepRow),
+                Row(
+                  children: [
                     Expanded(
                       child: TextField(
                         key: const ValueKey('subtask-input'),
                         controller: _newStep,
-                        decoration: const InputDecoration(hintText: 'Dodaj krok'),
+                        decoration: const InputDecoration(
+                          hintText: 'Dodaj krok',
+                        ),
                         onSubmitted: (_) => _addStep(),
                       ),
                     ),
@@ -310,49 +502,75 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                       onPressed: _saving ? null : _addStep,
                       icon: const Icon(Icons.add),
                     ),
-                  ]),
-                ]),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              ],
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(widget.task == null ? Icons.add : Icons.save),
-                label: Text(widget.task == null ? 'Dodaj zadanie' : 'Zapisz zmiany'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(widget.task == null ? Icons.add : Icons.save),
+            label: Text(
+              widget.task == null ? 'Dodaj zadanie' : 'Zapisz zmiany',
+            ),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 
-  Widget _stepRow(SubtaskItem step) => Row(children: [
-        Checkbox(
-          value: step.isDone,
-          onChanged: _saving
-              ? null
-              : (isDone) => setState(() {
-                    _subtasks = _subtasks
-                        .map((item) => item.id == step.id
-                            ? SubtaskItem(id: item.id, title: item.title, isDone: isDone ?? false, position: item.position)
-                            : item)
-                        .toList();
-                  }),
-        ),
-        Expanded(child: Text(step.title)),
-        IconButton(
-          tooltip: 'Usuń krok',
-          onPressed: _saving ? null : () => setState(() => _subtasks = _subtasks.where((item) => item.id != step.id).toList()),
-          icon: const Icon(Icons.close),
-        ),
-      ]);
+  Widget _stepRow(SubtaskItem step) => Row(
+    children: [
+      Checkbox(
+        value: step.isDone,
+        onChanged: _saving
+            ? null
+            : (isDone) => setState(() {
+                _subtasks = _subtasks
+                    .map(
+                      (item) => item.id == step.id
+                          ? SubtaskItem(
+                              id: item.id,
+                              title: item.title,
+                              isDone: isDone ?? false,
+                              position: item.position,
+                            )
+                          : item,
+                    )
+                    .toList();
+              }),
+      ),
+      Expanded(child: Text(step.title)),
+      IconButton(
+        tooltip: 'Usuń krok',
+        onPressed: _saving
+            ? null
+            : () => setState(
+                () => _subtasks = _subtasks
+                    .where((item) => item.id != step.id)
+                    .toList(),
+              ),
+        icon: const Icon(Icons.close),
+      ),
+    ],
+  );
 
   void _addStep() {
     final title = _newStep.text.trim();
@@ -381,10 +599,20 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
     if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: _dueAt == null ? const TimeOfDay(hour: 9, minute: 0) : TimeOfDay.fromDateTime(_dueAt!),
+      initialTime: _dueAt == null
+          ? const TimeOfDay(hour: 9, minute: 0)
+          : TimeOfDay.fromDateTime(_dueAt!),
     );
     if (time == null || !mounted) return;
-    setState(() => _dueAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    setState(
+      () => _dueAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      ),
+    );
   }
 
   void _setQuickDueDate(int dayOffset) {
@@ -410,17 +638,21 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
       _error = null;
     });
     try {
-      await widget.onSave(TaskDraft(
-        title: _title.text.trim(),
-        note: _note.text.trim(),
-        category: _category,
-        categoryId: _categoryId,
-        priority: _priority,
-        dueAt: _dueAt,
-        reminderAt: _reminderAt,
-        repeatRule: _repeatRule,
-        subtasks: _subtasks,
-      ));
+      await widget.onSave(
+        TaskDraft(
+          title: _title.text.trim(),
+          note: _note.text.trim(),
+          category: _category,
+          categoryId: _categoryId,
+          emoji: _emoji,
+          colorKey: _colorKey,
+          priority: _priority,
+          dueAt: _dueAt,
+          reminderAt: _reminderAt,
+          repeatRule: _repeatRule,
+          subtasks: _subtasks,
+        ),
+      );
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -432,5 +664,14 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
         });
       }
     }
+  }
+
+  String _categoryName(String? categoryId) {
+    if (categoryId == null) return 'Bez kategorii';
+    return widget.categories
+            .where((category) => category.id == categoryId)
+            .firstOrNull
+            ?.name ??
+        'Bez kategorii';
   }
 }

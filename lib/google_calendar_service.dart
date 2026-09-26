@@ -6,7 +6,41 @@ import 'calendar_store.dart';
 
 CalendarConnectionStatus calendarStatusForError(Object error) {
   if (error is CalendarTransportException) {
-    if (error.statusCode == 401) return CalendarConnectionStatus.expired;
+    final reason = error.reason;
+    if (error.statusCode == 401 || reason == 'authError') {
+      return CalendarConnectionStatus.expired;
+    }
+    if (error.statusCode == 429 ||
+        const {
+          'rateLimitExceeded',
+          'userRateLimitExceeded',
+          'quotaExceeded',
+          'dailyLimitExceeded',
+          'concurrentLimitExceeded',
+          'limitExceeded',
+          'servingLimitExceeded',
+        }.contains(reason)) {
+      return CalendarConnectionStatus.rateLimited;
+    }
+    if (const {'accessNotConfigured', 'serviceDisabled'}.contains(reason)) {
+      return CalendarConnectionStatus.apiDisabled;
+    }
+    if (const {
+      'insufficientPermissions',
+      'insufficientAuthenticationScopes',
+    }.contains(reason)) {
+      return CalendarConnectionStatus.missingScopes;
+    }
+    if (const {
+      'domainPolicy',
+      'accountDisabled',
+      'accountDeleted',
+      'accountUnverified',
+      'insufficientAudience',
+      'insufficientAuthorizedParty',
+    }.contains(reason)) {
+      return CalendarConnectionStatus.accountRestricted;
+    }
     if (error.statusCode == 403) {
       return CalendarConnectionStatus.permissionDenied;
     }
@@ -19,9 +53,39 @@ abstract interface class CalendarTransport {
 }
 
 class CalendarTransportException extends StateError {
-  CalendarTransportException(this.statusCode, String message) : super(message);
+  CalendarTransportException(this.statusCode, String message, {this.reason})
+    : super(message);
+
+  factory CalendarTransportException.fromResponse(int statusCode, String body) {
+    String? reason;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final apiError = decoded['error'];
+        if (apiError is Map) {
+          final errors = apiError['errors'];
+          if (errors is List && errors.isNotEmpty && errors.first is Map) {
+            final candidate = (errors.first as Map)['reason'];
+            if (candidate is String &&
+                candidate.length <= 80 &&
+                RegExp(r'^[A-Za-z0-9_]+$').hasMatch(candidate)) {
+              reason = candidate;
+            }
+          }
+        }
+      }
+    } on FormatException {
+      // Keep only the HTTP status when Google did not send valid JSON.
+    }
+    return CalendarTransportException(
+      statusCode,
+      'Google Calendar zwrócił błąd $statusCode.',
+      reason: reason,
+    );
+  }
 
   final int statusCode;
+  final String? reason;
 }
 
 class HttpCalendarTransport implements CalendarTransport {
@@ -37,9 +101,9 @@ class HttpCalendarTransport implements CalendarTransport {
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw CalendarTransportException(
+        throw CalendarTransportException.fromResponse(
           response.statusCode,
-          'Google Calendar zwrócił błąd ${response.statusCode}.',
+          body,
         );
       }
       return Map<String, dynamic>.from(jsonDecode(body) as Map);

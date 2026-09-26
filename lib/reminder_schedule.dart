@@ -1,3 +1,5 @@
+import 'task_item.dart';
+
 /// Returns the next local time at which the daily plan should be shown.
 ///
 /// The setting is deliberately opt-in. A time equal to [now] is considered
@@ -75,4 +77,100 @@ List<DateTime> overdueReminderTimes({
   return List<DateTime>.generate(occurrenceCount, (index) {
     return dueAt.add(interval * (index + 1));
   }).where((time) => time.isAfter(current)).toList(growable: false);
+}
+
+bool isSupportedTaskDigestInterval(int minutes) =>
+    minutes >= 15 && minutes <= 1440;
+
+/// Tasks included in a grouped reminder: unfinished and due before tomorrow.
+/// A task due later today remains included even if its exact time has passed.
+List<TaskItem> tasksForTaskDigest(
+  Iterable<TaskItem> tasks, {
+  required DateTime now,
+}) {
+  final tomorrow = DateTime(now.year, now.month, now.day + 1);
+  final selected = tasks
+      .where(
+        (task) =>
+            !task.isDone &&
+            task.dueAt != null &&
+            task.dueAt!.isBefore(tomorrow),
+      )
+      .toList();
+  selected.sort((left, right) => left.dueAt!.compareTo(right.dueAt!));
+  return selected;
+}
+
+({String title, String body}) formatTaskDigest(List<TaskItem> tasks) {
+  final count = tasks.length;
+  final noun = count == 1
+      ? 'zadanie'
+      : count % 10 >= 2 &&
+            count % 10 <= 4 &&
+            (count % 100 < 12 || count % 100 > 14)
+      ? 'zadania'
+      : 'zadań';
+  final title = 'Masz $count $noun do zrobienia';
+  final titles = tasks
+      .take(3)
+      .map((task) => task.title.trim())
+      .where((value) => value.isNotEmpty);
+  final body = titles.isEmpty
+      ? 'Otwórz Dniówkę, aby zobaczyć plan na dziś.'
+      : titles.join('\n');
+  return (title: title, body: body);
+}
+
+/// Produces future local reminder times aligned to the configured start time.
+/// No missed slots are returned, preventing catch-up notification bursts.
+List<DateTime> taskDigestTimes({
+  required DateTime now,
+  required int intervalMinutes,
+  required int startMinute,
+  required int endMinute,
+  int occurrenceCount = 96,
+}) {
+  if (!isSupportedTaskDigestInterval(intervalMinutes) ||
+      startMinute < 0 ||
+      startMinute >= 24 * 60 ||
+      endMinute < 0 ||
+      endMinute >= 24 * 60 ||
+      startMinute == endMinute ||
+      occurrenceCount <= 0) {
+    return const [];
+  }
+  final results = <DateTime>[];
+  final crossesMidnight = endMinute < startMinute;
+  final nowMinute = now.hour * 60 + now.minute;
+  final firstDayOffset = crossesMidnight && nowMinute < endMinute ? -1 : 0;
+  for (
+    var dayOffset = firstDayOffset;
+    dayOffset < 32 && results.length < occurrenceCount;
+    dayOffset++
+  ) {
+    final day = DateTime(now.year, now.month, now.day + dayOffset);
+    final start = DateTime(
+      day.year,
+      day.month,
+      day.day,
+      startMinute ~/ 60,
+      startMinute % 60,
+    );
+    final endDay = crossesMidnight ? day.add(const Duration(days: 1)) : day;
+    final end = DateTime(
+      endDay.year,
+      endDay.month,
+      endDay.day,
+      endMinute ~/ 60,
+      endMinute % 60,
+    );
+    for (
+      var occurrence = start;
+      occurrence.isBefore(end) && results.length < occurrenceCount;
+      occurrence = occurrence.add(Duration(minutes: intervalMinutes))
+    ) {
+      if (occurrence.isAfter(now)) results.add(occurrence);
+    }
+  }
+  return results;
 }

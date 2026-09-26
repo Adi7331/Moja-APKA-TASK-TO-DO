@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'task_item.dart';
+import 'task_appearance.dart';
 import 'task_view.dart';
 
 /// The task workspace used by the opt-in remaster. It deliberately owns only
@@ -281,6 +282,8 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final baseBackground = TaskAppearance.background(context, task.colorKey);
+    final taskForeground = TaskAppearance.foreground(context, task.colorKey);
     final completedColor = scheme.onSurfaceVariant.withValues(alpha: .62);
     final actions = [
       _TaskStatusButton(
@@ -322,11 +325,11 @@ class _TaskRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              task.title,
+              '${task.emoji?.isNotEmpty == true ? '${task.emoji} ' : ''}${task.title}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: task.isDone ? completedColor : null,
+                color: task.isDone ? completedColor : taskForeground,
                 decoration: task.isDone ? TextDecoration.lineThrough : null,
                 decorationThickness: task.isDone ? 2 : null,
               ),
@@ -337,7 +340,9 @@ class _TaskRow extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: task.isDone ? completedColor : scheme.onSurfaceVariant,
+                color: task.isDone
+                    ? completedColor
+                    : taskForeground.withValues(alpha: .8),
               ),
             ),
           ],
@@ -350,70 +355,82 @@ class _TaskRow extends StatelessWidget {
         return Semantics(
           button: true,
           label: 'Zadanie ${task.title}',
-          child: Material(
-            color: selected
-                ? scheme.primaryContainer.withValues(alpha: .55)
-                : scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: scheme.copyWith(
+                onSurface: taskForeground,
+                onSurfaceVariant: taskForeground.withValues(alpha: .8),
+              ),
+            ),
+            child: Material(
+              color: selected
+                  ? Color.alphaBlend(
+                      scheme.primary.withValues(alpha: .12),
+                      baseBackground,
+                    )
+                  : baseBackground,
               borderRadius: BorderRadius.circular(18),
-              onTap: onSelect,
-              onDoubleTap: onOpen,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-                child: compact
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                tooltip: task.isDone
-                                    ? 'Przywróć zadanie'
-                                    : 'Ukończ zadanie',
-                                onPressed: () => onStatusSelected(
-                                  task.isDone ? 'todo' : 'done',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: onSelect,
+                onDoubleTap: onOpen,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                  child: compact
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                IconButton(
+                                  tooltip: task.isDone
+                                      ? 'Przywróć zadanie'
+                                      : 'Ukończ zadanie',
+                                  onPressed: () => onStatusSelected(
+                                    task.isDone ? 'todo' : 'done',
+                                  ),
+                                  icon: Icon(
+                                    task.isDone
+                                        ? Icons.check_circle_rounded
+                                        : Icons.circle_outlined,
+                                  ),
+                                  color: task.isDone
+                                      ? scheme.primary
+                                      : scheme.onSurfaceVariant,
                                 ),
-                                icon: Icon(
-                                  task.isDone
-                                      ? Icons.check_circle_rounded
-                                      : Icons.circle_outlined,
-                                ),
-                                color: task.isDone
-                                    ? scheme.primary
-                                    : scheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(child: title),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(spacing: 8, runSpacing: 8, children: actions),
-                        ],
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            tooltip: task.isDone
-                                ? 'Przywróć zadanie'
-                                : 'Ukończ zadanie',
-                            onPressed: () =>
-                                onStatusSelected(task.isDone ? 'todo' : 'done'),
-                            icon: Icon(
-                              task.isDone
-                                  ? Icons.check_circle_rounded
-                                  : Icons.circle_outlined,
+                                const SizedBox(width: 8),
+                                Expanded(child: title),
+                              ],
                             ),
-                            color: task.isDone
-                                ? scheme.primary
-                                : scheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(child: title),
-                          ...actions,
-                        ],
-                      ),
+                            const SizedBox(height: 8),
+                            Wrap(spacing: 8, runSpacing: 8, children: actions),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              tooltip: task.isDone
+                                  ? 'Przywróć zadanie'
+                                  : 'Ukończ zadanie',
+                              onPressed: () => onStatusSelected(
+                                task.isDone ? 'todo' : 'done',
+                              ),
+                              icon: Icon(
+                                task.isDone
+                                    ? Icons.check_circle_rounded
+                                    : Icons.circle_outlined,
+                              ),
+                              color: task.isDone
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(child: title),
+                            ...actions,
+                          ],
+                        ),
+                ),
               ),
             ),
           ),

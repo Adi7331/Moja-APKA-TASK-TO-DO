@@ -51,6 +51,7 @@ void main() {
           launchedExecutable = executable;
           launchedArguments = arguments;
         },
+        waitForHelperReady: (ready, result, timeout) async => true,
       );
 
       final result = await installer.start(
@@ -78,6 +79,15 @@ void main() {
         installDirectory.path,
         '--exe-name',
         'dzien_po_dniu.exe',
+        '--ready-marker',
+        launchedArguments![launchedArguments!.indexOf('--ready-marker') + 1],
+        '--ack-marker',
+        launchedArguments![launchedArguments!.indexOf('--ack-marker') + 1],
+        '--result-file',
+        launchedArguments![launchedArguments!.indexOf('--result-file') + 1],
+        '--last-result-file',
+        launchedArguments![launchedArguments!.indexOf('--last-result-file') +
+            1],
       ]);
       final script = helperScript!;
       expect(script, contains('param()'));
@@ -97,6 +107,10 @@ void main() {
         ),
       );
       expect(script, contains('Expand-Archive'));
+      expect(script, contains('Write-UpdateResult'));
+      expect(script, contains('ackMarker'));
+      expect(script, contains('lastResultPath'));
+      expect(script, contains('nie potwierdziła poprawnego uruchomienia'));
       expect(script, contains('Move-Item'));
       final createStaging = script.indexOf(
         r'[System.IO.Directory]::CreateDirectory($stagingPath) | Out-Null',

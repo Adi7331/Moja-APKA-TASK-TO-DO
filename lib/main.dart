@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:tray_manager/tray_manager.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'local_task_store.dart';
 import 'local_task_category_store.dart';
@@ -23,6 +27,7 @@ import 'task_item.dart';
 import 'subtask_item.dart';
 import 'task_occurrence.dart';
 import 'task_view.dart';
+import 'reminder_schedule.dart';
 import 'google_sign_in_action.dart';
 import 'app_theme.dart';
 import 'remaster_theme.dart';
@@ -66,8 +71,11 @@ import 'android_widget_bridge.dart';
 import 'android_widget_snapshot.dart';
 import 'costs_screen.dart';
 import 'local_cost_store.dart';
+import 'windows_autostart.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
+String? _pendingWindowsUpdateAcknowledgement;
+bool _launchFromWindowsStartup = false;
 
 WeekDayTaskMovePlan planTaskMoveToWeekDay(TaskItem task, DateTime day) {
   final reminderFollowsDueAt =
@@ -84,8 +92,14 @@ WeekDayTaskMovePlan planTaskMoveToWeekDay(TaskItem task, DateTime day) {
   );
 }
 
-Future<void> main() async {
+Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  _launchFromWindowsStartup = arguments.contains('--background');
+  _pendingWindowsUpdateAcknowledgement = arguments
+      .where((argument) => argument.startsWith('--dpp-update-ack='))
+      .map((argument) => argument.substring('--dpp-update-ack='.length))
+      .firstOrNull;
+  if (Platform.isWindows) await windowManager.ensureInitialized();
   await initializeDateFormatting('pl_PL');
   await dotenv.load(fileName: '.env');
   await Supabase.initialize(
@@ -106,7 +120,10 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyAppState extends State<MyApp>
+    with WidgetsBindingObserver, WindowListener {
+  static const _legacyOverdueCleanupKey =
+      'organizer_legacy_overdue_alarm_cleanup_v1';
   static const _appVersion = String.fromEnvironment(
     'APP_VERSION',
     defaultValue: '1.0.0',
@@ -140,7 +157,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   OrganizerSettingsStore? _organizerSettingsStore;
   String? _successNotice;
   final _navigatorKey = GlobalKey<NavigatorState>();
+  static const _taskDigestChannel = MethodChannel('dzien_po_dniu/task_digest');
   Timer? _noticeTimer;
+  Timer? _taskDigestTimer;
+  TrayIcon? _trayIcon;
+  bool _exitRequestedFromTray = false;
   StreamSubscription<List<Map<String, dynamic>>>? _taskSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _taskCategorySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _subtaskSubscription;
@@ -208,12 +229,45 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.isWindows) {
+      windowManager.addListener(this);
+      unawaited(windowManager.setPreventClose(false));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final path = _pendingWindowsUpdateAcknowledgement;
+        _pendingWindowsUpdateAcknowledgement = null;
+        if (path != null && path.isNotEmpty) {
+          unawaited(File(path).writeAsString('started', flush: true));
+        }
+      });
+    }
+    if (Platform.isAndroid) {
+      _taskDigestChannel.setMethodCallHandler((call) async {
+        if (call.method == 'openToday' && mounted) {
+          setState(() => _selectedView = TaskView.today);
+        }
+        return null;
+      });
+      unawaited(_consumeAndroidTaskDigestOpen());
+    }
     NotificationService.instance.onResponse = _handleNotificationResponse;
     _localRestoreFuture = _restoreLocalTasks();
     _localNotesRestoreFuture = _restoreLocalNotes();
     unawaited(_refreshNotificationPermissionStatus());
     unawaited(_consumeLaunchNotification());
     _restoreCloudSession();
+  }
+
+  Future<void> _consumeAndroidTaskDigestOpen() async {
+    try {
+      final shouldOpen = await _taskDigestChannel.invokeMethod<bool>(
+        'consumeOpenToday',
+      );
+      if (shouldOpen == true && mounted) {
+        setState(() => _selectedView = TaskView.today);
+      }
+    } on Object {
+      // The native bridge may be absent in tests or older host builds.
+    }
   }
 
   Future<void> _consumeLaunchNotification() async {
@@ -227,6 +281,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   void _handleNotificationResponse(NotificationResponse response) {
     final taskId = response.payload;
+    if (taskId == 'task-digest') {
+      if (mounted) setState(() => _selectedView = TaskView.today);
+      return;
+    }
+    if (taskId == 'task-digest') {
+      if (mounted) setState(() => _selectedView = TaskView.today);
+      return;
+    }
     if (taskId == null || taskId.isEmpty || taskId.startsWith('note:')) return;
     final task = tasks.where((item) => item.id == taskId).firstOrNull;
     if (task == null) return;
@@ -387,6 +449,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
     await _refreshDailyPlanNotification();
     await _refreshOverdueTaskNotifications();
+    await _applyWindowsReminderMode();
+    if (Platform.isWindows &&
+        _launchFromWindowsStartup &&
+        _organizerSettings.taskRemindersEnabled) {
+      await windowManager.hide();
+    }
     _refreshAndroidWidgets();
   }
 
@@ -467,11 +535,35 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     await _localStore?.save(tasks);
   }
 
+  Future<void> _flushLocalDataForWindowsUpdate() async {
+    await _saveLocalTasks();
+    await _saveLocalNotes();
+    await _saveLocalFolders();
+    final preferences = await SharedPreferences.getInstance();
+    await LocalCostStore(
+      preferences,
+      ownerId: _costsOwnerForKey ?? 'local-user',
+    ).save(_costSnapshot);
+    // Sync outboxes are already persisted after each mutation; leave them on
+    // disk rather than blocking update shutdown on network availability.
+  }
+
   Future<void> _changeOrganizerSettings(OrganizerSettings settings) async {
     setState(() => _organizerSettings = settings);
     await _organizerSettingsStore?.save(settings);
-    if (settings.dailyPlanEnabled ||
-        settings.overdueReminderIntervalMinutes > 0) {
+    if (Platform.isWindows) {
+      try {
+        await const WindowsAutostart().setEnabled(
+          settings.windowsStartWithSystem,
+        );
+      } catch (_) {
+        if (mounted) {
+          _showSuccessNotice('Nie udało się zmienić autostartu Windows.');
+        }
+      }
+      await _applyWindowsReminderMode();
+    }
+    if (settings.dailyPlanEnabled || settings.taskRemindersEnabled) {
       final permission = await NotificationService.instance
           .requestPermissions();
       if (!permission && mounted) {
@@ -546,45 +638,126 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _syncTaskNotifications(TaskItem task) async {
     await NotificationService.instance.cancel(task.id);
-    await NotificationService.instance.cancelOverdueTaskReminders(task.id);
-    if (task.isDone) return;
-    final reminderTime = task.reminderAt ?? task.dueAt;
-    if (reminderTime != null) {
-      await NotificationService.instance.scheduleTaskReminder(
-        taskId: task.id,
-        title: task.title,
-        when: reminderTime,
-      );
+    if (!task.isDone) {
+      final reminderTime = task.reminderAt ?? task.dueAt;
+      if (reminderTime != null) {
+        await NotificationService.instance.scheduleTaskReminder(
+          taskId: task.id,
+          title: task.title,
+          when: reminderTime,
+        );
+      }
     }
-    final interval = _organizerSettings.overdueReminderIntervalMinutes;
-    if (task.dueAt != null && interval > 0) {
-      await NotificationService.instance.scheduleOverdueTaskReminders(
-        taskId: task.id,
-        title: task.title,
-        dueAt: task.dueAt!,
-        intervalMinutes: interval,
-      );
-    }
+    await _refreshOverdueTaskNotifications();
   }
 
   Future<void> _refreshOverdueTaskNotifications() async {
     final currentTasks = List<TaskItem>.of(tasks);
-    for (final task in currentTasks) {
-      if (task.isDone || task.dueAt == null) {
+    final preferences = await SharedPreferences.getInstance();
+    if (!(preferences.getBool(_legacyOverdueCleanupKey) ?? false)) {
+      for (final task in currentTasks) {
         await NotificationService.instance.cancelOverdueTaskReminders(task.id);
-        continue;
       }
-      final interval = _organizerSettings.overdueReminderIntervalMinutes;
-      if (interval == 0) {
-        await NotificationService.instance.cancelOverdueTaskReminders(task.id);
-      } else {
-        await NotificationService.instance.scheduleOverdueTaskReminders(
-          taskId: task.id,
-          title: task.title,
-          dueAt: task.dueAt!,
-          intervalMinutes: interval,
-        );
+      await preferences.setBool(_legacyOverdueCleanupKey, true);
+    }
+    if (Platform.isAndroid) {
+      await NotificationService.instance.scheduleTaskDigest(
+        enabled: _organizerSettings.taskRemindersEnabled,
+        intervalMinutes: _organizerSettings.taskReminderIntervalMinutes,
+        startMinute: _organizerSettings.taskReminderStartMinute,
+        endMinute: _organizerSettings.taskReminderEndMinute,
+        tasks: currentTasks,
+      );
+    } else if (Platform.isWindows) {
+      await NotificationService.instance.cancelTaskDigest();
+      _scheduleDesktopTaskDigest();
+    }
+  }
+
+  void _scheduleDesktopTaskDigest() {
+    _taskDigestTimer?.cancel();
+    if (!Platform.isWindows || !_organizerSettings.taskRemindersEnabled) return;
+    if (tasksForTaskDigest(tasks, now: DateTime.now()).isEmpty) return;
+    final next = taskDigestTimes(
+      now: DateTime.now(),
+      intervalMinutes: _organizerSettings.taskReminderIntervalMinutes,
+      startMinute: _organizerSettings.taskReminderStartMinute,
+      endMinute: _organizerSettings.taskReminderEndMinute,
+      occurrenceCount: 1,
+    ).firstOrNull;
+    if (next == null) return;
+    _taskDigestTimer = Timer(next.difference(DateTime.now()), () async {
+      final current = tasksForTaskDigest(tasks, now: DateTime.now());
+      if (current.isNotEmpty) {
+        await NotificationService.instance.showTaskDigest(current);
       }
+      _scheduleDesktopTaskDigest();
+    });
+  }
+
+  Future<void> _applyWindowsReminderMode() async {
+    if (!Platform.isWindows) return;
+    final enabled = _organizerSettings.taskRemindersEnabled;
+    await windowManager.setPreventClose(enabled);
+    if (!enabled) {
+      _trayIcon?.dispose();
+      _trayIcon = null;
+      return;
+    }
+    if (_trayIcon != null) return;
+    final icon = TrayIcon.create();
+    final menu = Menu.create();
+    final openItem = MenuItem.createWithLabelAndType(
+      'Otwórz Dniówkę',
+      MenuItemType.normal,
+    );
+    final exitItem = MenuItem.createWithLabelAndType(
+      'Zakończ',
+      MenuItemType.normal,
+    );
+    if (icon == null || menu == null || openItem == null || exitItem == null) {
+      icon?.dispose();
+      menu?.dispose();
+      openItem?.dispose();
+      exitItem?.dispose();
+      _showSuccessNotice('Nie udało się uruchomić ikony Dniówki w zasobniku.');
+      return;
+    }
+    _trayIcon = icon;
+    icon.icon = ImageAsset.fromAsset('assets/branding/dniowka-mark.png');
+    icon.setTooltip('Dniówka — przypomnienia o zadaniach');
+    icon.setContextMenu(menu);
+    icon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
+    icon.addListener((event) {
+      if (event is TrayIconDoubleClickedEvent) unawaited(_showFromTray());
+    });
+    openItem.addListener((event) {
+      if (event is MenuItemClickedEvent) unawaited(_showFromTray());
+    });
+    exitItem.addListener((event) {
+      if (event is MenuItemClickedEvent) {
+        _exitRequestedFromTray = true;
+        unawaited(windowManager.setPreventClose(false));
+        unawaited(windowManager.close());
+      }
+    });
+    menu.addItem(openItem);
+    menu.addSeparator();
+    menu.addItem(exitItem);
+    icon.setVisible(true);
+  }
+
+  Future<void> _showFromTray() async {
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  @override
+  void onWindowClose() {
+    if (Platform.isWindows &&
+        _organizerSettings.taskRemindersEnabled &&
+        !_exitRequestedFromTray) {
+      unawaited(windowManager.hide());
     }
   }
 
@@ -1785,6 +1958,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             note: draft.note,
             category: draft.category,
             categoryId: draft.categoryId,
+            emoji: draft.emoji,
+            colorKey: draft.colorKey,
             priority: draft.priority,
             dueAt: draft.dueAt,
             reminderAt: draft.reminderAt,
@@ -1799,6 +1974,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 note: draft.note,
                 category: draft.category,
                 categoryId: draft.categoryId,
+                emoji: draft.emoji,
+                colorKey: draft.colorKey,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
                 reminderAt: draft.reminderAt,
@@ -1839,6 +2016,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               note: draft.note,
               category: draft.category,
               categoryId: draft.categoryId,
+              emoji: draft.emoji,
+              colorKey: draft.colorKey,
               priority: draft.priority,
               dueAt: draft.dueAt,
               reminderAt: draft.reminderAt,
@@ -1856,6 +2035,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               note: draft.note,
               category: draft.category,
               categoryId: draft.categoryId,
+              emoji: draft.emoji,
+              colorKey: draft.colorKey,
               priority: draft.priority,
               dueAt: draft.dueAt,
               reminderAt: draft.reminderAt,
@@ -1884,6 +2065,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 note: draft.note,
                 category: draft.category,
                 categoryId: draft.categoryId,
+                emoji: draft.emoji,
+                colorKey: draft.colorKey,
                 priority: draft.priority,
                 dueAt: draft.dueAt,
                 reminderAt: draft.reminderAt,
@@ -1901,6 +2084,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   note: draft.note,
                   category: draft.category,
                   categoryId: draft.categoryId,
+                  emoji: draft.emoji,
+                  colorKey: draft.colorKey,
                   priority: draft.priority,
                   dueAt: draft.dueAt,
                   reminderAt: draft.reminderAt,
@@ -1914,6 +2099,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   note: draft.note,
                   category: draft.category,
                   categoryId: draft.categoryId,
+                  emoji: draft.emoji,
+                  colorKey: draft.colorKey,
                   priority: draft.priority,
                   dueAt: draft.dueAt,
                   reminderAt: draft.reminderAt,
@@ -1938,6 +2125,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _signOut() async {
+    _taskDigestTimer?.cancel();
+    await NotificationService.instance.cancelTaskDigest();
+    if (_organizerSettings.taskRemindersEnabled) {
+      final current = _organizerSettings;
+      final disabled = OrganizerSettings(
+        defaultReminderMinutes: current.defaultReminderMinutes,
+        defaultSnoozeMinutes: current.defaultSnoozeMinutes,
+        weeklyReviewHour: current.weeklyReviewHour,
+        weeklyReviewMinute: current.weeklyReviewMinute,
+        dailyPlanEnabled: current.dailyPlanEnabled,
+        dailyPlanHour: current.dailyPlanHour,
+        dailyPlanMinute: current.dailyPlanMinute,
+        overdueReminderIntervalMinutes: current.overdueReminderIntervalMinutes,
+        taskRemindersEnabled: false,
+        taskReminderIntervalMinutes: current.taskReminderIntervalMinutes,
+        taskReminderStartMinute: current.taskReminderStartMinute,
+        taskReminderEndMinute: current.taskReminderEndMinute,
+        windowsStartWithSystem: current.windowsStartWithSystem,
+      );
+      setState(() => _organizerSettings = disabled);
+      await _organizerSettingsStore?.save(disabled);
+      await _applyWindowsReminderMode();
+    }
     await _taskSubscription?.cancel();
     await _taskCategorySubscription?.cancel();
     await _subtaskSubscription?.cancel();
@@ -1976,6 +2186,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _taskDigestTimer?.cancel();
+    if (Platform.isWindows) windowManager.removeListener(this);
+    _trayIcon?.dispose();
     _taskSubscription?.cancel();
     _taskCategorySubscription?.cancel();
     _subtaskSubscription?.cancel();
@@ -2645,6 +2858,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       key: _updateGateKey,
       currentVersion: _appVersion,
       checkForUpdate: _checkForUpdate,
+      beforeWindowsUpdate: _flushLocalDataForWindowsUpdate,
       child: child ?? const SizedBox.shrink(),
     ),
     home: Builder(

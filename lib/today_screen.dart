@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'task_item.dart';
+import 'task_appearance.dart';
 import 'task_row.dart';
 import 'task_view.dart';
 
@@ -917,7 +918,12 @@ class _FocusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final text = task == null ? 'Wybierz jedną rzecz na start' : task!.title;
+    final taskColor = task == null
+        ? scheme.onSecondaryContainer
+        : TaskAppearance.foreground(context, task!.colorKey);
+    final text = task == null
+        ? 'Wybierz jedną rzecz na start'
+        : '${task!.emoji?.isNotEmpty == true ? '${task!.emoji} ' : ''}${task!.title}';
     final isEmpty = task == null;
     return Semantics(
       button: true,
@@ -929,10 +935,15 @@ class _FocusCard extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              scheme.primaryContainer.withValues(alpha: .9),
-              scheme.secondaryContainer.withValues(alpha: .96),
-            ],
+            colors: task == null
+                ? [
+                    scheme.primaryContainer.withValues(alpha: .9),
+                    scheme.secondaryContainer.withValues(alpha: .96),
+                  ]
+                : [
+                    TaskAppearance.background(context, task!.colorKey),
+                    TaskAppearance.background(context, task!.colorKey),
+                  ],
           ),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
@@ -963,7 +974,7 @@ class _FocusCard extends StatelessWidget {
                             Icon(
                               Icons.center_focus_strong,
                               size: 16,
-                              color: scheme.onSecondaryContainer,
+                              color: taskColor,
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -971,7 +982,7 @@ class _FocusCard extends StatelessWidget {
                               style: Theme.of(context).textTheme.labelSmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.w700,
-                                    color: scheme.onSecondaryContainer,
+                                    color: taskColor,
                                   ),
                             ),
                           ],
@@ -982,7 +993,7 @@ class _FocusCard extends StatelessWidget {
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: scheme.onSecondaryContainer,
+                                color: taskColor,
                               ),
                         ),
                         const SizedBox(height: 3),
@@ -992,9 +1003,7 @@ class _FocusCard extends StatelessWidget {
                               : 'Najbliższy termin w Twoim planie.',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                                color: scheme.onSecondaryContainer.withValues(
-                                  alpha: .82,
-                                ),
+                                color: taskColor.withValues(alpha: .82),
                               ),
                         ),
                       ],
