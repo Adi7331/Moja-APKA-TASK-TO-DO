@@ -2,10 +2,8 @@ import 'task_item.dart';
 
 enum TaskView { today, inbox, upcoming, completed }
 
-List<TaskItem> pinnedTodayTasks(Iterable<TaskItem> tasks) => tasks
-    .where((task) => task.pinnedToday && !task.isDone)
-    .take(3)
-    .toList();
+List<TaskItem> pinnedTodayTasks(Iterable<TaskItem> tasks) =>
+    tasks.where((task) => task.pinnedToday && !task.isDone).take(3).toList();
 
 List<TaskItem> tasksForView(List<TaskItem> tasks, TaskView view, DateTime now) {
   final endOfToday = DateTime(now.year, now.month, now.day + 1);
@@ -33,19 +31,22 @@ List<TaskItem> tasksForView(List<TaskItem> tasks, TaskView view, DateTime now) {
     TaskView.completed => tasks.where((task) => task.isDone).toList(),
   };
 
-  selected.sort(
-    (a, b) => switch (view) {
-      TaskView.upcoming => a.dueAt!.compareTo(b.dueAt!),
-      TaskView.completed => _completedOrder(a, b),
-      _ => 0,
-    },
-  );
+  final positions = {
+    for (var i = 0; i < selected.length; i++) selected[i].id: i,
+  };
+  selected.sort((a, b) {
+    if (view == TaskView.completed) {
+      return (b.completedAt ?? b.dueAt ?? DateTime(1900)).compareTo(
+        a.completedAt ?? a.dueAt ?? DateTime(1900),
+      );
+    }
+    const ranks = {'high': 0, 'medium': 1, 'low': 2};
+    final priority = (ranks[a.priority] ?? 1).compareTo(ranks[b.priority] ?? 1);
+    if (priority != 0) return priority;
+    final date = (a.dueAt ?? DateTime(9999)).compareTo(
+      b.dueAt ?? DateTime(9999),
+    );
+    return date != 0 ? date : positions[a.id]!.compareTo(positions[b.id]!);
+  });
   return selected;
-}
-
-int _completedOrder(TaskItem a, TaskItem b) {
-  if (a.dueAt == null && b.dueAt == null) return 0;
-  if (a.dueAt == null) return 1;
-  if (b.dueAt == null) return -1;
-  return b.dueAt!.compareTo(a.dueAt!);
 }

@@ -14,7 +14,7 @@ import 'local_cost_store.dart';
 import 'start_cost_card.dart';
 import 'app_navigation_icon.dart';
 
-enum AppSpace { start, tasks, notes, costs }
+enum AppSpace { start, tasks, notes, costs, hours }
 
 /// Shared shell. Data and mutations remain owned by the existing application.
 class RemasterShell extends StatefulWidget {
@@ -28,6 +28,8 @@ class RemasterShell extends StatefulWidget {
     required this.tasksContent,
     required this.notesContent,
     this.costsContent = const SizedBox.shrink(),
+    this.hoursContent = const SizedBox.shrink(),
+    this.onAddHours,
     this.costSnapshot = const CostSnapshot(),
     required this.onAddTask,
     required this.onAddNote,
@@ -70,6 +72,8 @@ class RemasterShell extends StatefulWidget {
   final Widget tasksContent;
   final Widget notesContent;
   final Widget costsContent;
+  final Widget hoursContent;
+  final VoidCallback? onAddHours;
   final CostSnapshot costSnapshot;
   final VoidCallback onAddTask, onAddNote, onLegacy;
   final VoidCallback? onAddCost;
@@ -123,6 +127,10 @@ class _RemasterShellState extends State<RemasterShell> {
   void _select(AppSpace space) => setState(() => _space = space);
 
   void _add() {
+    if (_space == AppSpace.hours) {
+      widget.onAddHours?.call();
+      return;
+    }
     if (_space == AppSpace.tasks) {
       widget.onAddTask();
       return;
@@ -453,6 +461,7 @@ class _RemasterShellState extends State<RemasterShell> {
                                 widget.tasksContent,
                                 widget.notesContent,
                                 widget.costsContent,
+                                widget.hoursContent,
                               ],
                             ),
                           ),
@@ -1134,6 +1143,7 @@ String _label(AppSpace space) => switch (space) {
   AppSpace.tasks => 'Zadania',
   AppSpace.notes => 'Notatki',
   AppSpace.costs => 'Koszty',
+  AppSpace.hours => 'Godziny',
 };
 
 /// Four compact destinations inspired by the supplied pill navigation.

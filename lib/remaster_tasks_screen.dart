@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'task_item.dart';
 import 'task_appearance.dart';
 import 'task_view.dart';
+import 'task_category.dart';
 
 /// The task workspace used by the opt-in remaster. It deliberately owns only
 /// presentation state (view, search and selected row); task data stays in
@@ -11,6 +12,7 @@ class RemasterTasksScreen extends StatefulWidget {
   const RemasterTasksScreen({
     super.key,
     required this.tasks,
+    this.categories = const [],
     required this.selectedView,
     required this.onViewChanged,
     required this.onOpenTask,
@@ -23,6 +25,7 @@ class RemasterTasksScreen extends StatefulWidget {
   });
 
   final List<TaskItem> tasks;
+  final List<TaskCategory> categories;
   final TaskView selectedView;
   final ValueChanged<TaskView> onViewChanged;
   final ValueChanged<TaskItem> onOpenTask;
@@ -42,8 +45,12 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
   TaskView? _view;
   String _query = '';
   String? _selectedTaskId;
+  String _categoryFilter = '*';
 
-  TaskView get _activeView => _view ?? widget.selectedView;
+  TaskView get _activeView {
+    final selected = _view ?? widget.selectedView;
+    return selected == TaskView.inbox ? TaskView.today : selected;
+  }
 
   @override
   void dispose() {
@@ -56,6 +63,9 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
     return tasksForView(widget.tasks, _activeView, DateTime.now()).where((
       task,
     ) {
+      if (_categoryFilter != '*' && (task.categoryId ?? '') != _categoryFilter) {
+        return false;
+      }
       return normalized.isEmpty ||
           task.title.toLowerCase().contains(normalized) ||
           task.note.toLowerCase().contains(normalized) ||
@@ -83,8 +93,39 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
     final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (_categoryFilter != '*' &&
+            _categoryFilter != '' &&
+            !widget.categories.any((c) => c.id == _categoryFilter) &&
+            !widget.tasks.any((t) => t.categoryId == _categoryFilter)) {
+          _categoryFilter = '*';
+        }
         final wide = constraints.maxWidth >= 1100;
         final list = _TaskList(
+          categoryFilter: DropdownButton<String>(
+            key: const Key('task-category-filter'),
+            value: _categoryFilter,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(
+                value: '*',
+                child: Text('Wszystkie kategorie'),
+              ),
+              const DropdownMenuItem(value: '', child: Text('Bez kategorii')),
+              for (final category in {
+                for (final task in widget.tasks)
+                  if (task.categoryId != null) task.categoryId!: task.category,
+                for (final item in widget.categories) item.id: item.name,
+              }.entries)
+                DropdownMenuItem(
+                  value: category.key,
+                  child: Text(category.value),
+                ),
+            ],
+            onChanged: (value) => setState(() {
+              _categoryFilter = value ?? '*';
+              _selectedTaskId = null;
+            }),
+          ),
           queryController: _search,
           query: _query,
           activeView: _activeView,
@@ -126,6 +167,7 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
 
 class _TaskList extends StatelessWidget {
   const _TaskList({
+    required this.categoryFilter,
     required this.queryController,
     required this.query,
     required this.activeView,
@@ -144,6 +186,7 @@ class _TaskList extends StatelessWidget {
   });
 
   final TextEditingController queryController;
+  final Widget categoryFilter;
   final String query;
   final TaskView activeView;
   final List<TaskItem> tasks;
@@ -206,6 +249,7 @@ class _TaskList extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: TaskView.values
+                        .where((view) => view != TaskView.inbox)
                         .map(
                           (view) => Padding(
                             padding: const EdgeInsets.only(right: 8),
@@ -219,6 +263,8 @@ class _TaskList extends StatelessWidget {
                         .toList(),
                   ),
                 ),
+                const SizedBox(height: 8),
+                categoryFilter,
               ],
             ),
           ),

@@ -88,7 +88,9 @@ void main() {
     expect(find.text('Zsynchronizowano'), findsOneWidget);
   });
 
-  testWidgets('offers sign out in the account menu', (WidgetTester tester) async {
+  testWidgets('offers sign out in the account menu', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: TodayScreen(
@@ -356,8 +358,9 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('task-view-menu')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Skrzynka').last);
-    expect(selected, TaskView.inbox);
+    expect(find.text('Skrzynka'), findsNothing);
+    await tester.tap(find.text('Nadchodzące').last);
+    expect(selected, TaskView.upcoming);
   });
 
   testWidgets('selects the dark appearance from settings', (
@@ -668,6 +671,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.circle_outlined), findsWidgets);
+  });
+
+  testWidgets('completion notice dismisses automatically after five seconds', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MyApp(remasterPreviewOverride: false));
+    await tester.tap(find.text('Tryb lokalny'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.circle_outlined).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Zadanie oznaczone jako gotowe'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Zadanie oznaczone jako gotowe'), findsNothing);
   });
 
   testWidgets('postpones a local task from its direct task action', (

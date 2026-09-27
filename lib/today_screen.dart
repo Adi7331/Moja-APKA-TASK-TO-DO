@@ -221,13 +221,6 @@ class _DesktopNavigation extends StatelessWidget {
               onPressed: onOpenNotes,
             ),
           _NavigationItem(
-            icon: Icons.inbox_outlined,
-            label: 'Skrzynka',
-            view: TaskView.inbox,
-            selected: selectedView == TaskView.inbox,
-            onTap: onViewChanged,
-          ),
-          _NavigationItem(
             icon: Icons.calendar_month_outlined,
             label: 'Nadchodzące',
             view: TaskView.upcoming,
@@ -653,18 +646,20 @@ class _Header extends StatelessWidget {
             },
             icon: const Icon(Icons.more_horiz),
             itemBuilder: (context) => [
-              ...TaskView.values.map(
-                (view) => PopupMenuItem<_HeaderMenuAction>(
-                  value: _HeaderMenuAction.view(view),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(_viewTitle(view))),
-                      if (view == selectedView)
-                        const Icon(Icons.check, size: 18),
-                    ],
+              ...TaskView.values
+                  .where((view) => view != TaskView.inbox)
+                  .map(
+                    (view) => PopupMenuItem<_HeaderMenuAction>(
+                      value: _HeaderMenuAction.view(view),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(_viewTitle(view))),
+                          if (view == selectedView)
+                            const Icon(Icons.check, size: 18),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
               const PopupMenuDivider(),
               if (onOpenWeek != null)
                 const PopupMenuItem<_HeaderMenuAction>(
