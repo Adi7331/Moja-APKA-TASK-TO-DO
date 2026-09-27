@@ -23,6 +23,7 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.calendarConnected = false,
     this.calendarConnecting = false,
     this.calendarStatus = CalendarConnectionStatus.disconnected,
+    this.calendarErrorDetail,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
     this.onConnectCalendar,
@@ -49,6 +50,7 @@ class RemasterSettingsScreen extends StatelessWidget {
   final bool calendarConnected;
   final bool calendarConnecting;
   final CalendarConnectionStatus calendarStatus;
+  final String? calendarErrorDetail;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
   final VoidCallback? onConnectCalendar,
@@ -179,6 +181,14 @@ class RemasterSettingsScreen extends StatelessWidget {
                             cachedEventCount: calendarCachedEventCount,
                           ),
                         ),
+                        if (calendarErrorDetail != null) ...[
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            'Kod diagnostyczny: $calendarErrorDetail',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
                         if (calendarLastSyncedAt != null) ...[
                           const SizedBox(height: 6),
                           Text(

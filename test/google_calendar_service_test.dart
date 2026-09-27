@@ -48,6 +48,19 @@ void main() {
     );
   });
 
+  test('keeps a safe Google error code for the settings diagnostic', () {
+    final error = CalendarTransportException.fromResponse(403, '''
+      {"error":{"errors":[{"message":"forbidden"},{"reason":"insufficientPermissions"}]}}
+    ''');
+
+    expect(error.reason, 'insufficientPermissions');
+    expect(error.diagnosticCode, 'HTTP 403 · insufficientPermissions');
+    expect(
+      calendarStatusForError(error),
+      CalendarConnectionStatus.missingScopes,
+    );
+  });
+
   test(
     'does not expose response messages or arbitrary error body in exception',
     () {

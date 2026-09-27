@@ -3,6 +3,14 @@ import 'repeat_rule.dart';
 
 const _unset = Object();
 
+String _normalizeTaskStatus(String? status) {
+  if (status == 'doing') return 'in_progress';
+  if (status == 'todo' || status == 'in_progress' || status == 'done') {
+    return status!;
+  }
+  return 'todo';
+}
+
 class TaskItem {
   const TaskItem({
     required this.id,
@@ -26,7 +34,7 @@ class TaskItem {
   factory TaskItem.fromRow(Map<String, dynamic> row) => TaskItem(
     id: row['id'] as String,
     title: row['title'] as String,
-    status: row['status'] as String? ?? 'todo',
+    status: _normalizeTaskStatus(row['status'] as String?),
     note: row['note'] as String? ?? '',
     categoryId: row['category_id'] as String?,
     category: row['category_id'] == null
@@ -57,7 +65,7 @@ class TaskItem {
   factory TaskItem.fromStorage(Map<String, dynamic> stored) => TaskItem(
     id: stored['id'] as String,
     title: stored['title'] as String,
-    status: stored['status'] as String? ?? 'todo',
+    status: _normalizeTaskStatus(stored['status'] as String?),
     note: stored['note'] as String? ?? '',
     categoryId: stored['categoryId'] as String?,
     category: stored['categoryId'] == null

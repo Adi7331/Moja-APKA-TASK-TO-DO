@@ -69,6 +69,16 @@ void main() {
     expect(restored.dueAt, original.dueAt);
   });
 
+  test('migrates the old in-progress status spelling on local restore', () {
+    final task = TaskItem.fromStorage({
+      'id': 'legacy-doing',
+      'title': 'Stare zadanie',
+      'status': 'doing',
+    });
+
+    expect(task.status, 'in_progress');
+  });
+
   test('round-trips locally stored checklist progress', () {
     final task = TaskItem(
       id: 'local-5',

@@ -20,11 +20,11 @@ class PendingTaskSync {
   final bool syncSubtasks;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'syncSubtasks': syncSubtasks,
-        'task': task.toStorage(),
-      };
+    'id': id,
+    'kind': kind.name,
+    'syncSubtasks': syncSubtasks,
+    'task': task.toStorage(),
+  };
 
   factory PendingTaskSync.fromJson(Map<String, dynamic> json) =>
       PendingTaskSync(
@@ -54,7 +54,9 @@ class TaskSyncOutbox {
     if (decoded is! List) return [];
     return decoded
         .whereType<Map>()
-        .map((item) => PendingTaskSync.fromJson(Map<String, dynamic>.from(item)))
+        .map(
+          (item) => PendingTaskSync.fromJson(Map<String, dynamic>.from(item)),
+        )
         .toList();
   }
 
@@ -62,10 +64,7 @@ class TaskSyncOutbox {
     await _enqueue(task, TaskSyncOperationKind.create);
   }
 
-  Future<void> enqueueUpdate(
-    TaskItem task, {
-    bool syncSubtasks = false,
-  }) async {
+  Future<void> enqueueUpdate(TaskItem task, {bool syncSubtasks = false}) async {
     await _enqueue(
       task,
       TaskSyncOperationKind.update,
@@ -83,13 +82,26 @@ class TaskSyncOutbox {
     bool syncSubtasks = false,
   }) async {
     final items = await load();
+    final index = items.indexWhere((item) => item.id == task.id);
+    var effectiveKind = kind;
+    var effectiveSyncSubtasks = syncSubtasks;
+    if (index != -1) {
+      final previous = items[index];
+      // An unsynced create remains a create even after local edits or a
+      // completion. Replace its snapshot, but do not try to update a row that
+      // does not exist in Supabase yet.
+      if (previous.kind == TaskSyncOperationKind.create &&
+          kind == TaskSyncOperationKind.update) {
+        effectiveKind = TaskSyncOperationKind.create;
+        effectiveSyncSubtasks = previous.syncSubtasks || syncSubtasks;
+      }
+    }
     final pending = PendingTaskSync(
       id: task.id,
       task: task,
-      kind: kind,
-      syncSubtasks: syncSubtasks,
+      kind: effectiveKind,
+      syncSubtasks: effectiveSyncSubtasks,
     );
-    final index = items.indexWhere((item) => item.id == task.id);
     if (index == -1) {
       items.add(pending);
     } else {

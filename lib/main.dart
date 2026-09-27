@@ -63,6 +63,7 @@ import 'focus_session_sync_service.dart';
 import 'calendar_event.dart';
 import 'calendar_store.dart';
 import 'calendar_credentials.dart';
+import 'profile_avatar.dart';
 import 'update_gate.dart';
 import 'update_service.dart';
 import 'google_calendar_service.dart';
@@ -183,6 +184,7 @@ class _MyAppState extends State<MyApp>
   DateTime? _calendarLastSyncedAt;
   CalendarConnectionStatus _calendarStatus =
       CalendarConnectionStatus.disconnected;
+  String? _calendarErrorDetail;
   String? _calendarAccessToken;
   bool _calendarAuthorizationPending = false;
   CalendarOAuthAttempt? _calendarOAuthAttempt;
@@ -842,6 +844,11 @@ class _MyAppState extends State<MyApp>
     return calendarStatusForError(error);
   }
 
+  String _calendarDiagnosticForError(Object error) =>
+      error is CalendarTransportException
+      ? error.diagnosticCode
+      : 'Błąd połączenia (${error.runtimeType})';
+
   Future<void> _startCalendarConnection() async {
     if (!cloudMode) {
       _showSuccessNotice('Zaloguj się, aby połączyć Google Calendar.');
@@ -851,12 +858,18 @@ class _MyAppState extends State<MyApp>
     _calendarOAuthAttempt = CalendarOAuthAttempt(
       Supabase.instance.client.auth.currentSession?.providerToken,
     );
-    if (mounted) setState(() => _calendarAuthorizationPending = true);
+    if (mounted) {
+      setState(() {
+        _calendarAuthorizationPending = true;
+        _calendarErrorDetail = null;
+      });
+    }
     await _setCalendarStatus(CalendarConnectionStatus.connecting);
     try {
       await SupabaseCalendarConnectionAction(Supabase.instance.client).start();
-    } catch (_) {
+    } catch (error) {
       await _setCalendarStatus(CalendarConnectionStatus.disconnected);
+      _calendarErrorDetail = _calendarDiagnosticForError(error);
       _calendarOAuthAttempt = null;
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
@@ -868,6 +881,7 @@ class _MyAppState extends State<MyApp>
   Future<void> _finishCalendarConnection(String? providerToken) async {
     if (providerToken == null || providerToken.isEmpty) {
       _calendarOAuthAttempt = null;
+      _calendarErrorDetail = 'Google nie zwrócił tokena dostępu.';
       await _setCalendarStatus(CalendarConnectionStatus.disconnected);
       if (mounted) setState(() => _calendarAuthorizationPending = false);
       _showSuccessNotice(
@@ -887,11 +901,13 @@ class _MyAppState extends State<MyApp>
       );
       if (!mounted) return;
       await _chooseCalendars(_availableCalendars);
+      _calendarErrorDetail = null;
       await _setCalendarStatus(CalendarConnectionStatus.connected);
       _calendarOAuthAttempt = null;
       if (mounted) setState(() => _calendarAuthorizationPending = false);
     } catch (error) {
       final status = _calendarStatusForError(error);
+      _calendarErrorDetail = _calendarDiagnosticForError(error);
       if (status == CalendarConnectionStatus.expired) {
         _calendarAccessToken = null;
         await _clearCalendarCredentials();
@@ -1008,11 +1024,13 @@ class _MyAppState extends State<MyApp>
           ..clear()
           ..addAll(events);
         _calendarLastSyncedAt = syncedAt;
+        _calendarErrorDetail = null;
       });
       await _setCalendarStatus(CalendarConnectionStatus.connected);
       _showSuccessNotice('Kalendarz odświeżony');
     } catch (error) {
       final status = _calendarStatusForError(error);
+      _calendarErrorDetail = _calendarDiagnosticForError(error);
       if (status == CalendarConnectionStatus.expired) {
         _calendarAccessToken = null;
         await _clearCalendarCredentials();
@@ -1041,6 +1059,7 @@ class _MyAppState extends State<MyApp>
       await _chooseCalendars(_availableCalendars);
     } catch (error) {
       final status = _calendarStatusForError(error);
+      _calendarErrorDetail = _calendarDiagnosticForError(error);
       if (status == CalendarConnectionStatus.expired) {
         _calendarAccessToken = null;
         await _clearCalendarCredentials();
@@ -1062,6 +1081,7 @@ class _MyAppState extends State<MyApp>
     setState(() {
       _calendarAccessToken = null;
       _calendarStatus = CalendarConnectionStatus.disconnected;
+      _calendarErrorDetail = null;
       _availableCalendars = const [];
       _calendarLastSyncedAt = null;
       calendarEvents.clear();
@@ -1980,6 +2000,7 @@ class _MyAppState extends State<MyApp>
                 dueAt: draft.dueAt,
                 reminderAt: draft.reminderAt,
               );
+              await _taskSyncOutbox?.remove(taskId);
               if (_subtasksChanged(task.subtasks, draft.subtasks)) {
                 await _sync.syncSubtasks(taskId, draft.subtasks);
               }
@@ -2239,6 +2260,8 @@ class _MyAppState extends State<MyApp>
     if (cloudMode) {
       try {
         await _sync.completeAndCreateNext(updated, next);
+        await _taskSyncOutbox?.remove(updated.id);
+        if (next != null) await _taskSyncOutbox?.remove(next.id);
         await _loadCloudTasks();
       } catch (_) {
         setState(() {
@@ -2279,6 +2302,7 @@ class _MyAppState extends State<MyApp>
     if (cloudMode) {
       try {
         await _sync.updateOrganizerTask(task);
+        await _taskSyncOutbox?.remove(task.id);
         await _loadCloudTasks();
       } catch (_) {
         final index = tasks.indexWhere((item) => item.id == task.id);
@@ -2313,6 +2337,7 @@ class _MyAppState extends State<MyApp>
     if (cloudMode) {
       try {
         await _sync.updateOrganizerTask(plan.updatedTask);
+        await _taskSyncOutbox?.remove(plan.updatedTask.id);
         await _loadCloudTasks();
       } catch (_) {
         final index = tasks.indexWhere((item) => item.id == task.id);
@@ -2438,6 +2463,7 @@ class _MyAppState extends State<MyApp>
     if (cloudMode) {
       try {
         await _sync.updateOrganizerTask(updated);
+        await _taskSyncOutbox?.remove(updated.id);
         await _loadCloudTasks();
       } catch (_) {
         setState(() => tasks[tasks.indexOf(task)] = updated);
@@ -2462,6 +2488,7 @@ class _MyAppState extends State<MyApp>
     if (cloudMode) {
       try {
         await _sync.updateOrganizerTask(updated);
+        await _taskSyncOutbox?.remove(updated.id);
         await _loadCloudTasks();
       } catch (_) {
         final index = tasks.indexWhere((item) => item.id == task.id);
@@ -2673,6 +2700,18 @@ class _MyAppState extends State<MyApp>
     if (!cloudMode) return null;
     return Supabase.instance.client.auth.currentUser?.userMetadata?[key]
         as String?;
+  }
+
+  String? _profileAvatarUrl() {
+    if (!cloudMode) return null;
+    try {
+      return profileAvatarUrl(
+        Supabase.instance.client.auth.currentUser?.userMetadata,
+      );
+    } on AssertionError {
+      // Unit and widget tests can render local mode without Supabase setup.
+      return null;
+    }
   }
 
   Widget _notesWorkspace(BuildContext context) {
@@ -2922,9 +2961,11 @@ class _MyAppState extends State<MyApp>
             onCheckForUpdate: _checkForUpdateFromSettings,
             updateCheckStatus: _updateCheckStatus,
             name: _profileValue('full_name'),
-            avatarUrl: _profileValue('avatar_url'),
+            avatarUrl: _profileAvatarUrl(),
+            calendarErrorDetail: _calendarErrorDetail,
             onSignOut: cloudMode ? _signOut : null,
-            calendarConnected: _calendarAccessToken != null,
+            calendarConnected:
+                _calendarStatus == CalendarConnectionStatus.connected,
             calendarConnecting: _calendarAuthorizationPending,
             calendarStatus: _calendarStatus,
             calendarCachedEventCount: calendarEvents.length,

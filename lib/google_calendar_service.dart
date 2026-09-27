@@ -64,10 +64,21 @@ class CalendarTransportException extends StateError {
         final apiError = decoded['error'];
         if (apiError is Map) {
           final errors = apiError['errors'];
-          if (errors is List && errors.isNotEmpty && errors.first is Map) {
-            final candidate = (errors.first as Map)['reason'];
-            if (candidate is String &&
-                candidate.length <= 80 &&
+          if (errors is List) {
+            for (final item in errors) {
+              if (item is! Map) continue;
+              final candidate = item['reason'];
+              if (candidate is String &&
+                  candidate.length <= 80 &&
+                  RegExp(r'^[A-Za-z0-9_]+$').hasMatch(candidate)) {
+                reason = candidate;
+                break;
+              }
+            }
+          }
+          if (reason == null && apiError['status'] is String) {
+            final candidate = apiError['status'] as String;
+            if (candidate.length <= 80 &&
                 RegExp(r'^[A-Za-z0-9_]+$').hasMatch(candidate)) {
               reason = candidate;
             }
@@ -86,6 +97,9 @@ class CalendarTransportException extends StateError {
 
   final int statusCode;
   final String? reason;
+
+  String get diagnosticCode =>
+      'HTTP $statusCode${reason == null ? '' : ' · $reason'}';
 }
 
 class HttpCalendarTransport implements CalendarTransport {
