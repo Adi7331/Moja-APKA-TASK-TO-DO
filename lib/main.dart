@@ -73,6 +73,7 @@ import 'android_widget_snapshot.dart';
 import 'costs_screen.dart';
 import 'local_cost_store.dart';
 import 'windows_autostart.dart';
+import 'work_hours_screen.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 String? _pendingWindowsUpdateAcknowledgement;
@@ -135,6 +136,9 @@ class _MyAppState extends State<MyApp>
   );
   final _updateGateKey = GlobalKey<UpdateGateState>();
   GlobalKey<CostsScreenState> _costsScreenKey = GlobalKey<CostsScreenState>();
+  GlobalKey<WorkHoursScreenState> _hoursScreenKey =
+      GlobalKey<WorkHoursScreenState>();
+  Timer? _undoSnackBarTimer;
   String? _costsOwnerForKey;
   CostSnapshot _costSnapshot = const CostSnapshot();
   bool localMode = false;
@@ -538,6 +542,7 @@ class _MyAppState extends State<MyApp>
   }
 
   Future<void> _flushLocalDataForWindowsUpdate() async {
+    await _hoursScreenKey.currentState?.flush();
     await _saveLocalTasks();
     await _saveLocalNotes();
     await _saveLocalFolders();
@@ -2206,6 +2211,7 @@ class _MyAppState extends State<MyApp>
 
   @override
   void dispose() {
+    _undoSnackBarTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _taskDigestTimer?.cancel();
     if (Platform.isWindows) windowManager.removeListener(this);
@@ -2595,8 +2601,10 @@ class _MyAppState extends State<MyApp>
     if (context == null) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
+    _undoSnackBarTimer?.cancel();
+    final controller = messenger.showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 5),
         content: Text(message),
         action: SnackBarAction(
           label: 'Cofnij',
@@ -2604,6 +2612,11 @@ class _MyAppState extends State<MyApp>
         ),
       ),
     );
+    var closed = false;
+    unawaited(controller.closed.then((_) => closed = true));
+    _undoSnackBarTimer = Timer(const Duration(seconds: 5), () {
+      if (!closed && mounted) controller.close();
+    });
   }
 
   List<TaskItem> _matchingTasks(
@@ -2788,6 +2801,7 @@ class _MyAppState extends State<MyApp>
     if (_remasterPreview) {
       return RemasterTasksScreen(
         tasks: tasks,
+        categories: taskCategories,
         selectedView: _selectedView,
         onViewChanged: (view) => setState(() {
           _selectedView = view;
@@ -2923,6 +2937,7 @@ class _MyAppState extends State<MyApp>
           if (_costsOwnerForKey != costsOwnerId) {
             _costsOwnerForKey = costsOwnerId;
             _costsScreenKey = GlobalKey<CostsScreenState>();
+            _hoursScreenKey = GlobalKey<WorkHoursScreenState>();
             _costSnapshot = const CostSnapshot();
           }
           return RemasterShell(
@@ -2945,6 +2960,12 @@ class _MyAppState extends State<MyApp>
                 setState(() => _costSnapshot = snapshot);
               },
             ),
+            hoursContent: WorkHoursScreen(
+              key: _hoursScreenKey,
+              ownerId: costsOwnerId,
+              cloudMode: cloudMode,
+            ),
+            onAddHours: () => _hoursScreenKey.currentState?.showAdd(),
             onAddTask: () => _showTaskForm(context),
             onAddNote: () => _openNewRemasterNote(),
             onAddCost: () => _costsScreenKey.currentState?.showAddChooser(),
