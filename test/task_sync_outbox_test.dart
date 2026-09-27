@@ -22,6 +22,22 @@ void main() {
     expect(await store.load(), isEmpty);
   });
 
+  test('updating an offline-created task keeps its create operation', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = TaskSyncOutbox(preferences);
+    const created = TaskItem(id: 'task-local', title: 'Nowe', status: 'todo');
+    final completed = created.copyWith(status: 'done');
+
+    await store.enqueue(created);
+    await store.enqueueUpdate(completed);
+
+    final pending = await store.load();
+    expect(pending, hasLength(1));
+    expect(pending.single.kind, TaskSyncOperationKind.create);
+    expect(pending.single.task.status, 'done');
+  });
+
   test('task outbox persists update and delete operations', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -37,15 +53,32 @@ void main() {
     expect(pending.single.task.id, 'task-2');
   });
 
-  test('task outbox remembers when an offline update changed subtasks', () async {
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final store = TaskSyncOutbox(preferences);
-    const task = TaskItem(id: 'task-3', title: 'Plan', status: 'todo');
+  test(
+    'task outbox remembers when an offline update changed subtasks',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final store = TaskSyncOutbox(preferences);
+      const task = TaskItem(id: 'task-3', title: 'Plan', status: 'todo');
 
-    await store.enqueueUpdate(task, syncSubtasks: true);
+      await store.enqueueUpdate(task, syncSubtasks: true);
 
-    final pending = await store.load();
-    expect(pending.single.syncSubtasks, isTrue);
-  });
+      final pending = await store.load();
+      expect(pending.single.syncSubtasks, isTrue);
+    },
+  );
+
+  test(
+    'restores legacy in-progress snapshots with the database status value',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final store = TaskSyncOutbox(preferences);
+      const task = TaskItem(id: 'task-4', title: 'W trakcie', status: 'doing');
+
+      await store.enqueueUpdate(task);
+
+      expect((await store.load()).single.task.status, 'in_progress');
+    },
+  );
 }

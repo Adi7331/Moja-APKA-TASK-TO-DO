@@ -65,7 +65,7 @@ void main() {
       ),
     );
     action.onPressed!.call();
-    expect(selectedStatus, 'doing');
+    expect(selectedStatus, 'in_progress');
   });
 
   testWidgets(

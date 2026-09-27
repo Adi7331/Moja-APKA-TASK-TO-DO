@@ -117,14 +117,24 @@ class TaskSyncService {
       })
       .eq('id', id);
 
-  Future<void> updateOrganizerTask(TaskItem task) => _client
-      .from('tasks')
-      .update({
-        ...task.toSupabasePayload(),
-        'category_id': task.categoryId,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      })
-      .eq('id', task.id);
+  Future<void> updateOrganizerTask(TaskItem task) async {
+    final row = await _client
+        .from('tasks')
+        .update({
+          ...task.toSupabasePayload(),
+          'category_id': task.categoryId,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', task.id)
+        .select('id, status')
+        .maybeSingle();
+    if (row == null) {
+      throw StateError('Nie znaleziono zadania do aktualizacji.');
+    }
+    if (row['status'] != task.status) {
+      throw StateError('Serwer nie potwierdził zmiany statusu zadania.');
+    }
+  }
 
   Future<void> completeAndCreateNext(TaskItem completed, TaskItem? next) async {
     await updateOrganizerTask(completed);

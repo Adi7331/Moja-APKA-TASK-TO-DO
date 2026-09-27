@@ -295,8 +295,8 @@ class _TaskRow extends StatelessWidget {
       _TaskStatusButton(
         tooltip: 'Oznacz jako w trakcie',
         icon: Icons.timelapse_rounded,
-        selected: task.status == 'doing',
-        onPressed: () => onStatusSelected('doing'),
+        selected: task.status == 'in_progress',
+        onPressed: () => onStatusSelected('in_progress'),
       ),
       _TaskStatusButton(
         tooltip: 'Oznacz jako gotowe',

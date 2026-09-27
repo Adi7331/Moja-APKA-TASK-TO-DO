@@ -1,4 +1,5 @@
 import 'package:dzien_po_dniu/remaster_settings_screen.dart';
+import 'package:dzien_po_dniu/calendar_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +77,39 @@ void main() {
     );
     await tester.tap(find.text('Wybierz kalendarze'));
     expect(chooseCalls, 1);
+  });
+
+  testWidgets('shows a Calendar error code and allows retry after a 403', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 1400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    var connectCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RemasterSettingsScreen(
+          appVersion: '1.2.2',
+          syncStatus: 'Zsynchronizowano',
+          themeMode: ThemeMode.dark,
+          onThemeMode: (_) {},
+          onLegacy: () {},
+          calendarStatus: CalendarConnectionStatus.missingScopes,
+          calendarErrorDetail: 'HTTP 403 · insufficientPermissions',
+          onConnectCalendar: () => connectCalls++,
+        ),
+      ),
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('Kod diagnostyczny: HTTP 403 · insufficientPermissions'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Połącz ponownie'), findsOneWidget);
+    await tester.tap(find.text('Połącz ponownie'));
+    expect(connectCalls, 1);
   });
 
   testWidgets('shows the app version and starts a manual update check', (

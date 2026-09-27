@@ -49,6 +49,7 @@ class RemasterShell extends StatefulWidget {
     this.calendarConnected = false,
     this.calendarConnecting = false,
     this.calendarStatus = CalendarConnectionStatus.disconnected,
+    this.calendarErrorDetail,
     this.calendarCachedEventCount = 0,
     this.calendarLastSyncedAt,
     this.onConnectCalendar,
@@ -86,6 +87,7 @@ class RemasterShell extends StatefulWidget {
   final bool calendarConnected;
   final bool calendarConnecting;
   final CalendarConnectionStatus calendarStatus;
+  final String? calendarErrorDetail;
   final int calendarCachedEventCount;
   final DateTime? calendarLastSyncedAt;
   final VoidCallback? onConnectCalendar,
@@ -192,6 +194,7 @@ class _RemasterShellState extends State<RemasterShell> {
         calendarConnected: widget.calendarConnected,
         calendarConnecting: widget.calendarConnecting,
         calendarStatus: widget.calendarStatus,
+        calendarErrorDetail: widget.calendarErrorDetail,
         calendarCachedEventCount: widget.calendarCachedEventCount,
         calendarLastSyncedAt: widget.calendarLastSyncedAt,
         onConnectCalendar: widget.onConnectCalendar,
