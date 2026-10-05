@@ -153,6 +153,7 @@ class _MyAppState extends State<MyApp>
   late Future<void> _localRestoreFuture;
   late Future<void> _localNotesRestoreFuture;
   bool _cloudTransitionInProgress = false;
+  bool _googleOAuthPending = false;
   String _searchQuery = '';
   String _statusFilter = 'all';
   TaskView _selectedView = TaskView.today;
@@ -347,6 +348,9 @@ class _MyAppState extends State<MyApp>
         _enterCloudMode();
       }
       _authSubscription = auth.onAuthStateChange.listen((state) {
+        if (state.event == AuthChangeEvent.signedIn) {
+          _googleOAuthPending = false;
+        }
         if (_calendarAuthorizationPending &&
             state.event == AuthChangeEvent.signedIn &&
             _calendarOAuthAttempt?.acceptSignedInToken(
@@ -358,10 +362,46 @@ class _MyAppState extends State<MyApp>
         if (state.session != null && !cloudMode) {
           _enterCloudMode();
         }
+      }, onError: (Object error, StackTrace stackTrace) {
+        if (_calendarAuthorizationPending) {
+          _calendarErrorDetail = googleOAuthErrorMessage(error);
+          _calendarOAuthAttempt = null;
+          unawaited(_setCalendarStatus(CalendarConnectionStatus.disconnected));
+          if (mounted) setState(() => _calendarAuthorizationPending = false);
+          _showGoogleOAuthFailure(error);
+          return;
+        }
+        if (_googleOAuthPending) {
+          _googleOAuthPending = false;
+          _showGoogleOAuthFailure(error);
+        }
       });
     } on AssertionError {
       // Widget tests intentionally construct MyApp without Supabase.initialize.
     }
+  }
+
+  Future<void> _startGoogleSignIn() async {
+    _googleOAuthPending = true;
+    try {
+      await SupabaseGoogleSignInAction(Supabase.instance.client).start();
+    } catch (_) {
+      _googleOAuthPending = false;
+      rethrow;
+    }
+  }
+
+  void _showGoogleOAuthFailure(Object error) {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(googleOAuthErrorMessage(error)),
+          duration: const Duration(seconds: 10),
+        ),
+      );
   }
 
   @override
@@ -852,7 +892,7 @@ class _MyAppState extends State<MyApp>
   String _calendarDiagnosticForError(Object error) =>
       error is CalendarTransportException
       ? error.diagnosticCode
-      : 'Błąd połączenia (${error.runtimeType})';
+      : googleOAuthErrorMessage(error);
 
   Future<void> _startCalendarConnection() async {
     if (!cloudMode) {
@@ -2921,15 +2961,13 @@ class _MyAppState extends State<MyApp>
             return RemasterLoginPage(
               onLocalMode: () => setState(() => localMode = true),
               onSignedIn: _enterCloudMode,
-              onGoogleSignIn: () =>
-                  SupabaseGoogleSignInAction(Supabase.instance.client).start(),
+            onGoogleSignIn: _startGoogleSignIn,
             );
           }
           return LoginPage(
             onLocalMode: () => setState(() => localMode = true),
             onSignedIn: _enterCloudMode,
-            onGoogleSignIn: () =>
-                SupabaseGoogleSignInAction(Supabase.instance.client).start(),
+            onGoogleSignIn: _startGoogleSignIn,
           );
         }
         if (_remasterPreview) {
@@ -3078,12 +3116,9 @@ class _LoginPageState extends State<LoginPage> {
     });
     try {
       await widget.onGoogleSignIn();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _googleError =
-              'Nie udało się połączyć z Google. Spróbuj ponownie.',
-        );
+        setState(() => _googleError = googleOAuthErrorMessage(error));
       }
     } finally {
       if (mounted) setState(() => _googleLoading = false);

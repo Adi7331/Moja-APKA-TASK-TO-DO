@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'google_sign_in_action.dart';
+
 /// Entry point used by the adaptive remaster. Authentication itself remains
 /// owned by [MyApp] so Google, e-mail and local mode keep their existing flow.
 class RemasterLoginPage extends StatefulWidget {
@@ -41,11 +43,9 @@ class _RemasterLoginPageState extends State<RemasterLoginPage> {
     });
     try {
       await widget.onGoogleSignIn();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _error = 'Nie udało się połączyć z Google. Spróbuj ponownie.',
-        );
+        setState(() => _error = googleOAuthErrorMessage(error));
       }
     } finally {
       if (mounted) setState(() => _googleLoading = false);
