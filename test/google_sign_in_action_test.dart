@@ -74,7 +74,7 @@ void main() {
   });
 
   test('reports when the Calendar OAuth browser could not be opened', () async {
-    final action = CalendarConnectionAction.forTesting((_, __) async => false);
+    final action = CalendarConnectionAction.forTesting((_, _) async => false);
 
     await expectLater(action.start(), throwsA(isA<OAuthLaunchException>()));
   });
