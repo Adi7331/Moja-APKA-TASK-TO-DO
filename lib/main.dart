@@ -347,35 +347,40 @@ class _MyAppState extends State<MyApp>
       if (auth.currentSession != null) {
         _enterCloudMode();
       }
-      _authSubscription = auth.onAuthStateChange.listen((state) {
-        if (state.event == AuthChangeEvent.signedIn) {
-          _googleOAuthPending = false;
-        }
-        if (_calendarAuthorizationPending &&
-            state.event == AuthChangeEvent.signedIn &&
-            _calendarOAuthAttempt?.acceptSignedInToken(
-                  state.session?.providerToken,
-                ) ==
-                true) {
-          unawaited(_finishCalendarConnection(state.session!.providerToken));
-        }
-        if (state.session != null && !cloudMode) {
-          _enterCloudMode();
-        }
-      }, onError: (Object error, StackTrace stackTrace) {
-        if (_calendarAuthorizationPending) {
-          _calendarErrorDetail = googleOAuthErrorMessage(error);
-          _calendarOAuthAttempt = null;
-          unawaited(_setCalendarStatus(CalendarConnectionStatus.disconnected));
-          if (mounted) setState(() => _calendarAuthorizationPending = false);
-          _showGoogleOAuthFailure(error);
-          return;
-        }
-        if (_googleOAuthPending) {
-          _googleOAuthPending = false;
-          _showGoogleOAuthFailure(error);
-        }
-      });
+      _authSubscription = auth.onAuthStateChange.listen(
+        (state) {
+          if (state.event == AuthChangeEvent.signedIn) {
+            _googleOAuthPending = false;
+          }
+          if (_calendarAuthorizationPending &&
+              state.event == AuthChangeEvent.signedIn &&
+              _calendarOAuthAttempt?.acceptSignedInToken(
+                    state.session?.providerToken,
+                  ) ==
+                  true) {
+            unawaited(_finishCalendarConnection(state.session!.providerToken));
+          }
+          if (state.session != null && !cloudMode) {
+            _enterCloudMode();
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (_calendarAuthorizationPending) {
+            _calendarErrorDetail = googleOAuthErrorMessage(error);
+            _calendarOAuthAttempt = null;
+            unawaited(
+              _setCalendarStatus(CalendarConnectionStatus.disconnected),
+            );
+            if (mounted) setState(() => _calendarAuthorizationPending = false);
+            _showGoogleOAuthFailure(error);
+            return;
+          }
+          if (_googleOAuthPending) {
+            _googleOAuthPending = false;
+            _showGoogleOAuthFailure(error);
+          }
+        },
+      );
     } on AssertionError {
       // Widget tests intentionally construct MyApp without Supabase.initialize.
     }
@@ -2528,6 +2533,32 @@ class _MyAppState extends State<MyApp>
     _refreshAndroidWidgets();
   }
 
+  Future<void> _saveTaskPriority(TaskItem updated) async {
+    final index = tasks.indexWhere((task) => task.id == updated.id);
+    if (index == -1) return;
+    if (cloudMode) {
+      try {
+        await _sync.updateOrganizerTask(updated);
+        await _taskSyncOutbox?.remove(updated.id);
+        await _loadCloudTasks();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => tasks[index] = updated);
+        await _saveLocalTasks();
+        await _taskSyncOutbox?.enqueueUpdate(updated);
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
+      }
+    } else {
+      setState(() => tasks[index] = updated);
+      await _saveLocalTasks();
+    }
+    _refreshAndroidWidgets();
+  }
+
   Future<void> _moveTaskToWeekDay(TaskItem task, DateTime day) async {
     final plan = planTaskMoveToWeekDay(task, day);
     final updated = plan.updatedTask;
@@ -2849,6 +2880,7 @@ class _MyAppState extends State<MyApp>
         }),
         onOpenTask: (task) => _showTaskForm(context, task: task),
         onStatusSelected: _changeTaskStatus,
+        onPriorityChanged: _saveTaskPriority,
         onDeleteTask: (task) => _confirmDeleteTask(context, task),
         onPostponeTask: _postponeTask,
         onQuickAdd: () => _showTaskForm(context),
@@ -2961,7 +2993,7 @@ class _MyAppState extends State<MyApp>
             return RemasterLoginPage(
               onLocalMode: () => setState(() => localMode = true),
               onSignedIn: _enterCloudMode,
-            onGoogleSignIn: _startGoogleSignIn,
+              onGoogleSignIn: _startGoogleSignIn,
             );
           }
           return LoginPage(

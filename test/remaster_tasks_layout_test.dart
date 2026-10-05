@@ -31,6 +31,7 @@ void main() {
               onViewChanged: (_) {},
               onOpenTask: (_) {},
               onStatusSelected: (_, _) {},
+              onPriorityChanged: (_) {},
               onDeleteTask: (_) {},
               onPostponeTask: (_) {},
               onQuickAdd: () {},
@@ -44,6 +45,7 @@ void main() {
       expect(find.byTooltip('Oznacz jako do zrobienia'), findsOneWidget);
       expect(find.byTooltip('Oznacz jako w trakcie'), findsOneWidget);
       expect(find.byTooltip('Oznacz jako gotowe'), findsOneWidget);
+      expect(find.byTooltip('Oznacz jako priorytetowe'), findsOneWidget);
       expect(find.byTooltip('Odłóż zadanie'), findsOneWidget);
       expect(find.byTooltip('Usuń zadanie'), findsOneWidget);
       expect(

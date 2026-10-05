@@ -112,8 +112,12 @@ class TaskItem {
   final String? colorKey;
 
   bool get isDone => status == 'done';
+  bool get isPriority => priority == 'high';
   int get subtaskCount => subtasks.length;
   int get completedSubtaskCount => subtasks.where((step) => step.isDone).length;
+
+  TaskItem togglePriority() =>
+      copyWith(priority: isPriority ? 'medium' : 'high');
 
   TaskItem copyWith({
     String? id,

@@ -49,6 +49,7 @@ void main() {
           onViewChanged: (_) {},
           onOpenTask: (_) {},
           onStatusSelected: (_, status) => selectedStatus = status,
+          onPriorityChanged: (_) {},
           onDeleteTask: (_) {},
           onPostponeTask: (_) {},
           onQuickAdd: () {},

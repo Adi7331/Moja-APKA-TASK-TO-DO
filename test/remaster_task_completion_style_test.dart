@@ -29,6 +29,7 @@ void main() {
               onViewChanged: (_) {},
               onOpenTask: (_) {},
               onStatusSelected: (_, _) {},
+              onPriorityChanged: (_) {},
               onDeleteTask: (_) {},
               onPostponeTask: (_) {},
               onQuickAdd: () {},
