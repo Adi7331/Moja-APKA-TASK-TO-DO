@@ -34,6 +34,7 @@ void main() {
 
     expect(find.text('Lista kroków'), findsOneWidget);
     expect(find.text('Wygląd zadania'), findsOneWidget);
+    expect(find.text('Wysoki oznacza zadanie priorytetowe.'), findsOneWidget);
     expect(find.text('Emoji'), findsOneWidget);
     expect(find.byKey(const ValueKey('task-color-mint')), findsOneWidget);
   });

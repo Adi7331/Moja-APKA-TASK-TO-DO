@@ -15,6 +15,8 @@ void main() {
 
     expect(task.id, '8de852fa-5c83-4b01-8e22-bb0e1901d95e');
     expect(task.isDone, isFalse);
+    expect(task.priority, 'medium');
+    expect(task.isPriority, isFalse);
   });
 
   test('treats a task without a category id as uncategorized', () {
@@ -28,6 +30,7 @@ void main() {
 
     expect(task.categoryId, isNull);
     expect(task.category, 'Bez kategorii');
+    expect(task.priority, 'medium');
   });
 
   test('round-trips task emoji and color with local and cloud payloads', () {
@@ -45,8 +48,10 @@ void main() {
 
     expect(restored.emoji, '🚶');
     expect(restored.colorKey, 'mint');
+    expect(restored.priority, 'medium');
     expect(payload['emoji'], '🚶');
     expect(payload['color_key'], 'mint');
+    expect(payload['priority'], 'medium');
     expect(payload, containsPair('category_id', null));
   });
 
@@ -62,11 +67,17 @@ void main() {
     );
 
     final restored = TaskItem.fromStorage(original.toStorage());
+    final payload = original.toSupabasePayload();
+    final cloudRestored = TaskItem.fromRow({'id': original.id, ...payload});
 
     expect(restored.id, original.id);
     expect(restored.title, original.title);
     expect(restored.status, 'in_progress');
     expect(restored.dueAt, original.dueAt);
+    expect(restored.priority, 'high');
+    expect(restored.isPriority, isTrue);
+    expect(payload['priority'], 'high');
+    expect(cloudRestored.isPriority, isTrue);
   });
 
   test('migrates the old in-progress status spelling on local restore', () {
@@ -77,6 +88,7 @@ void main() {
     });
 
     expect(task.status, 'in_progress');
+    expect(task.priority, 'medium');
   });
 
   test('round-trips locally stored checklist progress', () {

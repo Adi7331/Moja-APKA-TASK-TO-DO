@@ -17,6 +17,7 @@ class RemasterTasksScreen extends StatefulWidget {
     required this.onViewChanged,
     required this.onOpenTask,
     required this.onStatusSelected,
+    required this.onPriorityChanged,
     required this.onDeleteTask,
     required this.onPostponeTask,
     required this.onQuickAdd,
@@ -30,6 +31,7 @@ class RemasterTasksScreen extends StatefulWidget {
   final ValueChanged<TaskView> onViewChanged;
   final ValueChanged<TaskItem> onOpenTask;
   final void Function(TaskItem task, String status) onStatusSelected;
+  final ValueChanged<TaskItem> onPriorityChanged;
   final ValueChanged<TaskItem> onDeleteTask;
   final ValueChanged<TaskItem> onPostponeTask;
   final VoidCallback onQuickAdd;
@@ -63,7 +65,8 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
     return tasksForView(widget.tasks, _activeView, DateTime.now()).where((
       task,
     ) {
-      if (_categoryFilter != '*' && (task.categoryId ?? '') != _categoryFilter) {
+      if (_categoryFilter != '*' &&
+          (task.categoryId ?? '') != _categoryFilter) {
         return false;
       }
       return normalized.isEmpty ||
@@ -136,6 +139,7 @@ class _RemasterTasksScreenState extends State<RemasterTasksScreen> {
           onSelect: (task) => setState(() => _selectedTaskId = task.id),
           onOpen: widget.onOpenTask,
           onStatusSelected: widget.onStatusSelected,
+          onPriorityChanged: widget.onPriorityChanged,
           onDelete: widget.onDeleteTask,
           onPostpone: widget.onPostponeTask,
           onAdd: widget.onQuickAdd,
@@ -178,6 +182,7 @@ class _TaskList extends StatelessWidget {
     required this.onSelect,
     required this.onOpen,
     required this.onStatusSelected,
+    required this.onPriorityChanged,
     required this.onDelete,
     required this.onPostpone,
     required this.onAdd,
@@ -196,6 +201,7 @@ class _TaskList extends StatelessWidget {
   final ValueChanged<TaskItem> onSelect;
   final ValueChanged<TaskItem> onOpen;
   final void Function(TaskItem task, String status) onStatusSelected;
+  final ValueChanged<TaskItem> onPriorityChanged;
   final ValueChanged<TaskItem> onDelete;
   final ValueChanged<TaskItem> onPostpone;
   final VoidCallback onAdd;
@@ -294,6 +300,7 @@ class _TaskList extends StatelessWidget {
                       onOpen: () => onOpen(task),
                       onStatusSelected: (status) =>
                           onStatusSelected(task, status),
+                      onPriorityChanged: onPriorityChanged,
                       onPostpone: () => onPostpone(task),
                       onDelete: () => onDelete(task),
                     );
@@ -313,6 +320,7 @@ class _TaskRow extends StatelessWidget {
     required this.onSelect,
     required this.onOpen,
     required this.onStatusSelected,
+    required this.onPriorityChanged,
     required this.onPostpone,
     required this.onDelete,
   });
@@ -322,6 +330,7 @@ class _TaskRow extends StatelessWidget {
   final VoidCallback onSelect;
   final VoidCallback onOpen;
   final ValueChanged<String> onStatusSelected;
+  final ValueChanged<TaskItem> onPriorityChanged;
   final VoidCallback onPostpone;
   final VoidCallback onDelete;
 
@@ -329,6 +338,12 @@ class _TaskRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final baseBackground = TaskAppearance.background(context, task.colorKey);
+    final taskBackground = task.isPriority
+        ? Color.alphaBlend(
+            scheme.primary.withValues(alpha: .045),
+            baseBackground,
+          )
+        : baseBackground;
     final taskForeground = TaskAppearance.foreground(context, task.colorKey);
     final completedColor = scheme.onSurfaceVariant.withValues(alpha: .62);
     final actions = [
@@ -349,6 +364,15 @@ class _TaskRow extends StatelessWidget {
         icon: Icons.check_circle_outline_rounded,
         selected: task.status == 'done',
         onPressed: () => onStatusSelected('done'),
+      ),
+      IconButton(
+        key: ValueKey('task-priority-${task.id}'),
+        tooltip: task.isPriority
+            ? 'Usuń priorytet'
+            : 'Oznacz jako priorytetowe',
+        onPressed: () => onPriorityChanged(task.togglePriority()),
+        color: task.isPriority ? scheme.primary : scheme.onSurfaceVariant,
+        icon: Icon(task.isPriority ? Icons.flag_rounded : Icons.flag_outlined),
       ),
       IconButton(
         tooltip: 'Odłóż zadanie',
@@ -409,12 +433,13 @@ class _TaskRow extends StatelessWidget {
               ),
             ),
             child: Material(
+              key: ValueKey('task-card-${task.id}'),
               color: selected
                   ? Color.alphaBlend(
                       scheme.primary.withValues(alpha: .12),
-                      baseBackground,
+                      taskBackground,
                     )
-                  : baseBackground,
+                  : taskBackground,
               borderRadius: BorderRadius.circular(18),
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),

@@ -383,7 +383,10 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: _priority,
-                  decoration: const InputDecoration(labelText: 'Priorytet'),
+                  decoration: const InputDecoration(
+                    labelText: 'Priorytet',
+                    helperText: 'Wysoki oznacza zadanie priorytetowe.',
+                  ),
                   items: const [
                     DropdownMenuItem(value: 'low', child: Text('Niski')),
                     DropdownMenuItem(value: 'medium', child: Text('Średni')),
