@@ -44,3 +44,29 @@ Future<bool> saveLocallyThenSyncOrQueueNote({
     return false;
   }
 }
+
+/// Runs best-effort work after the note itself is safely saved. A failed
+/// refresh or reminder must not be reported as a failed note write.
+Future<bool> runNoteSaveFollowUps(
+  Iterable<Future<void> Function()> actions,
+) async {
+  var succeeded = true;
+  for (final action in actions) {
+    try {
+      await action();
+    } on Object {
+      succeeded = false;
+    }
+  }
+  return succeeded;
+}
+
+/// Attachment metadata has a foreign key to the parent note, so the parent
+/// must exist before uploading attachment objects and metadata.
+Future<NoteItem> ensureNoteBeforeAttachments({
+  required Future<void> Function() ensureNote,
+  required Future<NoteItem> Function() uploadAttachments,
+}) async {
+  await ensureNote();
+  return uploadAttachments();
+}

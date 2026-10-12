@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'note_attachment_picker.dart';
+import 'note_attachment_preview.dart';
 import 'note_folder.dart';
 import 'note_item.dart';
 import 'remaster_theme.dart';
@@ -53,7 +53,7 @@ class NoteEditorScreen extends StatefulWidget {
   )?
   onAttach;
   final Future<void> Function(NoteAttachment attachment)? onDeleteAttachment;
-  final Future<String?> Function(NoteAttachment attachment)? onOpenAttachment;
+  final Future<File?> Function(NoteAttachment attachment)? onOpenAttachment;
   final bool initialImagePicker;
   final bool initialFilePicker;
   final bool initialChecklist;
@@ -283,17 +283,33 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   Future<void> _openAttachment(NoteAttachment attachment) async {
+    File? file;
     final path = attachment.localPath;
-    if (path == null) {
-      final remoteUrl = widget.onOpenAttachment == null
-          ? null
-          : await widget.onOpenAttachment!(attachment);
-      if (remoteUrl != null && await launchUrl(Uri.parse(remoteUrl))) return;
-      _showMessage('Plik zostanie otwarty po zakończeniu synchronizacji.');
+    if (path != null) {
+      final local = File(path);
+      if (await local.exists()) file = local;
+    }
+    if (file == null && widget.onOpenAttachment != null) {
+      try {
+        file = await widget.onOpenAttachment!(attachment);
+      } catch (_) {
+        if (mounted) _showMessage('Nie udało się pobrać załącznika.');
+        return;
+      }
+    }
+    if (file == null) {
+      _showMessage('Załącznik będzie dostępny po synchronizacji.');
       return;
     }
-    final opened = await launchUrl(Uri.file(path));
-    if (!opened && mounted) _showMessage('Nie udało się otworzyć pliku.');
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => NoteAttachmentPreviewScreen(
+          attachment: attachment,
+          file: file!,
+        ),
+      ),
+    );
   }
 
   Future<void> _removeAttachment(NoteAttachment attachment) async {

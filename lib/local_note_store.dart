@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -114,6 +115,30 @@ class LocalNoteStore {
       byteSize: byteSize,
       localPath: target.path,
     );
+  }
+
+  Future<File> cacheDownloadedAttachment({
+    required String noteId,
+    required String ownerId,
+    required NoteAttachment attachment,
+    required Uint8List bytes,
+  }) async {
+    if (bytes.length > noteAttachmentMaxBytes) {
+      throw ArgumentError('Załącznik nie może przekraczać 20 MB.');
+    }
+    final directory = await _dataDirectory();
+    final targetDirectory = Directory(
+      '${directory.path}${Platform.pathSeparator}attachments'
+      '${Platform.pathSeparator}${_safeFileName(ownerId)}'
+      '${Platform.pathSeparator}${_safeFileName(noteId)}',
+    );
+    await targetDirectory.create(recursive: true);
+    final target = File(
+      '${targetDirectory.path}${Platform.pathSeparator}'
+      '${_safeFileName(attachment.id)}-${_safeFileName(attachment.fileName)}',
+    );
+    await target.writeAsBytes(bytes, flush: true);
+    return target;
   }
 
   Future<void> deleteAttachment(NoteAttachment attachment) async {

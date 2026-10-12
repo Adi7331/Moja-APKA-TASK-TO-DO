@@ -124,6 +124,17 @@ void main() {
     expect(selected.map((task) => task.id), ['overdue', 'today']);
   });
 
+  test('task digest counts a duplicated local task only once', () {
+    final duplicate = _task('same-id', DateTime(2026, 9, 26, 9));
+    final selected = tasksForTaskDigest(
+      [duplicate, duplicate, _task('second', DateTime(2026, 9, 26, 10))],
+      now: DateTime(2026, 9, 26, 12),
+    );
+
+    expect(selected.map((task) => task.id), ['same-id', 'second']);
+    expect(formatTaskDigest(selected).title, 'Masz 2 zadania do zrobienia');
+  });
+
   test('task digest shows at most three titles and a count', () {
     final digest = formatTaskDigest(
       List.generate(5, (index) => _task('id-$index', DateTime(2026, 9, 26))),
@@ -133,6 +144,7 @@ void main() {
     expect(digest.body, contains('Zadanie 0'));
     expect(digest.body, contains('Zadanie 2'));
     expect(digest.body, isNot(contains('Zadanie 3')));
+    expect(digest.body, contains('+ 2 kolejne zadania'));
     expect(
       formatTaskDigest([
         _task('id-1', DateTime(2026, 9, 26)),

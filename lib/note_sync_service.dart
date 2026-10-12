@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -181,6 +182,25 @@ class NoteSyncService {
     }
   }
 
+  Future<void> ensureNoteExists(
+    NoteItem note, {
+    required bool includeFolderId,
+  }) async {
+    final existing = await _client
+        .from('notes')
+        .select('id')
+        .eq('id', note.id)
+        .eq('user_id', _userId)
+        .maybeSingle();
+    if (existing == null) {
+      await saveNote(
+        note.copyWith(userId: _userId),
+        expectedRevision: null,
+        includeFolderId: includeFolderId,
+      );
+    }
+  }
+
   Future<List<NoteFolder>> loadFolders() async {
     final rows = await _client
         .from('note_folders')
@@ -333,9 +353,43 @@ class NoteSyncService {
       fileName: attachment.fileName,
       mimeType: attachment.mimeType,
       byteSize: byteSize,
+      localPath: attachment.localPath,
       storagePath: path,
       createdAt: attachment.createdAt,
     );
+  }
+
+  Future<NoteItem> uploadPendingAttachments(NoteItem note) async {
+    final uploaded = <String, NoteAttachment>{};
+    final pending = note.attachments.where(
+      (attachment) =>
+          attachment.storagePath == null && attachment.localPath != null,
+    );
+    if (pending.isEmpty) return note;
+    for (final attachment in pending) {
+      final file = File(attachment.localPath!);
+      if (!await file.exists()) {
+        throw StateError('Nie znaleziono pliku ${attachment.fileName}.');
+      }
+      uploaded[attachment.id] = await uploadAttachment(
+        attachment: attachment,
+        noteId: note.id,
+        file: file,
+      );
+    }
+    return note.copyWith(
+      attachments: note.attachments
+          .map((attachment) => uploaded[attachment.id] ?? attachment)
+          .toList(),
+    );
+  }
+
+  Future<Uint8List> downloadAttachment(NoteAttachment attachment) async {
+    final path = attachment.storagePath;
+    if (path == null || path.isEmpty) {
+      throw StateError('Załącznik nie ma jeszcze kopii w chmurze.');
+    }
+    return _client.storage.from('note-attachments').download(path);
   }
 
   Future<void> deleteAttachment(NoteAttachment attachment) async {
@@ -349,12 +403,6 @@ class NoteSyncService {
         .delete()
         .eq('id', attachment.id)
         .eq('user_id', userId);
-  }
-
-  Future<String?> createAttachmentUrl(NoteAttachment attachment) async {
-    final path = attachment.storagePath;
-    if (path == null || path.isEmpty) return null;
-    return _client.storage.from('note-attachments').createSignedUrl(path, 300);
   }
 }
 

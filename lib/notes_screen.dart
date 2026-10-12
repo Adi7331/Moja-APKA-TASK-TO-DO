@@ -34,7 +34,7 @@ class NotesScreen extends StatefulWidget {
   final Future<void> Function(NoteItem note)? onPermanentlyDelete;
   final Future<NoteAttachment> Function(NoteItem note, NoteAttachmentCandidate candidate)? onAttach;
   final Future<void> Function(NoteAttachment attachment)? onDeleteAttachment;
-  final Future<String?> Function(NoteAttachment attachment)? onOpenAttachment;
+  final Future<File?> Function(NoteAttachment attachment)? onOpenAttachment;
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
