@@ -53,6 +53,20 @@ void main() {
     expect(message, isNot(contains('private-value')));
   });
 
+  test('redacts tokens from JSON-formatted authentication errors', () {
+    final message = googleOAuthErrorMessage(
+      AuthException(
+        'provider response: {"access_token":"secret-access", '
+        '"refresh_token": "secret-refresh"}',
+      ),
+    );
+
+    expect(message, contains('access_token":"[ukryto]'));
+    expect(message, contains('refresh_token": "[ukryto]'));
+    expect(message, isNot(contains('secret-access')));
+    expect(message, isNot(contains('secret-refresh')));
+  });
+
   test('publishes the callback URI used by Google OAuth', () {
     expect(googleLoginRedirectUrl, 'dzienpodniu://login-callback/');
   });

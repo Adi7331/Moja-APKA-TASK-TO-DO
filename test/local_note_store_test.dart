@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,6 +36,29 @@ void main() {
 
     expect(File(attachment.localPath!).readAsStringSync(), 'ok');
     expect(attachment.fileName, 'source.txt');
+  });
+
+  test('caches a downloaded attachment under private application data', () async {
+    final directory = await Directory.systemTemp.createTemp('notes-cache-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = LocalNoteStore(directory: directory);
+    final attachment = NoteAttachment(
+      id: 'a1',
+      fileName: 'zdjecie.png',
+      mimeType: 'image/png',
+      byteSize: 3,
+      storagePath: 'owner-1/note-1/a1/zdjecie.png',
+    );
+
+    final cached = await store.cacheDownloadedAttachment(
+      noteId: 'note-1',
+      ownerId: 'owner-1',
+      attachment: attachment,
+      bytes: Uint8List.fromList([1, 2, 3]),
+    );
+
+    expect(cached.path, contains('attachments'));
+    expect(cached.readAsBytesSync(), [1, 2, 3]);
   });
 
   test('persists note folders separately from note content', () async {

@@ -89,14 +89,15 @@ List<TaskItem> tasksForTaskDigest(
   required DateTime now,
 }) {
   final tomorrow = DateTime(now.year, now.month, now.day + 1);
-  final selected = tasks
-      .where(
-        (task) =>
-            !task.isDone &&
-            task.dueAt != null &&
-            task.dueAt!.isBefore(tomorrow),
-      )
-      .toList();
+  final byId = <String, TaskItem>{};
+  for (final task in tasks) {
+    if (!task.isDone && task.dueAt != null && task.dueAt!.isBefore(tomorrow)) {
+      // Local storage can briefly contain the same id twice while an older
+      // sync snapshot is being reconciled. The last copy is the newest one.
+      byId[task.id] = task;
+    }
+  }
+  final selected = byId.values.toList();
   selected.sort((left, right) => left.dueAt!.compareTo(right.dueAt!));
   return selected;
 }
@@ -113,13 +114,25 @@ List<TaskItem> tasksForTaskDigest(
   final title = 'Masz $count $noun do zrobienia';
   final titles = tasks
       .take(3)
-      .map((task) => task.title.trim())
-      .where((value) => value.isNotEmpty);
-  final body = titles.isEmpty
+      .map((task) => task.title.trim().isEmpty ? 'Bez tytułu' : task.title.trim())
+      .toList();
+  final remaining = count - titles.length;
+  final body = count == 0
       ? 'Otwórz Dniówkę, aby zobaczyć plan na dziś.'
-      : titles.join('\n');
+      : [
+          ...titles,
+          if (remaining > 0) '+ $remaining ${_remainingTaskNoun(remaining)}',
+        ].join('\n');
   return (title: title, body: body);
 }
+
+String _remainingTaskNoun(int count) => count == 1
+    ? 'kolejne zadanie'
+    : count % 10 >= 2 &&
+          count % 10 <= 4 &&
+          (count % 100 < 12 || count % 100 > 14)
+    ? 'kolejne zadania'
+    : 'kolejnych zadań';
 
 /// Produces future local reminder times aligned to the configured start time.
 /// No missed slots are returned, preventing catch-up notification bursts.

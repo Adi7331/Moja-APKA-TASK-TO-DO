@@ -36,7 +36,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.ensureVisible(find.byKey(const Key('add-work-day')));
+        await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('add-work-day')));
         await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Zapisz'));

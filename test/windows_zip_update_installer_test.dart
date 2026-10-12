@@ -107,6 +107,11 @@ void main() {
         ),
       );
       expect(script, contains('Expand-Archive'));
+      expect(script, contains('System.IO.Compression.ZipFile]::OpenRead'));
+      expect(script, contains('nieprawidłową ścieżkę pliku'));
+      expect(script, contains('flutter_windows.dll'));
+      expect(script, contains('data\\flutter_assets'));
+      expect(script, contains(r'Stop-Process -Id $newProcess.Id -Force'));
       expect(script, contains('Write-UpdateResult'));
       expect(script, contains('ackMarker'));
       expect(script, contains('lastResultPath'));

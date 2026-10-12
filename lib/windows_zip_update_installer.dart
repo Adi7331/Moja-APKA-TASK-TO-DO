@@ -370,10 +370,31 @@ try {
 
   [System.IO.Directory]::CreateDirectory($stagingPath) | Out-Null
   $stagingCreated = $true
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+  try {
+    $stagingRoot = [System.IO.Path]::GetFullPath($stagingPath) + [System.IO.Path]::DirectorySeparatorChar
+    foreach ($entry in $archive.Entries) {
+      if ([System.IO.Path]::IsPathRooted($entry.FullName)) {
+        throw 'Archiwum aktualizacji zawiera nieprawidłową ścieżkę pliku.'
+      }
+      $entryPath = [System.IO.Path]::GetFullPath((Join-Path -Path $stagingPath -ChildPath $entry.FullName))
+      if (!$entryPath.StartsWith($stagingRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Archiwum aktualizacji zawiera nieprawidłową ścieżkę pliku.'
+      }
+    }
+  }
+  finally {
+    $archive.Dispose()
+  }
   Expand-Archive -LiteralPath $zipPath -DestinationPath $stagingPath -Force
   $stagedExe = Join-Path -Path $stagingPath -ChildPath $exeName
   if (!(Test-Path -LiteralPath $stagedExe -PathType Leaf)) {
     throw 'Archiwum aktualizacji nie zawiera pliku wykonywalnego.'
+  }
+  if (!(Test-Path -LiteralPath (Join-Path -Path $stagingPath -ChildPath 'flutter_windows.dll') -PathType Leaf) -or
+      !(Test-Path -LiteralPath (Join-Path -Path $stagingPath -ChildPath 'data\flutter_assets') -PathType Container)) {
+    throw 'Archiwum aktualizacji jest niekompletne i nie zawiera wymaganych plików aplikacji.'
   }
   [System.IO.File]::WriteAllText($readyPath, 'ready', [System.Text.UTF8Encoding]::new($false))
 
@@ -398,6 +419,15 @@ try {
   Write-UpdateResult 'success' 'Aktualizacja została uruchomiona.'
 }
 catch {
+  if ($newProcess) {
+    try {
+      if (!$newProcess.HasExited) {
+        Stop-Process -Id $newProcess.Id -Force
+        $newProcess.WaitForExit(10000) | Out-Null
+      }
+    }
+    catch { }
+  }
   if ($backupCreated -and (Test-Path -LiteralPath $backupPath)) {
     if ($replacementActivated -and (Test-Path -LiteralPath $installPath)) {
       Move-Item -LiteralPath $installPath -Destination $stagingPath

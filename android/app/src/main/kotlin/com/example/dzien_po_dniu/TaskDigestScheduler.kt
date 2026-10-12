@@ -93,17 +93,18 @@ internal object TaskDigestScheduler {
             .getString("flutter.local_tasks_v1", null) ?: return emptyList()
         val tomorrow = LocalDate.now().plusDays(1).atStartOfDay()
         val array = JSONArray(raw)
-        val selected = mutableListOf<Pair<LocalDateTime, String>>()
+        val selected = linkedMapOf<String, Pair<LocalDateTime, String>>()
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
             if (item.optString("status", "todo") == "done") continue
             val due = parseDueAt(item.optString("dueAt", "")) ?: continue
             if (due.isBefore(tomorrow)) {
                 val title = item.optString("title", "").trim()
-                if (title.isNotEmpty()) selected.add(due to title)
+                val id = item.optString("id", "").ifBlank { "legacy-$index" }
+                selected[id] = due to title.ifBlank { "Bez tytułu" }
             }
         }
-        return selected.sortedBy { it.first }.map { it.second }
+        return selected.values.sortedBy { it.first }.map { it.second }
     }
 
     private fun parseDueAt(value: String): LocalDateTime? {
@@ -134,12 +135,13 @@ internal object TaskDigestScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0,
         )
         val count = titles.size
-        val noun = when {
-            count == 1 -> "zadanie"
-            count in 2..4 -> "zadania"
-            else -> "zadań"
-        }
-        val body = titles.take(3).joinToString("\n") + if (count > 3) "\n…" else ""
+        val noun = taskNoun(count)
+        val visibleTitles = titles.take(3)
+        val remaining = count - visibleTitles.size
+        val body = buildList {
+            addAll(visibleTitles)
+            if (remaining > 0) add("+ $remaining ${remainingTaskNoun(remaining)}")
+        }.joinToString("\n")
         val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, CHANNEL_ID)
         } else {
@@ -158,6 +160,18 @@ internal object TaskDigestScheduler {
         } catch (_: SecurityException) {
             // Notification permission can be revoked after the setting is enabled.
         }
+    }
+
+    private fun taskNoun(count: Int): String = when {
+        count == 1 -> "zadanie"
+        count % 10 in 2..4 && count % 100 !in 12..14 -> "zadania"
+        else -> "zadań"
+    }
+
+    private fun remainingTaskNoun(count: Int): String = when {
+        count == 1 -> "kolejne zadanie"
+        count % 10 in 2..4 && count % 100 !in 12..14 -> "kolejne zadania"
+        else -> "kolejnych zadań"
     }
 
     private fun alarmIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(

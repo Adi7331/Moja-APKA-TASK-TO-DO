@@ -42,13 +42,17 @@ class OAuthLaunchException implements Exception {
   final String flowName;
 
   @override
-  String toString() => 'Nie udało się otworzyć przeglądarki dla logowania $flowName.';
+  String toString() =>
+      'Nie udało się otworzyć przeglądarki dla logowania $flowName.';
 }
 
 String googleOAuthErrorMessage(Object error) {
   if (error is OAuthLaunchException) return error.toString();
+  if (error is! AuthException) {
+    return 'Nie udało się połączyć z Google. Spróbuj ponownie.';
+  }
 
-  final rawDetail = error is AuthException ? error.message : error.toString();
+  final rawDetail = error.message;
   final detail = _redactOAuthDetails(rawDetail);
   final normalized = detail.toLowerCase();
 
@@ -71,12 +75,12 @@ String googleOAuthErrorMessage(Object error) {
 
 String _redactOAuthDetails(String value) {
   final sanitized = value
-      .replaceAll(
+      .replaceAllMapped(
         RegExp(
-          r'(access_token|refresh_token|id_token|code|state)=([^&\s]+)',
+          r'(["\x27]?(?:access_token|refresh_token|id_token|code|state)["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s}&]+)(["\x27]?)',
           caseSensitive: false,
         ),
-        r'$1=[ukryto]',
+        (match) => '${match.group(1)}[ukryto]${match.group(3)}',
       )
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
@@ -84,7 +88,10 @@ String _redactOAuthDetails(String value) {
   return sanitized.substring(0, end);
 }
 
-Future<void> _launchOAuth(String flowName, Future<bool> Function() launch) async {
+Future<void> _launchOAuth(
+  String flowName,
+  Future<bool> Function() launch,
+) async {
   if (!await launch()) throw OAuthLaunchException(flowName);
 }
 

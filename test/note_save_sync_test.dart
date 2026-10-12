@@ -77,4 +77,31 @@ void main() {
 
     expect(queued, isFalse);
   });
+
+  test('post-save refresh failure does not turn a saved note into an error', () async {
+    var reminderScheduled = false;
+
+    final completed = await runNoteSaveFollowUps([
+      () async => throw StateError('refresh failed'),
+      () async => reminderScheduled = true,
+    ]);
+
+    expect(completed, isFalse);
+    expect(reminderScheduled, isTrue);
+  });
+
+  test('attachment upload waits until its parent note exists', () async {
+    final calls = <String>[];
+
+    final uploadedNote = await ensureNoteBeforeAttachments(
+      ensureNote: () async => calls.add('note'),
+      uploadAttachments: () async {
+        calls.add('attachment');
+        return NoteItem(id: 'n1', title: 'uploaded');
+      },
+    );
+
+    expect(calls, ['note', 'attachment']);
+    expect(uploadedNote.title, 'uploaded');
+  });
 }

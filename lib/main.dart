@@ -629,7 +629,10 @@ class _MyAppState extends State<MyApp>
       enabled: settings.dailyPlanEnabled,
       hour: settings.dailyPlanHour,
       minute: settings.dailyPlanMinute,
-      pendingTaskCount: tasks.where((task) => !task.isDone).length,
+      pendingTaskCount: tasksForTaskDigest(
+        tasks,
+        now: DateTime.now(),
+      ).length,
     );
     await _refreshOverdueTaskNotifications();
   }
@@ -670,7 +673,10 @@ class _MyAppState extends State<MyApp>
         enabled: _organizerSettings.dailyPlanEnabled,
         hour: _organizerSettings.dailyPlanHour,
         minute: _organizerSettings.dailyPlanMinute,
-        pendingTaskCount: tasks.where((task) => !task.isDone).length,
+        pendingTaskCount: tasksForTaskDigest(
+          tasks,
+          now: DateTime.now(),
+        ).length,
       );
 
   bool _subtasksChanged(List<SubtaskItem> before, List<SubtaskItem> after) {
@@ -1655,8 +1661,23 @@ class _MyAppState extends State<MyApp>
         if (operation.kind == NoteSyncOperationKind.delete) {
           await _noteSync.permanentlyDeleteNote(operation.note);
         } else {
+          var synchronizedNote = operation.note;
+          if (operation.note.attachments.any(
+            (attachment) =>
+                attachment.storagePath == null &&
+                attachment.localPath != null,
+          )) {
+            synchronizedNote = await ensureNoteBeforeAttachments(
+              ensureNote: () => _noteSync.ensureNoteExists(
+                operation.note,
+                includeFolderId: operation.includeFolderId,
+              ),
+              uploadAttachments: () =>
+                  _noteSync.uploadPendingAttachments(operation.note),
+            );
+          }
           await _noteSync.saveNote(
-            operation.note,
+            synchronizedNote,
             expectedRevision: operation.expectedRevision,
             includeFolderId: operation.includeFolderId,
           );
@@ -1837,11 +1858,27 @@ class _MyAppState extends State<MyApp>
       try {
         synchronized = await saveLocallyThenSyncOrQueueNote(
           saveLocal: _saveLocalNotes,
-          syncCloud: () => _noteSync.saveNote(
-            note,
-            expectedRevision: isNew ? null : note.revision - 1,
-            includeFolderId: _foldersCloudAvailable,
-          ),
+          syncCloud: () async {
+            if (note.attachments.any(
+              (attachment) =>
+                  attachment.storagePath == null &&
+                  attachment.localPath != null,
+            )) {
+              note = await ensureNoteBeforeAttachments(
+                ensureNote: () => _noteSync.ensureNoteExists(
+                  note,
+                  includeFolderId: _foldersCloudAvailable,
+                ),
+                uploadAttachments: () =>
+                    _noteSync.uploadPendingAttachments(note),
+              );
+            }
+            await _noteSync.saveNote(
+              note,
+              expectedRevision: isNew ? null : note.revision - 1,
+              includeFolderId: _foldersCloudAvailable,
+            );
+          },
           enqueue: () async {
             final outbox = _noteSyncOutbox;
             if (outbox == null) {
@@ -1890,22 +1927,25 @@ class _MyAppState extends State<MyApp>
             () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
           );
         }
-      } else {
-        await _noteSyncOutbox?.remove(note.id);
-        await _loadCloudNotes();
-        await _refreshSyncStatusFromOutboxes();
-        try {
-          await _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays);
-        } catch (_) {
-          // The current note was synchronized; cleanup can retry later.
-        }
       }
-      await _scheduleNoteReminder(note);
+      await runNoteSaveFollowUps([
+        if (synchronized)
+          () async {
+            await _noteSyncOutbox?.remove(note.id);
+          },
+        if (synchronized) () => _loadCloudNotes(),
+        () => _refreshSyncStatusFromOutboxes(),
+        if (synchronized)
+          () => _noteSync.purgeExpiredTrash(NoteTrashRetention.thirtyDays),
+        () => _scheduleNoteReminder(note),
+      ]);
       _refreshAndroidWidgets();
       return;
     }
     await _saveLocalNotes();
-    await _scheduleNoteReminder(note);
+    await runNoteSaveFollowUps([
+      () => _scheduleNoteReminder(note),
+    ]);
     _refreshAndroidWidgets();
   }
 
@@ -1919,22 +1959,6 @@ class _MyAppState extends State<MyApp>
       mimeType: candidate.mimeType,
       byteSize: candidate.byteSize,
     );
-    if (cloudMode && _notesCloudAvailable) {
-      // Storage metadata references the note row, so create a just-started
-      // note before uploading its first attachment.
-      if (!notes.any((item) => item.id == note.id)) {
-        await _noteSync.saveNote(
-          note,
-          expectedRevision: null,
-          includeFolderId: _foldersCloudAvailable,
-        );
-      }
-      return _noteSync.uploadAttachment(
-        attachment: attachment,
-        noteId: note.id,
-        file: candidate.file,
-      );
-    }
     final store = _localNoteStore;
     if (store == null) {
       return NoteAttachment(
@@ -1954,9 +1978,23 @@ class _MyAppState extends State<MyApp>
     );
   }
 
-  Future<String?> _openNoteAttachment(NoteAttachment attachment) async {
+  Future<File?> _openNoteAttachment(NoteAttachment attachment) async {
+    final localPath = attachment.localPath;
+    if (localPath != null && await File(localPath).exists()) {
+      return File(localPath);
+    }
     if (!cloudMode || !_notesCloudAvailable) return null;
-    return _noteSync.createAttachmentUrl(attachment);
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return null;
+    final bytes = await _noteSync.downloadAttachment(attachment);
+    final storageSegments = attachment.storagePath?.split('/') ?? const [];
+    final noteId = storageSegments.length > 1 ? storageSegments[1] : 'note';
+    return _localNoteStore?.cacheDownloadedAttachment(
+      noteId: noteId,
+      ownerId: userId,
+      attachment: attachment,
+      bytes: bytes,
+    );
   }
 
   Future<void> _deleteNoteAttachment(NoteAttachment attachment) async {
