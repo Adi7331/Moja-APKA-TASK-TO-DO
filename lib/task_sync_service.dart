@@ -3,9 +3,25 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'task_item.dart';
 import 'subtask_item.dart';
 
+Map<String, dynamic> queuedTaskPayload(TaskItem task, String userId) => {
+  'id': task.id,
+  'user_id': userId,
+  ...task.toSupabasePayload(),
+  'updated_at': DateTime.now().toUtc().toIso8601String(),
+};
+
 class TaskSyncService {
   TaskSyncService(this._client);
   final SupabaseClient _client;
+
+  /// Retrying a queued creation is safe even if the previous response was lost.
+  Future<void> upsertQueuedTask(TaskItem task) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Zaloguj się, aby synchronizować zadania.');
+    }
+    await _client.from('tasks').upsert(queuedTaskPayload(task, userId));
+  }
 
   Future<List<Map<String, dynamic>>> loadTasks() async {
     final user = _client.auth.currentUser;

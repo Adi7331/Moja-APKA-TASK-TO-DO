@@ -193,6 +193,20 @@ class CostsScreenState extends State<CostsScreen> {
     }
   }
 
+  Future<void> retrySync() async {
+    if (!widget.cloudMode || _outbox == null) return;
+    if (!_syncAvailable) {
+      await _connectCloud();
+      return;
+    }
+    await _flushOutbox();
+    if ((await _outbox!.load()).isEmpty) {
+      await _refreshRemote();
+    } else if (mounted) {
+      setState(() => _syncLabel = 'Lokalnie · czeka na synchronizację');
+    }
+  }
+
   Future<void> _refreshRemote() async {
     try {
       final remote = await _sync.load();

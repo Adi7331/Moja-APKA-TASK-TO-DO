@@ -59,6 +59,7 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".TaskDigestAlarmReceiver" android:exported="false" />
+        <receiver android:name=".DailyPlanAlarmReceiver" android:exported="false" />
         <receiver android:name=".TaskDigestBootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

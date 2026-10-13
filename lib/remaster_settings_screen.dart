@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'organizer_settings.dart';
 import 'calendar_store.dart';
+import 'local_backup_manager.dart';
+import 'local_backup_settings_card.dart';
 
 class RemasterSettingsScreen extends StatelessWidget {
   const RemasterSettingsScreen({
@@ -36,6 +38,10 @@ class RemasterSettingsScreen extends StatelessWidget {
     this.onTestReminder,
     this.notificationPermissionGranted,
     this.onOpenNotificationSettings,
+    this.backupManager,
+    this.backupOwnerId,
+    this.onBackupSettingsChanged,
+    this.onBackupRestored,
   });
 
   final String appVersion;
@@ -63,6 +69,10 @@ class RemasterSettingsScreen extends StatelessWidget {
   final VoidCallback? onTestReminder;
   final bool? notificationPermissionGranted;
   final Future<void> Function()? onOpenNotificationSettings;
+  final LocalBackupManager? backupManager;
+  final String? backupOwnerId;
+  final VoidCallback? onBackupSettingsChanged;
+  final Future<void> Function()? onBackupRestored;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +104,17 @@ class RemasterSettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (backupManager != null && backupOwnerId != null) ...[
+                  const SizedBox(height: 24),
+                  Text('Kopia lokalna', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  LocalBackupSettingsCard(
+                    manager: backupManager!,
+                    ownerId: backupOwnerId!,
+                    onSettingsChanged: onBackupSettingsChanged,
+                    onRestored: onBackupRestored,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'Synchronizacja',

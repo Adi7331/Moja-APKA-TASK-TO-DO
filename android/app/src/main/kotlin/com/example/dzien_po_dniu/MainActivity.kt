@@ -2,6 +2,10 @@ package com.example.dzien_po_dniu
 
 import android.content.Intent
 import android.content.Context
+import android.app.Activity
+import android.database.Cursor
+import android.net.Uri
+import android.provider.DocumentsContract
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import androidx.core.content.FileProvider
@@ -20,6 +24,7 @@ import java.util.zip.ZipInputStream
 class MainActivity : FlutterActivity() {
     private var taskDigestChannel: MethodChannel? = null
     private var pendingOpenToday = false
+    private var pendingBackupFolderResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -49,6 +54,25 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DAILY_PLAN_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "schedule" -> {
+                        DailyPlanScheduler.update(
+                            this,
+                            call.argument<Boolean>("enabled") ?: false,
+                            call.argument<Int>("hour") ?: 9,
+                            call.argument<Int>("minute") ?: 0,
+                        )
+                        result.success(null)
+                    }
+                    "cancel" -> {
+                        DailyPlanScheduler.update(this, false, 9, 0)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         if (intent?.getBooleanExtra("open_today", false) == true) {
             pendingOpenToday = true
             intent?.removeExtra("open_today")
@@ -85,6 +109,135 @@ class MainActivity : FlutterActivity() {
                     result.error("widgets_update_failed", error.message, null)
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKUP_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method == "chooseFolder") {
+                    if (pendingBackupFolderResult != null) {
+                        result.error("busy", "Wybór folderu już trwa.", null)
+                    } else {
+                        pendingBackupFolderResult = result
+                        startActivityForResult(
+                            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                            },
+                            BACKUP_PICKER_REQUEST,
+                        )
+                    }
+                    return@setMethodCallHandler
+                }
+                try {
+                    val folder = call.argument<String>("folder")
+                        ?: throw IllegalArgumentException("Nie wybrano folderu kopii.")
+                    val tree = Uri.parse(folder)
+                    require(contentResolver.persistedUriPermissions.any {
+                        it.uri == tree && it.isReadPermission && it.isWritePermission
+                    }) { "Utracono dostęp do folderu kopii. Wybierz go ponownie." }
+                    when (call.method) {
+                        "list" -> result.success(backupDocumentNames(tree))
+                        "write" -> {
+                            val name = safeBackupName(call.argument<String>("name"))
+                            val path = call.argument<String>("path")
+                                ?: throw IllegalArgumentException("Brakuje pliku kopii.")
+                            val source = File(path)
+                            require(source.isFile) { "Nie znaleziono przygotowanej kopii." }
+                            require(backupDocumentNames(tree).none { it == name }) {
+                                "Kopia o tej nazwie już istnieje."
+                            }
+                            val document = DocumentsContract.createDocument(
+                                contentResolver, childDocumentsUri(tree), "application/octet-stream", name,
+                            ) ?: throw IllegalStateException("Nie można utworzyć kopii w folderze.")
+                            try {
+                                contentResolver.openOutputStream(document, "w")?.use { output ->
+                                    FileInputStream(source).use { input -> input.copyTo(output) }
+                                } ?: throw IllegalStateException("Nie można zapisać kopii w folderze.")
+                            } catch (error: Exception) {
+                                DocumentsContract.deleteDocument(contentResolver, document)
+                                throw error
+                            }
+                            result.success(null)
+                        }
+                        "read" -> {
+                            val document = findBackupDocument(tree, safeBackupName(call.argument<String>("name")))
+                                ?: throw IllegalArgumentException("Nie znaleziono wybranej kopii.")
+                            val target = File.createTempFile("dniowka-restore-", ".dniowka", cacheDir)
+                            contentResolver.openInputStream(document)?.use { input ->
+                                FileOutputStream(target).use { output -> input.copyTo(output) }
+                            } ?: throw IllegalStateException("Nie można odczytać kopii.")
+                            result.success(target.absolutePath)
+                        }
+                        "delete" -> {
+                            val document = findBackupDocument(tree, safeBackupName(call.argument<String>("name")))
+                            if (document != null) DocumentsContract.deleteDocument(contentResolver, document)
+                            result.success(null)
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (error: Exception) {
+                    result.error("backup_failed", error.message, null)
+                }
+            }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != BACKUP_PICKER_REQUEST) return
+        val pending = pendingBackupFolderResult ?: return
+        pendingBackupFolderResult = null
+        val tree = data?.data
+        if (resultCode != Activity.RESULT_OK || tree == null) {
+            pending.success(null)
+            return
+        }
+        try {
+            contentResolver.takePersistableUriPermission(
+                tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            pending.success(tree.toString())
+        } catch (error: Exception) {
+            pending.error("folder_access_failed", error.message, null)
+        }
+    }
+
+    private fun safeBackupName(name: String?): String {
+        require(name != null && name.matches(Regex("dniowka-[a-f0-9]{16}-[0-9]+-[0-9]+\\.dniowka"))) {
+            "Nieprawidłowa nazwa kopii."
+        }
+        return name
+    }
+
+    private fun childDocumentsUri(tree: Uri): Uri =
+        DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+
+    private fun backupDocumentNames(tree: Uri): List<String> {
+        val parentId = DocumentsContract.getTreeDocumentId(tree)
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+        val names = mutableListOf<String>()
+        contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                while (cursor.moveToNext()) names.add(cursor.getString(0))
+            } ?: throw IllegalStateException("Nie można odczytać folderu kopii.")
+        return names
+    }
+
+    private fun findBackupDocument(tree: Uri, name: String): Uri? {
+        val parentId = DocumentsContract.getTreeDocumentId(tree)
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+        contentResolver.query(
+            children,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            null, null, null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                if (cursor.getString(1) == name) {
+                    return DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
+                }
+            }
+        }
+        return null
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -174,6 +327,9 @@ class MainActivity : FlutterActivity() {
         const val UPDATE_CHANNEL = "dzien_po_dniu/update"
         const val WIDGETS_CHANNEL = "dzien_po_dniu/widgets"
         const val TASK_DIGEST_CHANNEL = "dzien_po_dniu/task_digest"
+        const val BACKUP_CHANNEL = "dniowka/local_backup"
+        const val DAILY_PLAN_CHANNEL = "dniowka/daily_plan"
+        const val BACKUP_PICKER_REQUEST = 8152
         const val WIDGETS_PREFERENCES = "android_widgets"
         const val BUFFER_SIZE = 8192
         const val MAX_APK_BYTES = 200L * 1024L * 1024L

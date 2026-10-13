@@ -20,9 +20,11 @@ class WorkHoursScreen extends StatefulWidget {
     super.key,
     required this.ownerId,
     required this.cloudMode,
+    this.onDataChanged,
   });
   final String ownerId;
   final bool cloudMode;
+  final VoidCallback? onDataChanged;
   @override
   State<WorkHoursScreen> createState() => WorkHoursScreenState();
 }
@@ -82,6 +84,8 @@ class WorkHoursScreenState extends State<WorkHoursScreen>
     await _store?.flushed;
   }
 
+  Future<void> retrySync() => _sync();
+
   Future<void> _initialize() async {
     try {
       final preferences = await SharedPreferences.getInstance();
@@ -107,6 +111,7 @@ class WorkHoursScreenState extends State<WorkHoursScreen>
   void _changed() {
     if (mounted) {
       setState(() {});
+      widget.onDataChanged?.call();
       if (!_syncing) unawaited(_sync());
     }
   }

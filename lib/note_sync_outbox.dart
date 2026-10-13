@@ -47,10 +47,25 @@ class PendingNoteSync {
 /// Durable outbox for note saves and permanent deletes. It intentionally stores
 /// snapshots, not tokens or credentials, so an offline restart can retry safely.
 class NoteSyncOutbox {
-  NoteSyncOutbox(this._preferences);
+  NoteSyncOutbox(this._preferences, {this.ownerId});
 
-  static const _key = 'note_sync_outbox_v1';
+  static const legacyKey = 'note_sync_outbox_v1';
   final SharedPreferences _preferences;
+  final String? ownerId;
+  String get _key => ownerId == null ? legacyKey : '${legacyKey}_$ownerId';
+
+  static Future<void> scopeLegacyQueue(
+    SharedPreferences preferences,
+    String ownerId,
+  ) async {
+    final scopedKey = '${legacyKey}_$ownerId';
+    if (preferences.containsKey(scopedKey)) return;
+    final legacy = preferences.getString(legacyKey);
+    if (legacy != null) {
+      await preferences.setString(scopedKey, legacy);
+      await preferences.remove(legacyKey);
+    }
+  }
 
   Future<List<PendingNoteSync>> load() async {
     final raw = _preferences.getString(_key);

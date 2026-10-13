@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'task_item.dart';
 
-enum TaskSyncOperationKind { create, update, delete }
+enum TaskSyncOperationKind { create, update, delete, restore }
 
 class PendingTaskSync {
   const PendingTaskSync({
@@ -12,17 +12,20 @@ class PendingTaskSync {
     required this.task,
     this.kind = TaskSyncOperationKind.create,
     this.syncSubtasks = false,
+    this.createdOffline = false,
   });
 
   final String id;
   final TaskItem task;
   final TaskSyncOperationKind kind;
   final bool syncSubtasks;
+  final bool createdOffline;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'kind': kind.name,
     'syncSubtasks': syncSubtasks,
+    'createdOffline': createdOffline,
     'task': task.toStorage(),
   };
 
@@ -34,6 +37,7 @@ class PendingTaskSync {
           orElse: () => TaskSyncOperationKind.create,
         ),
         syncSubtasks: json['syncSubtasks'] as bool? ?? false,
+        createdOffline: json['createdOffline'] as bool? ?? false,
         task: TaskItem.fromStorage(
           Map<String, dynamic>.from(json['task'] as Map),
         ),
@@ -42,10 +46,25 @@ class PendingTaskSync {
 
 /// Durable snapshots for task creates that could not reach Supabase.
 class TaskSyncOutbox {
-  TaskSyncOutbox(this._preferences);
+  TaskSyncOutbox(this._preferences, {this.ownerId});
 
-  static const _key = 'task_sync_outbox_v1';
+  static const legacyKey = 'task_sync_outbox_v1';
   final SharedPreferences _preferences;
+  final String? ownerId;
+  String get _key => ownerId == null ? legacyKey : '${legacyKey}_$ownerId';
+
+  static Future<void> scopeLegacyQueue(
+    SharedPreferences preferences,
+    String ownerId,
+  ) async {
+    final scopedKey = '${legacyKey}_$ownerId';
+    if (preferences.containsKey(scopedKey)) return;
+    final legacy = preferences.getString(legacyKey);
+    if (legacy != null) {
+      await preferences.setString(scopedKey, legacy);
+      await preferences.remove(legacyKey);
+    }
+  }
 
   Future<List<PendingTaskSync>> load() async {
     final raw = _preferences.getString(_key);
@@ -76,6 +95,10 @@ class TaskSyncOutbox {
     await _enqueue(task, TaskSyncOperationKind.delete);
   }
 
+  Future<void> enqueueRestore(TaskItem task) async {
+    await _enqueue(task, TaskSyncOperationKind.restore);
+  }
+
   Future<void> _enqueue(
     TaskItem task,
     TaskSyncOperationKind kind, {
@@ -85,6 +108,7 @@ class TaskSyncOutbox {
     final index = items.indexWhere((item) => item.id == task.id);
     var effectiveKind = kind;
     var effectiveSyncSubtasks = syncSubtasks;
+    var createdOffline = false;
     if (index != -1) {
       final previous = items[index];
       // An unsynced create remains a create even after local edits or a
@@ -95,12 +119,26 @@ class TaskSyncOutbox {
         effectiveKind = TaskSyncOperationKind.create;
         effectiveSyncSubtasks = previous.syncSubtasks || syncSubtasks;
       }
+      if (previous.kind == TaskSyncOperationKind.create &&
+          kind == TaskSyncOperationKind.restore) {
+        effectiveKind = TaskSyncOperationKind.create;
+      }
+      if (previous.kind == TaskSyncOperationKind.create &&
+          kind == TaskSyncOperationKind.delete) {
+        createdOffline = true;
+      }
+      if (previous.createdOffline && kind == TaskSyncOperationKind.restore) {
+        // The server has never seen this task. Undoing its queued delete must
+        // recreate it, not issue an UPDATE for a missing row.
+        effectiveKind = TaskSyncOperationKind.create;
+      }
     }
     final pending = PendingTaskSync(
       id: task.id,
       task: task,
       kind: effectiveKind,
       syncSubtasks: effectiveSyncSubtasks,
+      createdOffline: createdOffline,
     );
     if (index == -1) {
       items.add(pending);
