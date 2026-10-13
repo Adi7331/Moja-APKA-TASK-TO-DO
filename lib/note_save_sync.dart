@@ -34,13 +34,13 @@ Future<bool> saveLocallyThenSyncOrQueueNote({
   required Future<void> Function() enqueue,
 }) async {
   await saveLocal();
+  await enqueue();
   try {
     await syncCloud();
     return true;
   } on NoteConflictException {
     rethrow;
   } catch (_) {
-    await enqueue();
     return false;
   }
 }

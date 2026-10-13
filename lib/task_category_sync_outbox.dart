@@ -38,10 +38,25 @@ class PendingTaskCategorySync {
 
 /// Durable category changes for the short period when Supabase is unavailable.
 class TaskCategorySyncOutbox {
-  TaskCategorySyncOutbox(this._preferences);
+  TaskCategorySyncOutbox(this._preferences, {this.ownerId});
 
-  static const _key = 'task_category_sync_outbox_v1';
+  static const legacyKey = 'task_category_sync_outbox_v1';
   final SharedPreferences _preferences;
+  final String? ownerId;
+  String get _key => ownerId == null ? legacyKey : '${legacyKey}_$ownerId';
+
+  static Future<void> scopeLegacyQueue(
+    SharedPreferences preferences,
+    String ownerId,
+  ) async {
+    final scopedKey = '${legacyKey}_$ownerId';
+    if (preferences.containsKey(scopedKey)) return;
+    final legacy = preferences.getString(legacyKey);
+    if (legacy != null) {
+      await preferences.setString(scopedKey, legacy);
+      await preferences.remove(legacyKey);
+    }
+  }
 
   Future<List<PendingTaskCategorySync>> load() async {
     final raw = _preferences.getString(_key);

@@ -47,7 +47,7 @@ void main() {
     expect(trashed.revision, 6);
   });
 
-  test('cloud failure queues after local save and returns pending', () async {
+  test('durably queues after local save and before cloud request', () async {
     final calls = <String>[];
 
     final synchronized = await saveLocallyThenSyncOrQueueNote(
@@ -60,7 +60,7 @@ void main() {
     );
 
     expect(synchronized, isFalse);
-    expect(calls, ['local', 'cloud', 'queue']);
+    expect(calls, ['local', 'queue', 'cloud']);
   });
 
   test('local write failure is not disguised as a queued cloud save', () async {

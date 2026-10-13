@@ -13,6 +13,7 @@ import 'organizer_settings.dart';
 import 'local_cost_store.dart';
 import 'start_cost_card.dart';
 import 'app_navigation_icon.dart';
+import 'local_backup_manager.dart';
 
 enum AppSpace { start, tasks, notes, costs, hours }
 
@@ -65,6 +66,10 @@ class RemasterShell extends StatefulWidget {
     this.notificationPermissionGranted,
     this.onOpenNotificationSettings,
     this.onRetrySync,
+    this.backupManager,
+    this.backupOwnerId,
+    this.onBackupSettingsChanged,
+    this.onBackupRestored,
   });
   final List<TaskItem> tasks;
   final List<NoteItem> notes;
@@ -105,6 +110,10 @@ class RemasterShell extends StatefulWidget {
   final bool? notificationPermissionGranted;
   final Future<void> Function()? onOpenNotificationSettings;
   final Future<void> Function()? onRetrySync;
+  final LocalBackupManager? backupManager;
+  final String? backupOwnerId;
+  final VoidCallback? onBackupSettingsChanged;
+  final Future<void> Function()? onBackupRestored;
   @override
   State<RemasterShell> createState() => _RemasterShellState();
 }
@@ -215,6 +224,10 @@ class _RemasterShellState extends State<RemasterShell> {
         onTestReminder: widget.onTestReminder,
         notificationPermissionGranted: widget.notificationPermissionGranted,
         onOpenNotificationSettings: widget.onOpenNotificationSettings,
+        backupManager: widget.backupManager,
+        backupOwnerId: widget.backupOwnerId,
+        onBackupSettingsChanged: widget.onBackupSettingsChanged,
+        onBackupRestored: widget.onBackupRestored,
       ),
     ),
   );

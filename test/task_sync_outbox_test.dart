@@ -38,6 +38,21 @@ void main() {
     expect(pending.single.task.status, 'done');
   });
 
+  test('undoing deletion of an offline-created task queues it as a create', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = TaskSyncOutbox(preferences);
+    const created = TaskItem(id: 'task-local', title: 'Nowe', status: 'todo');
+
+    await store.enqueue(created);
+    await store.enqueueDelete(created);
+    await store.enqueueRestore(created);
+
+    final pending = await store.load();
+    expect(pending, hasLength(1));
+    expect(pending.single.kind, TaskSyncOperationKind.create);
+  });
+
   test('task outbox persists update and delete operations', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

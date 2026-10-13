@@ -8,11 +8,14 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'local_task_store.dart';
+import 'task_cache_reconciler.dart';
+import 'sync_retry_scheduler.dart';
 import 'local_task_category_store.dart';
 import 'local_note_store.dart';
 import 'cloud_migration.dart';
@@ -72,8 +75,11 @@ import 'android_widget_bridge.dart';
 import 'android_widget_snapshot.dart';
 import 'costs_screen.dart';
 import 'local_cost_store.dart';
+import 'cost_sync_outbox.dart';
 import 'windows_autostart.dart';
 import 'work_hours_screen.dart';
+import 'work_hours_store.dart';
+import 'local_backup_manager.dart';
 
 typedef WeekDayTaskMovePlan = ({TaskItem updatedTask, DateTime? reminderTime});
 String? _pendingWindowsUpdateAcknowledgement;
@@ -174,6 +180,12 @@ class _MyAppState extends State<MyApp>
   StreamSubscription<List<Map<String, dynamic>>>? _noteSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _folderSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _focusSessionSubscription;
+  late final SyncRetryScheduler _syncRetryScheduler = SyncRetryScheduler(
+    interval: const Duration(seconds: 30),
+    synchronize: _retryConnection,
+  );
+  LocalBackupManager? _backupManager;
+  Timer? _backupTimer;
   StreamSubscription<AuthState>? _authSubscription;
   var _nextLocalTaskId = 4;
   LocalTaskStore? _localStore;
@@ -235,6 +247,9 @@ class _MyAppState extends State<MyApp>
   @override
   void initState() {
     super.initState();
+    // Keep previews and widget tests on the requested UI immediately while
+    // preferences and the local cache are restored asynchronously.
+    _remasterPreview = widget.remasterPreviewOverride ?? true;
     WidgetsBinding.instance.addObserver(this);
     if (Platform.isWindows) {
       windowManager.addListener(this);
@@ -262,6 +277,7 @@ class _MyAppState extends State<MyApp>
     unawaited(_refreshNotificationPermissionStatus());
     unawaited(_consumeLaunchNotification());
     _restoreCloudSession();
+    _syncRetryScheduler.start();
   }
 
   Future<void> _consumeAndroidTaskDigestOpen() async {
@@ -313,28 +329,10 @@ class _MyAppState extends State<MyApp>
         Duration(minutes: _organizerSettings.defaultSnoozeMinutes),
       ),
     );
-    if (cloudMode) {
-      try {
-        await _sync.updateOrganizerTask(updated);
-        await _loadCloudTasks();
-      } catch (_) {
-        final index = tasks.indexWhere((item) => item.id == task.id);
-        if (index == -1) return;
-        setState(() => tasks[index] = updated);
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueueUpdate(updated);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      final index = tasks.indexWhere((item) => item.id == task.id);
-      if (index == -1) return;
-      setState(() => tasks[index] = updated);
-      await _saveLocalTasks();
-    }
+    final index = tasks.indexWhere((item) => item.id == task.id);
+    if (index == -1) return;
+    setState(() => tasks[index] = updated);
+    await _persistTaskOperation(updated);
     await _syncTaskNotifications(updated);
     _showSuccessNotice(
       'Zadanie odłożone o ${_organizerSettings.defaultSnoozeMinutes} min',
@@ -412,12 +410,8 @@ class _MyAppState extends State<MyApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (cloudMode) {
-      unawaited(_retryPendingTaskSync());
-      unawaited(_retryPendingTaskCategorySync());
-      unawaited(_retryPendingFolderSync());
-      unawaited(_retryPendingNoteSync());
-    }
+    unawaited(_syncRetryScheduler.retryNow());
+    _markBackupDirty();
     unawaited(_refreshAllTaskNotifications());
     unawaited(_refreshNotificationPermissionStatus());
     if (!_calendarAuthorizationPending) return;
@@ -507,6 +501,31 @@ class _MyAppState extends State<MyApp>
       await windowManager.hide();
     }
     _refreshAndroidWidgets();
+    _markBackupDirty();
+    unawaited(_initializeBackupManager(preferences));
+  }
+
+  Future<void> _initializeBackupManager(SharedPreferences preferences) async {
+    final ownerId = _costsOwnerId();
+    Directory supportDirectory;
+    try {
+      supportDirectory = await getApplicationSupportDirectory();
+    } on MissingPluginException {
+      // Widget tests do not register path_provider; backups are disabled there.
+      supportDirectory = Directory.systemTemp;
+    }
+    final backup = LocalBackupManager(
+      preferences: preferences,
+      supportDirectory: supportDirectory,
+      storage: Platform.isAndroid
+          ? AndroidSafBackupStorage()
+          : DesktopBackupStorage(),
+      passwords: const SecureBackupPasswordStore(),
+    );
+    await backup.load(ownerId);
+    if (!mounted || ownerId != _costsOwnerId()) return;
+    setState(() => _backupManager = backup);
+    _markBackupDirty();
   }
 
   Future<void> _restoreLocalNotes() async {
@@ -584,6 +603,75 @@ class _MyAppState extends State<MyApp>
 
   Future<void> _saveLocalTasks() async {
     await _localStore?.save(tasks);
+    _markBackupDirty();
+  }
+
+  bool get _hasCloudIdentity {
+    try {
+      return Supabase.instance.client.auth.currentUser != null;
+    } on AssertionError {
+      return false;
+    }
+  }
+
+  Future<void> _persistTaskOperation(
+    TaskItem task, {
+    bool create = false,
+    bool delete = false,
+    bool syncSubtasks = false,
+  }) async {
+    await _saveLocalTasks();
+    if (!_hasCloudIdentity) return;
+    final outbox = _taskSyncOutbox;
+    if (outbox == null) throw StateError('Kolejka zadań nie jest gotowa.');
+    if (delete) {
+      await outbox.enqueueDelete(task);
+    } else if (create) {
+      await outbox.enqueue(task);
+    } else {
+      await outbox.enqueueUpdate(task, syncSubtasks: syncSubtasks);
+    }
+    if (mounted) {
+      setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+    }
+    if (cloudMode) {
+      await _retryPendingTaskSync();
+      await _refreshSyncStatusFromOutboxes();
+    }
+  }
+
+  void _markBackupDirty() {
+    _backupTimer?.cancel();
+    _backupTimer = Timer(const Duration(seconds: 90), () async {
+      try {
+        await _backupManager?.backupIfChanged(_costsOwnerId());
+      } catch (_) {
+        // A backup failure must not break a normal local data save.
+      }
+    });
+  }
+
+  Future<void> _reloadAfterBackupRestore() async {
+    final restoredTasks = await _localStore?.load() ?? const <TaskItem>[];
+    final restoredCategories =
+        await _localTaskCategoryStore?.load() ?? const <TaskCategory>[];
+    final restoredNotes = await _localNoteStore?.load() ?? const <NoteItem>[];
+    final restoredFolders =
+        await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
+    if (!mounted) return;
+    setState(() {
+      tasks..clear()..addAll(restoredTasks);
+      taskCategories..clear()..addAll(restoredCategories);
+      notes..clear()..addAll(restoredNotes);
+      folders..clear()..addAll(restoredFolders);
+      _costsScreenKey = GlobalKey<CostsScreenState>();
+      _hoursScreenKey = GlobalKey<WorkHoursScreenState>();
+      _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację';
+    });
+    await _refreshDailyPlanNotification();
+    await _refreshOverdueTaskNotifications();
+    _refreshAndroidWidgets();
+    _markBackupDirty();
   }
 
   Future<void> _flushLocalDataForWindowsUpdate() async {
@@ -828,12 +916,14 @@ class _MyAppState extends State<MyApp>
 
   Future<void> _saveLocalNotes() async {
     await _localNoteStore?.save(notes);
+    _markBackupDirty();
   }
 
   Future<void> _saveLocalFolders() async {
     // Folder schema deployment is deliberately opt-in. Until it is applied in
     // Supabase, local folders stay available without risking existing notes.
     await _localNoteStore?.saveFolders(folders);
+    _markBackupDirty();
   }
 
   Future<void> _saveFocusSession(FocusSession session) async {
@@ -1169,20 +1259,10 @@ class _MyAppState extends State<MyApp>
     );
     setState(() => folders.add(folder));
     await _saveLocalFolders();
-    if (cloudMode && _foldersCloudAvailable) {
-      try {
-        await _noteSync.saveFolder(folder);
-        await _noteFolderSyncOutbox?.remove(folder.id);
-        await _loadCloudFolders();
-        await _refreshSyncStatusFromOutboxes();
-      } catch (_) {
-        await _noteFolderSyncOutbox?.enqueueUpsert(folder);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
+    if (_hasCloudIdentity) {
+      await _noteFolderSyncOutbox?.enqueueUpsert(folder);
+      if (cloudMode && _foldersCloudAvailable) await _retryPendingFolderSync();
+      await _refreshSyncStatusFromOutboxes();
     }
     return folder;
   }
@@ -1202,28 +1282,20 @@ class _MyAppState extends State<MyApp>
     });
     await _saveLocalFolders();
     await _saveLocalNotes();
-    if (cloudMode && _foldersCloudAvailable) {
-      try {
-        await _noteSync.deleteFolder(folder);
-        await _noteFolderSyncOutbox?.remove(folder.id);
-        await _loadCloudFolders();
-        await _loadCloudNotes();
-        await _refreshSyncStatusFromOutboxes();
-      } catch (_) {
-        await _noteFolderSyncOutbox?.enqueueDelete(folder);
-        for (final changed in changedNotes) {
-          await _noteSyncOutbox?.enqueue(
-            changed,
-            expectedRevision: changed.revision - 1,
-            includeFolderId: true,
-          );
-        }
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
+    if (_hasCloudIdentity) {
+      await _noteFolderSyncOutbox?.enqueueDelete(folder);
+      for (final changed in changedNotes) {
+        await _noteSyncOutbox?.enqueue(
+          changed,
+          expectedRevision: changed.revision - 1,
+          includeFolderId: true,
+        );
       }
+      if (cloudMode && _foldersCloudAvailable) {
+        await _retryPendingFolderSync();
+        await _retryPendingNoteSync();
+      }
+      await _refreshSyncStatusFromOutboxes();
     }
   }
 
@@ -1234,20 +1306,10 @@ class _MyAppState extends State<MyApp>
       if (index != -1) folders[index] = updated;
     });
     await _saveLocalFolders();
-    if (cloudMode && _foldersCloudAvailable) {
-      try {
-        await _noteSync.saveFolder(updated);
-        await _noteFolderSyncOutbox?.remove(updated.id);
-        await _loadCloudFolders();
-        await _refreshSyncStatusFromOutboxes();
-      } catch (_) {
-        await _noteFolderSyncOutbox?.enqueueUpsert(updated);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
+    if (_hasCloudIdentity) {
+      await _noteFolderSyncOutbox?.enqueueUpsert(updated);
+      if (cloudMode && _foldersCloudAvailable) await _retryPendingFolderSync();
+      await _refreshSyncStatusFromOutboxes();
     }
   }
 
@@ -1264,6 +1326,14 @@ class _MyAppState extends State<MyApp>
         if (index != -1) notes[index] = updated;
       });
       await _localNoteStore?.save(notes);
+      if (_hasCloudIdentity) {
+        await _noteSyncOutbox?.enqueue(
+          updated,
+          expectedRevision: updated.revision - 1,
+          includeFolderId: true,
+        );
+        if (mounted) setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+      }
       return;
     }
     await _saveNote(updated);
@@ -1284,21 +1354,20 @@ class _MyAppState extends State<MyApp>
       }),
     );
     final pending = await _taskSyncOutbox?.load() ?? const <PendingTaskSync>[];
-    final mergedTasks = [...cloudTasks];
-    for (final operation in pending) {
-      final index = mergedTasks.indexWhere((task) => task.id == operation.id);
-      if (index == -1) {
-        mergedTasks.insert(0, operation.task);
-      } else {
-        mergedTasks[index] = operation.task;
-      }
-    }
+    final store = _localStore;
+    if (store == null) return;
+    final mergedTasks = await reconcileCloudTasks(
+      cloudTasks: cloudTasks,
+      pending: pending,
+      store: store,
+    );
     if (!mounted) return;
     setState(() {
       tasks
         ..clear()
         ..addAll(mergedTasks);
     });
+    _markBackupDirty();
     _refreshAndroidWidgets();
   }
 
@@ -1312,27 +1381,17 @@ class _MyAppState extends State<MyApp>
         final task = operation.task;
         switch (operation.kind) {
           case TaskSyncOperationKind.create:
-            await _sync.addTask(
-              task.title,
-              id: task.id,
-              note: task.note,
-              category: task.category,
-              categoryId: task.categoryId,
-              priority: task.priority,
-              dueAt: task.dueAt,
-              reminderAt: task.reminderAt,
-              sourceNoteId: task.sourceNoteId,
-            );
-            for (final step in task.subtasks) {
-              await _sync.addSubtask(task.id, step.title, step.position);
-            }
+            await _sync.upsertQueuedTask(task);
+            await _sync.syncSubtasks(task.id, task.subtasks);
           case TaskSyncOperationKind.update:
-            await _sync.updateOrganizerTask(task);
+            await _sync.upsertQueuedTask(task);
             if (operation.syncSubtasks) {
               await _sync.syncSubtasks(task.id, task.subtasks);
             }
           case TaskSyncOperationKind.delete:
             await _sync.deleteTask(task.id);
+          case TaskSyncOperationKind.restore:
+            await _sync.restoreTask(task.id);
         }
         await outbox.remove(operation.id);
         changed = true;
@@ -1352,12 +1411,17 @@ class _MyAppState extends State<MyApp>
         ..addAll(loaded);
     });
     await _localTaskCategoryStore?.save(taskCategories);
+    _markBackupDirty();
   }
 
-  Future<void> _retryPendingTaskCategorySync() async {
+  Future<void> _retryPendingTaskCategorySync({
+    TaskCategorySyncOperationKind? kind,
+  }) async {
     final outbox = _taskCategorySyncOutbox;
     if (outbox == null) return;
-    final pending = await outbox.load();
+    final pending = (await outbox.load())
+        .where((operation) => kind == null || operation.kind == kind)
+        .toList();
     for (final operation in pending) {
       try {
         if (operation.kind == TaskCategorySyncOperationKind.upsert) {
@@ -1406,28 +1470,11 @@ class _MyAppState extends State<MyApp>
       }
     });
     await _localTaskCategoryStore?.save(taskCategories);
-    if (!cloudMode) return;
-    try {
-      final synced = await _categorySync.save(category);
-      if (!mounted) return;
-      setState(() {
-        final index = taskCategories.indexWhere((item) => item.id == synced.id);
-        if (index == -1) {
-          taskCategories.add(synced);
-        } else {
-          taskCategories[index] = synced;
-        }
-        _syncStatus = 'Zsynchronizowano';
-      });
-      await _localTaskCategoryStore?.save(taskCategories);
-    } catch (_) {
-      await _taskCategorySyncOutbox?.enqueueUpsert(category);
-      if (mounted) {
-        setState(
-          () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-        );
-      }
-    }
+    _markBackupDirty();
+    if (!_hasCloudIdentity) return;
+    await _taskCategorySyncOutbox?.enqueueUpsert(category);
+    if (cloudMode) await _retryPendingTaskCategorySync();
+    await _refreshSyncStatusFromOutboxes();
   }
 
   Future<void> _deleteTaskCategory(TaskCategory category) async {
@@ -1444,24 +1491,17 @@ class _MyAppState extends State<MyApp>
     });
     await _saveLocalTasks();
     await _localTaskCategoryStore?.save(taskCategories);
-    if (!cloudMode) return;
-    try {
-      for (final task in changedTasks) {
-        await _sync.updateOrganizerTask(task);
-      }
-      await _categorySync.delete(category.id);
-      await _refreshSyncStatusFromOutboxes();
-    } catch (_) {
-      for (final task in changedTasks) {
-        await _taskSyncOutbox?.enqueueUpdate(task);
-      }
-      await _taskCategorySyncOutbox?.enqueueDelete(category);
-      if (mounted) {
-        setState(
-          () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-        );
-      }
+    _markBackupDirty();
+    if (!_hasCloudIdentity) return;
+    for (final task in changedTasks) {
+      await _taskSyncOutbox?.enqueueUpdate(task);
     }
+    await _taskCategorySyncOutbox?.enqueueDelete(category);
+    if (cloudMode) {
+      await _retryPendingTaskSync();
+      await _retryPendingTaskCategorySync();
+    }
+    await _refreshSyncStatusFromOutboxes();
   }
 
   Future<void> _openTaskCategories() async {
@@ -1491,21 +1531,58 @@ class _MyAppState extends State<MyApp>
     try {
       await _localRestoreFuture;
       await _localNotesRestoreFuture;
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw StateError('Brak aktywnej sesji.');
+      final preferences = await SharedPreferences.getInstance();
+      final previousLocalOwner = preferences.getString('local_content_owner_v1');
+      final mayAdoptLegacyLocalData = previousLocalOwner == null ||
+          previousLocalOwner == user.id ||
+          previousLocalOwner == 'local-user';
+      if (mayAdoptLegacyLocalData) {
+        await TaskSyncOutbox.scopeLegacyQueue(preferences, user.id);
+        await TaskCategorySyncOutbox.scopeLegacyQueue(preferences, user.id);
+        await NoteSyncOutbox.scopeLegacyQueue(preferences, user.id);
+        await NoteFolderSyncOutbox.scopeLegacyQueue(preferences, user.id);
+      }
+      _taskSyncOutbox = TaskSyncOutbox(
+        preferences,
+        ownerId: user.id,
+      );
+      _taskCategorySyncOutbox = TaskCategorySyncOutbox(
+        preferences,
+        ownerId: user.id,
+      );
+      _noteSyncOutbox = NoteSyncOutbox(preferences, ownerId: user.id);
+      _noteFolderSyncOutbox = NoteFolderSyncOutbox(
+        preferences,
+        ownerId: user.id,
+      );
       final localTasks = await _localStore?.load() ?? const <TaskItem>[];
       final cloudRows = await _sync.loadTasks();
+      final mayImportLocalData = previousLocalOwner == null ||
+          previousLocalOwner == user.id ||
+          previousLocalOwner == 'local-user';
       final store = _localStore;
       final decision = decideLocalTaskMigration(
         localTaskCount: localTasks.length,
         cloudTaskCount: cloudRows.length,
-        migrationCompleted: store?.cloudMigrationCompleted ?? false,
+        migrationCompleted: !mayImportLocalData ||
+            (store?.cloudMigrationCompleted ?? false),
       );
       if (decision.shouldImport) {
         await _sync.importLocalTasks(localTasks);
         await store?.markCloudMigrationCompleted();
       }
+      // Categories must exist before tasks reference them. Deletions happen
+      // after task updates have detached their category_id.
+      await _retryPendingTaskCategorySync(
+        kind: TaskCategorySyncOperationKind.upsert,
+      );
       await _loadCloudTasks();
       await _retryPendingTaskSync();
-      await _retryPendingTaskCategorySync();
+      await _retryPendingTaskCategorySync(
+        kind: TaskCategorySyncOperationKind.delete,
+      );
       await _refreshAllTaskNotifications();
       try {
         await _loadCloudTaskCategories();
@@ -1518,7 +1595,7 @@ class _MyAppState extends State<MyApp>
         final cloudNotes = await _noteSync.loadNotes();
         final noteMigrationCompleted =
             await _localNoteStore?.cloudMigrationCompleted ?? false;
-        if (localNotes.isNotEmpty &&
+        if (mayImportLocalData && localNotes.isNotEmpty &&
             cloudNotes.isEmpty &&
             !noteMigrationCompleted) {
           await _noteSync.importLocalNotes(localNotes);
@@ -1541,7 +1618,7 @@ class _MyAppState extends State<MyApp>
           final localFolders =
               await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
           final cloudFolders = await _noteSync.loadFolders();
-          if (localFolders.isNotEmpty && cloudFolders.isEmpty) {
+          if (mayImportLocalData && localFolders.isNotEmpty && cloudFolders.isEmpty) {
             await _noteSync.importLocalFolders(localFolders);
           }
           _foldersCloudAvailable = true;
@@ -1562,8 +1639,7 @@ class _MyAppState extends State<MyApp>
         // until the owner enables focus_sessions.sql in Supabase.
         _focusSessionsCloudAvailable = false;
       }
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw StateError('Brak aktywnej sesji.');
+      await preferences.setString('local_content_owner_v1', user.id);
       await _taskSubscription?.cancel();
       _taskSubscription = Supabase.instance.client
           .from('tasks')
@@ -1627,7 +1703,7 @@ class _MyAppState extends State<MyApp>
     try {
       await _loadCloudTasks();
       await _refreshAllTaskNotifications();
-      if (mounted) setState(() => _syncStatus = 'Zsynchronizowano');
+      await _refreshSyncStatusFromOutboxes();
     } catch (_) {
       if (mounted) setState(() => _syncStatus = 'Błąd synchronizacji');
     }
@@ -1714,26 +1790,45 @@ class _MyAppState extends State<MyApp>
 
   Future<void> _retryAllPendingSync() async {
     if (!cloudMode) {
-      _showSuccessNotice('Zaloguj się, aby ponowić synchronizację.');
+      if (_hasCloudIdentity) {
+        await _enterCloudMode();
+      } else {
+        _showSuccessNotice('Zaloguj się, aby synchronizować dane między urządzeniami.');
+      }
       return;
     }
     if (mounted) setState(() => _syncStatus = 'Synchronizowanie…');
     try {
+      await _retryPendingTaskCategorySync(
+        kind: TaskCategorySyncOperationKind.upsert,
+      );
       await _retryPendingTaskSync();
-      await _retryPendingTaskCategorySync();
+      await _retryPendingTaskCategorySync(
+        kind: TaskCategorySyncOperationKind.delete,
+      );
       await _retryPendingFolderSync();
       await _retryPendingNoteSync();
+      await _costsScreenKey.currentState?.retrySync();
+      await _hoursScreenKey.currentState?.retrySync();
+      final preferences = await SharedPreferences.getInstance();
       final taskPending = await _taskSyncOutbox?.load() ?? const [];
       final categoryPending = await _taskCategorySyncOutbox?.load() ?? const [];
       final notePending = await _noteSyncOutbox?.load() ?? const [];
       final folderPending = await _noteFolderSyncOutbox?.load() ?? const [];
+      final costPending = await CostSyncOutbox(
+        preferences,
+        ownerId: _costsOwnerId(),
+      ).load();
+      final hoursPending = WorkHoursStore(preferences, _costsOwnerId()).pending;
       if (!mounted) return;
       setState(() {
         _syncStatus =
             taskPending.isEmpty &&
                 categoryPending.isEmpty &&
                 notePending.isEmpty &&
-                folderPending.isEmpty
+                folderPending.isEmpty &&
+                costPending.isEmpty &&
+                hoursPending.isEmpty
             ? 'Zsynchronizowano'
             : 'Czeka na synchronizację';
       });
@@ -1742,8 +1837,22 @@ class _MyAppState extends State<MyApp>
     }
   }
 
+  Future<void> _retryConnection() async {
+    try {
+      if (Supabase.instance.client.auth.currentUser == null) return;
+      if (!cloudMode) {
+        await _enterCloudMode();
+        return;
+      }
+      await _retryAllPendingSync();
+    } on AssertionError {
+      // Widget tests can run without Supabase.initialize.
+    }
+  }
+
   Future<void> _refreshSyncStatusFromOutboxes() async {
     if (!cloudMode) return;
+    final preferences = await SharedPreferences.getInstance();
     final pending = await Future.wait([
       _taskSyncOutbox?.load() ?? Future.value(const <PendingTaskSync>[]),
       _taskCategorySyncOutbox?.load() ??
@@ -1751,8 +1860,10 @@ class _MyAppState extends State<MyApp>
       _noteSyncOutbox?.load() ?? Future.value(const <PendingNoteSync>[]),
       _noteFolderSyncOutbox?.load() ??
           Future.value(const <PendingNoteFolderSync>[]),
+      CostSyncOutbox(preferences, ownerId: _costsOwnerId()).load(),
     ]);
-    final hasPending = pending.any((items) => (items as List).isNotEmpty);
+    final hasHoursPending = WorkHoursStore(preferences, _costsOwnerId()).pending.isNotEmpty;
+    final hasPending = hasHoursPending || pending.any((items) => (items as List).isNotEmpty);
     if (mounted) {
       setState(
         () => _syncStatus = hasPending
@@ -1943,6 +2054,15 @@ class _MyAppState extends State<MyApp>
       return;
     }
     await _saveLocalNotes();
+    if (_hasCloudIdentity) {
+      await _noteSyncOutbox?.enqueue(
+        note,
+        expectedRevision: isNew ? null : note.revision - 1,
+        includeFolderId: _foldersCloudAvailable,
+      );
+      if (mounted) setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+      if (cloudMode && _notesCloudAvailable) await _retryPendingNoteSync();
+    }
     await runNoteSaveFollowUps([
       () => _scheduleNoteReminder(note),
     ]);
@@ -2074,117 +2194,33 @@ class _MyAppState extends State<MyApp>
             repeatRule: draft.repeatRule,
             subtasks: draft.subtasks,
           );
-          if (cloudMode) {
-            try {
-              await _sync.updateTask(
-                taskId,
-                title: draft.title,
-                note: draft.note,
-                category: draft.category,
-                categoryId: draft.categoryId,
-                emoji: draft.emoji,
-                colorKey: draft.colorKey,
-                priority: draft.priority,
-                dueAt: draft.dueAt,
-                reminderAt: draft.reminderAt,
-              );
-              await _taskSyncOutbox?.remove(taskId);
-              if (_subtasksChanged(task.subtasks, draft.subtasks)) {
-                await _sync.syncSubtasks(taskId, draft.subtasks);
-              }
-              await _loadCloudTasks();
-            } catch (_) {
-              setState(() {
-                final index = tasks.indexWhere((item) => item.id == task.id);
-                if (index != -1) tasks[index] = updatedTask;
-              });
-              await _saveLocalTasks();
-              await _taskSyncOutbox?.enqueueUpdate(
-                updatedTask,
-                syncSubtasks: _subtasksChanged(task.subtasks, draft.subtasks),
-              );
-              if (mounted) {
-                setState(
-                  () => _syncStatus =
-                      'Zapisano lokalnie · czeka na synchronizację',
-                );
-              }
-            }
-          } else {
-            setState(() {
-              final index = tasks.indexOf(task);
-              tasks[index] = updatedTask;
-            });
-            await _saveLocalTasks();
-          }
-        } else if (cloudMode) {
-          final provisionalId = newNoteId();
-          try {
-            final row = await _sync.addTask(
-              draft.title,
-              note: draft.note,
-              category: draft.category,
-              categoryId: draft.categoryId,
-              emoji: draft.emoji,
-              colorKey: draft.colorKey,
-              priority: draft.priority,
-              dueAt: draft.dueAt,
-              reminderAt: draft.reminderAt,
-            );
-            taskId = row['id'] as String;
-            for (final step in draft.subtasks) {
-              await _sync.addSubtask(taskId, step.title, step.position);
-            }
-            await _loadCloudTasks();
-          } catch (_) {
-            final pendingTask = TaskItem(
-              id: provisionalId,
-              title: draft.title,
-              status: 'todo',
-              note: draft.note,
-              category: draft.category,
-              categoryId: draft.categoryId,
-              emoji: draft.emoji,
-              colorKey: draft.colorKey,
-              priority: draft.priority,
-              dueAt: draft.dueAt,
-              reminderAt: draft.reminderAt,
-              repeatRule: draft.repeatRule,
-              subtasks: draft.subtasks,
-            );
-            setState(() => tasks.insert(0, pendingTask));
-            await _saveLocalTasks();
-            await _taskSyncOutbox?.enqueue(pendingTask);
-            if (mounted) {
-              setState(
-                () =>
-                    _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-              );
-            }
-            taskId = provisionalId;
-          }
-        } else {
-          taskId = 'local-${_nextLocalTaskId++}';
-          setState(
-            () => tasks.add(
-              TaskItem(
-                id: taskId,
-                title: draft.title,
-                status: 'todo',
-                note: draft.note,
-                category: draft.category,
-                categoryId: draft.categoryId,
-                emoji: draft.emoji,
-                colorKey: draft.colorKey,
-                priority: draft.priority,
-                dueAt: draft.dueAt,
-                reminderAt: draft.reminderAt,
-                repeatRule: draft.repeatRule,
-                subtasks: draft.subtasks,
-              ),
-            ),
+          setState(() {
+            final index = tasks.indexWhere((item) => item.id == task.id);
+            if (index != -1) tasks[index] = updatedTask;
+          });
+          await _persistTaskOperation(
+            updatedTask,
+            syncSubtasks: _subtasksChanged(task.subtasks, draft.subtasks),
           );
-          await _saveLocalTasks();
+        } else {
+          taskId = _hasCloudIdentity ? newNoteId() : 'local-${_nextLocalTaskId++}';
+          final pendingTask = TaskItem(
+            id: taskId,
+            title: draft.title,
+            status: 'todo',
+            note: draft.note,
+            category: draft.category,
+            categoryId: draft.categoryId,
+            emoji: draft.emoji,
+            colorKey: draft.colorKey,
+            priority: draft.priority,
+            dueAt: draft.dueAt,
+            reminderAt: draft.reminderAt,
+            repeatRule: draft.repeatRule,
+            subtasks: draft.subtasks,
+          );
+          setState(() => tasks.insert(0, pendingTask));
+          await _persistTaskOperation(pendingTask, create: true);
         }
         final taskForNotifications =
             tasks.where((item) => item.id == taskId).firstOrNull ??
@@ -2236,6 +2272,7 @@ class _MyAppState extends State<MyApp>
   Future<void> _signOut() async {
     _taskDigestTimer?.cancel();
     await NotificationService.instance.cancelTaskDigest();
+    await NotificationService.instance.cancelDailyPlan();
     if (_organizerSettings.taskRemindersEnabled) {
       final current = _organizerSettings;
       final disabled = OrganizerSettings(
@@ -2294,6 +2331,8 @@ class _MyAppState extends State<MyApp>
 
   @override
   void dispose() {
+    _syncRetryScheduler.dispose();
+    _backupTimer?.cancel();
     _undoSnackBarTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _taskDigestTimer?.cancel();
@@ -2343,38 +2382,16 @@ class _MyAppState extends State<MyApp>
         ? createNextOccurrence(
             task,
             completedAt!,
-            'local-${_nextLocalTaskId++}',
+            newNoteId(),
           )
         : null;
-    if (cloudMode) {
-      try {
-        await _sync.completeAndCreateNext(updated, next);
-        await _taskSyncOutbox?.remove(updated.id);
-        if (next != null) await _taskSyncOutbox?.remove(next.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        setState(() {
-          final index = tasks.indexWhere((item) => item.id == task.id);
-          if (index != -1) tasks[index] = updated;
-          if (next != null) tasks.add(next);
-        });
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueueUpdate(updated);
-        if (next != null) await _taskSyncOutbox?.enqueue(next);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      setState(() {
-        final index = tasks.indexOf(task);
-        tasks[index] = updated;
-        if (next != null) tasks.add(next);
-      });
-      await _saveLocalTasks();
-    }
+    setState(() {
+      final index = tasks.indexWhere((item) => item.id == task.id);
+      if (index != -1) tasks[index] = updated;
+      if (next != null) tasks.add(next);
+    });
+    await _persistTaskOperation(updated);
+    if (next != null) await _persistTaskOperation(next, create: true);
     await _syncTaskNotifications(updated);
     if (next != null) await _syncTaskNotifications(next);
     await _refreshDailyPlanNotification();
@@ -2388,30 +2405,10 @@ class _MyAppState extends State<MyApp>
   }
 
   Future<void> _restoreTaskState(TaskItem task) async {
-    if (cloudMode) {
-      try {
-        await _sync.updateOrganizerTask(task);
-        await _taskSyncOutbox?.remove(task.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        final index = tasks.indexWhere((item) => item.id == task.id);
-        if (index != -1) {
-          setState(() => tasks[index] = task);
-          await _saveLocalTasks();
-          await _taskSyncOutbox?.enqueueUpdate(task);
-        }
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      final index = tasks.indexWhere((item) => item.id == task.id);
-      if (index == -1) return;
-      setState(() => tasks[index] = task);
-      await _saveLocalTasks();
-    }
+    final index = tasks.indexWhere((item) => item.id == task.id);
+    if (index == -1) return;
+    setState(() => tasks[index] = task);
+    await _persistTaskOperation(task);
     await _syncTaskNotifications(task);
     await _refreshDailyPlanNotification();
     _refreshAndroidWidgets();
@@ -2423,30 +2420,10 @@ class _MyAppState extends State<MyApp>
     final option = await showTaskPostponeSheet(context);
     if (option == null) return;
     final plan = planTaskPostponement(task, DateTime.now(), option);
-    if (cloudMode) {
-      try {
-        await _sync.updateOrganizerTask(plan.updatedTask);
-        await _taskSyncOutbox?.remove(plan.updatedTask.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        final index = tasks.indexWhere((item) => item.id == task.id);
-        if (index != -1) {
-          setState(() => tasks[index] = plan.updatedTask);
-          await _saveLocalTasks();
-          await _taskSyncOutbox?.enqueueUpdate(plan.updatedTask);
-        }
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      final index = tasks.indexWhere((item) => item.id == task.id);
-      if (index == -1) return;
-      setState(() => tasks[index] = plan.updatedTask);
-      await _saveLocalTasks();
-    }
+    final index = tasks.indexWhere((item) => item.id == task.id);
+    if (index == -1) return;
+    setState(() => tasks[index] = plan.updatedTask);
+    await _persistTaskOperation(plan.updatedTask);
     await _syncTaskNotifications(plan.updatedTask);
     _showSuccessNotice('Zadanie odłożone');
     _refreshAndroidWidgets();
@@ -2458,49 +2435,16 @@ class _MyAppState extends State<MyApp>
       _showSuccessNotice('Wpisz nazwę zadania.');
       return;
     }
-    late final String taskId;
-    if (cloudMode) {
-      try {
-        final row = await _sync.addTask(
-          parsed.title,
-          dueAt: parsed.dueAt,
-          sourceNoteId: sourceNoteId,
-        );
-        taskId = row['id'] as String;
-        await _loadCloudTasks();
-      } catch (_) {
-        taskId = 'local-${_nextLocalTaskId++}';
-        final pendingTask = TaskItem(
-          id: taskId,
-          title: parsed.title,
-          status: 'todo',
-          dueAt: parsed.dueAt,
-          sourceNoteId: sourceNoteId,
-        );
-        setState(() => tasks.insert(0, pendingTask));
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueue(pendingTask);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      taskId = 'local-${_nextLocalTaskId++}';
-      setState(
-        () => tasks.add(
-          TaskItem(
-            id: taskId,
-            title: parsed.title,
-            status: 'todo',
-            dueAt: parsed.dueAt,
-            sourceNoteId: sourceNoteId,
-          ),
-        ),
-      );
-      await _saveLocalTasks();
-    }
+    final taskId = _hasCloudIdentity ? newNoteId() : 'local-${_nextLocalTaskId++}';
+    final pendingTask = TaskItem(
+      id: taskId,
+      title: parsed.title,
+      status: 'todo',
+      dueAt: parsed.dueAt,
+      sourceNoteId: sourceNoteId,
+    );
+    setState(() => tasks.insert(0, pendingTask));
+    await _persistTaskOperation(pendingTask, create: true);
     final taskForNotifications =
         tasks.where((item) => item.id == taskId).firstOrNull ??
         TaskItem(
@@ -2549,82 +2493,28 @@ class _MyAppState extends State<MyApp>
       return;
     }
     final updated = task.copyWith(pinnedToday: !task.pinnedToday);
-    if (cloudMode) {
-      try {
-        await _sync.updateOrganizerTask(updated);
-        await _taskSyncOutbox?.remove(updated.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        setState(() => tasks[tasks.indexOf(task)] = updated);
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueueUpdate(updated);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      setState(() => tasks[tasks.indexOf(task)] = updated);
-      await _saveLocalTasks();
-    }
+    final index = tasks.indexWhere((item) => item.id == task.id);
+    if (index == -1) return;
+    setState(() => tasks[index] = updated);
+    await _persistTaskOperation(updated);
     _refreshAndroidWidgets();
   }
 
   Future<void> _saveTaskPriority(TaskItem updated) async {
     final index = tasks.indexWhere((task) => task.id == updated.id);
     if (index == -1) return;
-    if (cloudMode) {
-      try {
-        await _sync.updateOrganizerTask(updated);
-        await _taskSyncOutbox?.remove(updated.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => tasks[index] = updated);
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueueUpdate(updated);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      setState(() => tasks[index] = updated);
-      await _saveLocalTasks();
-    }
+    setState(() => tasks[index] = updated);
+    await _persistTaskOperation(updated);
     _refreshAndroidWidgets();
   }
 
   Future<void> _moveTaskToWeekDay(TaskItem task, DateTime day) async {
     final plan = planTaskMoveToWeekDay(task, day);
     final updated = plan.updatedTask;
-    if (cloudMode) {
-      try {
-        await _sync.updateOrganizerTask(updated);
-        await _taskSyncOutbox?.remove(updated.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        final index = tasks.indexWhere((item) => item.id == task.id);
-        if (index != -1) {
-          setState(() => tasks[index] = updated);
-          await _saveLocalTasks();
-          await _taskSyncOutbox?.enqueueUpdate(updated);
-        }
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      setState(() {
-        final index = tasks.indexWhere((item) => item.id == task.id);
-        tasks[index] = updated;
-      });
-      await _saveLocalTasks();
-    }
+    final index = tasks.indexWhere((item) => item.id == task.id);
+    if (index == -1) return;
+    setState(() => tasks[index] = updated);
+    await _persistTaskOperation(updated);
     await _syncTaskNotifications(updated);
     _refreshAndroidWidgets();
   }
@@ -2650,24 +2540,8 @@ class _MyAppState extends State<MyApp>
     );
     if (accepted != true) return;
     final localIndex = tasks.indexOf(task);
-    if (cloudMode) {
-      try {
-        await _sync.deleteTask(task.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        setState(() => tasks.removeWhere((item) => item.id == task.id));
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueueDelete(task);
-        if (mounted) {
-          setState(
-            () => _syncStatus = 'Usunięto lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      setState(() => tasks.remove(task));
-      await _saveLocalTasks();
-    }
+    setState(() => tasks.removeWhere((item) => item.id == task.id));
+    await _persistTaskOperation(task, delete: true);
     await NotificationService.instance.cancel(task.id);
     await _refreshDailyPlanNotification();
     _refreshAndroidWidgets();
@@ -2678,27 +2552,14 @@ class _MyAppState extends State<MyApp>
   }
 
   Future<void> _restoreDeletedTask(TaskItem task, int localIndex) async {
-    if (cloudMode) {
-      try {
-        await _sync.restoreTask(task.id);
-        await _loadCloudTasks();
-      } catch (_) {
-        final restoreIndex = localIndex.clamp(0, tasks.length).toInt();
-        setState(() => tasks.insert(restoreIndex, task));
-        await _saveLocalTasks();
-        await _taskSyncOutbox?.enqueueUpdate(task);
-        if (mounted) {
-          setState(
-            () =>
-                _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację',
-          );
-        }
-      }
-    } else {
-      if (tasks.any((item) => item.id == task.id)) return;
-      final restoreIndex = localIndex.clamp(0, tasks.length).toInt();
-      setState(() => tasks.insert(restoreIndex, task));
-      await _saveLocalTasks();
+    if (tasks.any((item) => item.id == task.id)) return;
+    final restoreIndex = localIndex.clamp(0, tasks.length).toInt();
+    setState(() => tasks.insert(restoreIndex, task));
+    await _saveLocalTasks();
+    if (_hasCloudIdentity) {
+      await _taskSyncOutbox?.enqueueRestore(task);
+      if (cloudMode) await _retryPendingTaskSync();
+      if (mounted) setState(() => _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację');
     }
     await _syncTaskNotifications(task);
     await _refreshDailyPlanNotification();
@@ -3066,12 +2927,14 @@ class _MyAppState extends State<MyApp>
               onSnapshotChanged: (snapshot) {
                 if (!mounted || _costsOwnerId() != costsOwnerId) return;
                 setState(() => _costSnapshot = snapshot);
+                _markBackupDirty();
               },
             ),
             hoursContent: WorkHoursScreen(
               key: _hoursScreenKey,
               ownerId: costsOwnerId,
               cloudMode: cloudMode,
+              onDataChanged: _markBackupDirty,
             ),
             onAddHours: () => _hoursScreenKey.currentState?.showAdd(),
             onAddTask: () => _showTaskForm(context),
@@ -3111,6 +2974,10 @@ class _MyAppState extends State<MyApp>
             notificationPermissionGranted: _notificationPermissionGranted,
             onOpenNotificationSettings: _openNotificationSettings,
             onRetrySync: _retryAllPendingSync,
+            backupManager: _backupManager,
+            backupOwnerId: costsOwnerId,
+            onBackupSettingsChanged: _markBackupDirty,
+            onBackupRestored: _reloadAfterBackupRestore,
           );
         }
         return Stack(

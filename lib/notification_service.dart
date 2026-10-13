@@ -14,6 +14,7 @@ class NotificationService {
   static final instance = NotificationService._();
   final _plugin = FlutterLocalNotificationsPlugin();
   static const _taskDigestChannel = MethodChannel('dzien_po_dniu/task_digest');
+  static const _dailyPlanChannel = MethodChannel('dniowka/daily_plan');
   var _isInitialized = false;
   void Function(NotificationResponse response)? onResponse;
   NotificationResponse? _launchResponse;
@@ -141,6 +142,14 @@ class NotificationService {
     required int minute,
     required int pendingTaskCount,
   }) async {
+    if (Platform.isAndroid) {
+      await _dailyPlanChannel.invokeMethod<void>('schedule', {
+        'enabled': enabled,
+        'hour': hour,
+        'minute': minute,
+      });
+      return;
+    }
     await cancelDailyPlan();
     if (!_isInitialized || pendingTaskCount == 0) return;
     final times = dailyPlanTimes(
@@ -175,6 +184,10 @@ class NotificationService {
   }
 
   Future<void> cancelDailyPlan() async {
+    if (Platform.isAndroid) {
+      await _dailyPlanChannel.invokeMethod<void>('cancel');
+      return;
+    }
     if (!_isInitialized) return;
     await Future.wait([
       for (var index = 0; index < dailyPlanOccurrenceCount; index++)

@@ -30,6 +30,7 @@ internal object TaskDigestScheduler {
             .putInt("end", end.coerceIn(0, 1439))
             .apply()
         if (enabled && start != end) scheduleNext(context) else cancel(context)
+        if (enabled && start != end) refreshPostedNotification(context)
     }
 
     fun restore(context: Context) {
@@ -42,6 +43,7 @@ internal object TaskDigestScheduler {
     fun cancel(context: Context) {
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         manager.cancel(alarmIntent(context))
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
     }
 
     fun scheduleNext(context: Context) {
@@ -88,7 +90,7 @@ internal object TaskDigestScheduler {
         }
     }
 
-    private fun currentDueTasks(context: Context): List<String> {
+    internal fun currentDueTasks(context: Context): List<String> {
         val raw = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             .getString("flutter.local_tasks_v1", null) ?: return emptyList()
         val tomorrow = LocalDate.now().plusDays(1).atStartOfDay()
@@ -105,6 +107,16 @@ internal object TaskDigestScheduler {
             }
         }
         return selected.values.sortedBy { it.first }.map { it.second }
+    }
+
+    private fun refreshPostedNotification(context: Context) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val tasks = currentDueTasks(context)
+        if (tasks.isEmpty()) {
+            manager.cancel(NOTIFICATION_ID)
+        } else {
+            showNotification(context, tasks)
+        }
     }
 
     private fun parseDueAt(value: String): LocalDateTime? {
@@ -194,7 +206,10 @@ class TaskDigestBootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED -> TaskDigestScheduler.restore(context)
+            Intent.ACTION_TIMEZONE_CHANGED -> {
+                TaskDigestScheduler.restore(context)
+                DailyPlanScheduler.restore(context)
+            }
         }
     }
 }
