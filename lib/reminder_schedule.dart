@@ -91,13 +91,18 @@ List<TaskItem> tasksForTaskDigest(
   final tomorrow = DateTime(now.year, now.month, now.day + 1);
   final byId = <String, TaskItem>{};
   for (final task in tasks) {
-    if (!task.isDone && task.dueAt != null && task.dueAt!.isBefore(tomorrow)) {
-      // Local storage can briefly contain the same id twice while an older
-      // sync snapshot is being reconciled. The last copy is the newest one.
-      byId[task.id] = task;
-    }
+    // Local storage can briefly contain the same id twice while an older
+    // sync snapshot is being reconciled. The last copy is the newest one.
+    byId[task.id] = task;
   }
-  final selected = byId.values.toList();
+  final selected = byId.values
+      .where(
+        (task) =>
+            !task.isDone &&
+            task.dueAt != null &&
+            task.dueAt!.isBefore(tomorrow),
+      )
+      .toList();
   selected.sort((left, right) => left.dueAt!.compareTo(right.dueAt!));
   return selected;
 }

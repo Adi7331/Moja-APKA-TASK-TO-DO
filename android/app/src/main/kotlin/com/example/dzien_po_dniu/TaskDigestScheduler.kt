@@ -10,7 +10,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import org.json.JSONArray
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -52,7 +51,12 @@ internal object TaskDigestScheduler {
         val interval = preferences.getInt("interval", 60).coerceIn(15, 1440)
         val start = preferences.getInt("start", 540).coerceIn(0, 1439)
         val end = preferences.getInt("end", 1260).coerceIn(0, 1439)
-        val next = nextOccurrence(LocalDateTime.now(), interval, start, end) ?: return
+        val next = nextDigestOccurrence(
+            now = LocalDateTime.now(),
+            interval = interval,
+            start = start,
+            end = end,
+        ) ?: return
         val pending = alarmIntent(context)
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val time = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -61,24 +65,6 @@ internal object TaskDigestScheduler {
         } else {
             manager.set(AlarmManager.RTC_WAKEUP, time, pending)
         }
-    }
-
-    private fun nextOccurrence(now: LocalDateTime, interval: Int, start: Int, end: Int): LocalDateTime? {
-        if (start == end || interval !in 15..1440) return null
-        val nowMinute = now.hour * 60 + now.minute
-        val firstOffset = if (end < start && nowMinute < end) -1 else 0
-        for (offset in firstOffset..32) {
-            val date = now.toLocalDate().plusDays(offset.toLong())
-            val begin = date.atStartOfDay().plusMinutes(start.toLong())
-            val endDate = if (end < start) date.plusDays(1) else date
-            val stop = endDate.atStartOfDay().plusMinutes(end.toLong())
-            var candidate = begin
-            while (candidate.isBefore(stop)) {
-                if (candidate.isAfter(now)) return candidate
-                candidate = candidate.plusMinutes(interval.toLong())
-            }
-        }
-        return null
     }
 
     fun onAlarm(context: Context) {
@@ -93,29 +79,31 @@ internal object TaskDigestScheduler {
     internal fun currentDueTasks(context: Context): List<String> {
         val raw = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             .getString("flutter.local_tasks_v1", null) ?: return emptyList()
-        val tomorrow = LocalDate.now().plusDays(1).atStartOfDay()
         val array = JSONArray(raw)
-        val selected = linkedMapOf<String, Pair<LocalDateTime, String>>()
+        val entries = mutableListOf<TaskDigestEntry>()
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-            if (item.optString("status", "todo") == "done") continue
-            val due = parseDueAt(item.optString("dueAt", "")) ?: continue
-            if (due.isBefore(tomorrow)) {
-                val title = item.optString("title", "").trim()
-                val id = item.optString("id", "").ifBlank { "legacy-$index" }
-                selected[id] = due to title.ifBlank { "Bez tytułu" }
-            }
+            val title = item.optString("title", "").trim()
+            entries.add(
+                TaskDigestEntry(
+                    id = item.optString("id", "").ifBlank { "legacy-$index" },
+                    title = title.ifBlank { "Bez tytułu" },
+                    status = item.optString("status", "todo"),
+                    dueAt = parseDueAt(item.optString("dueAt", "")),
+                ),
+            )
         }
-        return selected.values.sortedBy { it.first }.map { it.second }
+        return tasksForDigest(entries, LocalDateTime.now()).map { it.title }
     }
 
     private fun refreshPostedNotification(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val tasks = currentDueTasks(context)
-        if (tasks.isEmpty()) {
-            manager.cancel(NOTIFICATION_ID)
-        } else {
-            showNotification(context, tasks)
+        when {
+            tasks.isEmpty() -> manager.cancel(NOTIFICATION_ID)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                manager.activeNotifications.any { it.id == NOTIFICATION_ID } ->
+                showNotification(context, tasks)
         }
     }
 
@@ -132,7 +120,7 @@ internal object TaskDigestScheduler {
         }
     }
 
-    private fun showNotification(context: Context, titles: List<String>) {
+    private fun showNotification(context: Context, titles: List<String>): Boolean {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
@@ -166,11 +154,14 @@ internal object TaskDigestScheduler {
             .setStyle(Notification.BigTextStyle().bigText(body))
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .build()
         try {
             manager.notify(NOTIFICATION_ID, notification)
+            return true
         } catch (_: SecurityException) {
             // Notification permission can be revoked after the setting is enabled.
+            return false
         }
     }
 
