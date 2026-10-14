@@ -135,6 +135,21 @@ void main() {
     expect(formatTaskDigest(selected).title, 'Masz 2 zadania do zrobienia');
   });
 
+  test('task digest uses the latest duplicate before checking its status', () {
+    final dueAt = DateTime(2026, 9, 26, 9);
+    final selected = tasksForTaskDigest(
+      [
+        _task('completed', dueAt),
+        _task('completed', dueAt, isDone: true),
+        _task('rescheduled', dueAt),
+        _task('rescheduled', DateTime(2026, 9, 27)),
+      ],
+      now: DateTime(2026, 9, 26, 12),
+    );
+
+    expect(selected, isEmpty);
+  });
+
   test('task digest shows at most three titles and a count', () {
     final digest = formatTaskDigest(
       List.generate(5, (index) => _task('id-$index', DateTime(2026, 9, 26))),

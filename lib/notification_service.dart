@@ -16,6 +16,7 @@ class NotificationService {
   static const _taskDigestChannel = MethodChannel('dzien_po_dniu/task_digest');
   static const _dailyPlanChannel = MethodChannel('dniowka/daily_plan');
   var _isInitialized = false;
+  var _legacyTaskDigestCleaned = false;
   void Function(NotificationResponse response)? onResponse;
   NotificationResponse? _launchResponse;
 
@@ -206,6 +207,7 @@ class NotificationService {
     required List<TaskItem> tasks,
   }) async {
     if (Platform.isAndroid) {
+      await _cancelLegacyTaskDigestNotifications();
       await _taskDigestChannel.invokeMethod<void>('schedule', {
         'enabled': enabled,
         'interval': intervalMinutes,
@@ -249,6 +251,7 @@ class NotificationService {
 
   Future<void> cancelTaskDigest() async {
     if (Platform.isAndroid) {
+      await _cancelLegacyTaskDigestNotifications();
       await _taskDigestChannel.invokeMethod<void>('cancel');
       return;
     }
@@ -257,6 +260,15 @@ class NotificationService {
       for (var index = 0; index < taskDigestOccurrenceCount; index++)
         _plugin.cancel(id: taskDigestNotificationId(index)),
     ]);
+  }
+
+  Future<void> _cancelLegacyTaskDigestNotifications() async {
+    if (!_isInitialized || _legacyTaskDigestCleaned) return;
+    await Future.wait([
+      for (var index = 0; index < taskDigestOccurrenceCount; index++)
+        _plugin.cancel(id: taskDigestNotificationId(index)),
+    ]);
+    _legacyTaskDigestCleaned = true;
   }
 
   Future<void> scheduleTaskReminder({
