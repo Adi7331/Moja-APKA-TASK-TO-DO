@@ -42,6 +42,40 @@ void main() {
     expect(businessPresetWorkflows.first.totalMinutes, 40);
   });
 
+  test('cached defaults do not enter the outbox and remote edits win', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = BusinessStore(preferences, 'user-a');
+    final preset = businessPresetWorkflows.first;
+
+    await store.seedWorkflowsIfMissing(businessPresetWorkflows);
+    expect(store.snapshot.pending, isEmpty);
+
+    final customized = BusinessWorkflow(
+      id: preset.id,
+      name: 'Mój workflow',
+      steps: preset.steps,
+      isPreset: true,
+    );
+    await store.mergeRemote([
+      {
+        'id': preset.id,
+        'kind': 'workflow',
+        'payload': customized.toJson(),
+        'deleted_at': null,
+      },
+    ]);
+
+    expect(
+      store.snapshot.workflows
+          .singleWhere((workflow) => workflow.id == preset.id)
+          .name,
+      'Mój workflow',
+    );
+    expect(store.snapshot.pending, isEmpty);
+    store.dispose();
+  });
+
   test(
     'concurrent local writes keep each record and owner data isolated',
     () async {

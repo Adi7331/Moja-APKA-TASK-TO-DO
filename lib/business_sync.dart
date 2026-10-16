@@ -55,7 +55,7 @@ class BusinessSync {
               ? operation['updatedAt']
               : null,
           'updated_at': operation['updatedAt'],
-        }, onConflict: 'id');
+        }, onConflict: 'user_id,id');
         if (!_authorized) return;
         await store.acknowledge(operation);
       }

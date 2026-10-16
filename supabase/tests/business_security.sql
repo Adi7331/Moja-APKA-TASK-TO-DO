@@ -35,7 +35,7 @@ begin
   insert into public.business_records(id, user_id, kind, payload, updated_at, deleted_at)
   values (record_id, owner_id, 'product', '{"name":"Stale offline edit"}',
           '2026-10-16 10:00Z', null)
-  on conflict (id) do update set payload = excluded.payload,
+  on conflict (user_id, id) do update set payload = excluded.payload,
     updated_at = excluded.updated_at, deleted_at = excluded.deleted_at;
   if not (select deleted_at is not null and payload->>'name' = 'Lampa'
           from public.business_records where id = record_id) then
@@ -58,6 +58,7 @@ select set_config('request.jwt.claim.sub', current_setting('business_test.owner_
 set local role authenticated;
 do $$
 declare affected integer;
+  owner_id uuid := current_setting('business_test.owner_b')::uuid;
 begin
   if exists (select 1 from public.business_records
              where id = current_setting('business_test.record')) then
@@ -71,6 +72,14 @@ begin
   where id = current_setting('business_test.record');
   get diagnostics affected = row_count;
   if affected <> 0 then raise exception 'Cross-owner deletion allowed'; end if;
+
+  insert into public.business_records(id, user_id, kind, payload)
+  values (current_setting('business_test.record'), owner_id, 'workflow', '{}')
+  on conflict (user_id, id) do update set payload = excluded.payload;
+  if (select count(*) from public.business_records
+      where id = current_setting('business_test.record')) <> 1 then
+    raise exception 'The same record ID could not be stored independently per owner';
+  end if;
 end;
 $$;
 

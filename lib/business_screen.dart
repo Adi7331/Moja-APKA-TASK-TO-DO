@@ -66,10 +66,8 @@ class BusinessScreenState extends State<BusinessScreen>
       final presetsSeeded =
           prefs.getBool('business_workflows_seeded_v1_${widget.ownerId}') ??
           false;
-      if (!presetsSeeded && store.snapshot.workflows.isEmpty) {
-        for (final workflow in businessPresetWorkflows) {
-          await store.saveWorkflow(workflow);
-        }
+      if (!presetsSeeded) {
+        await store.seedWorkflowsIfMissing(businessPresetWorkflows);
         await prefs.setBool(
           'business_workflows_seeded_v1_${widget.ownerId}',
           true,

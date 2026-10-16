@@ -66,6 +66,22 @@ class BusinessStore extends ChangeNotifier {
       _upsert('test', value.id, value.toJson());
   Future<void> saveWorkflow(BusinessWorkflow value) =>
       _upsert('workflow', value.id, value.toJson());
+
+  Future<void> seedWorkflowsIfMissing(List<BusinessWorkflow> workflows) =>
+      _commit((current) {
+        var next = current;
+        for (final workflow in workflows) {
+          if (next.workflows.any((item) => item.id == workflow.id)) continue;
+          next = _replace(
+            next,
+            'workflow',
+            workflow.id,
+            workflow.toJson(),
+            next.pending,
+          );
+        }
+        return next;
+      });
   Future<void> saveSession(BusinessFocusSession value) =>
       _upsert('session', value.id, value.toJson());
   Future<void> saveIdea(BusinessIdea value) =>
