@@ -68,6 +68,8 @@ import 'calendar_store.dart';
 import 'calendar_credentials.dart';
 import 'profile_avatar.dart';
 import 'update_gate.dart';
+import 'business_screen.dart';
+import 'business_models.dart';
 import 'update_service.dart';
 import 'google_calendar_service.dart';
 import 'organizer_settings.dart';
@@ -144,6 +146,8 @@ class _MyAppState extends State<MyApp>
   GlobalKey<CostsScreenState> _costsScreenKey = GlobalKey<CostsScreenState>();
   GlobalKey<WorkHoursScreenState> _hoursScreenKey =
       GlobalKey<WorkHoursScreenState>();
+  GlobalKey<BusinessScreenState> _businessScreenKey =
+      GlobalKey<BusinessScreenState>();
   Timer? _undoSnackBarTimer;
   String? _costsOwnerForKey;
   CostSnapshot _costSnapshot = const CostSnapshot();
@@ -632,7 +636,9 @@ class _MyAppState extends State<MyApp>
       await outbox.enqueueUpdate(task, syncSubtasks: syncSubtasks);
     }
     if (mounted) {
-      setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+      setState(
+        () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+      );
     }
     if (cloudMode) {
       await _retryPendingTaskSync();
@@ -660,10 +666,18 @@ class _MyAppState extends State<MyApp>
         await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
     if (!mounted) return;
     setState(() {
-      tasks..clear()..addAll(restoredTasks);
-      taskCategories..clear()..addAll(restoredCategories);
-      notes..clear()..addAll(restoredNotes);
-      folders..clear()..addAll(restoredFolders);
+      tasks
+        ..clear()
+        ..addAll(restoredTasks);
+      taskCategories
+        ..clear()
+        ..addAll(restoredCategories);
+      notes
+        ..clear()
+        ..addAll(restoredNotes);
+      folders
+        ..clear()
+        ..addAll(restoredFolders);
       _costsScreenKey = GlobalKey<CostsScreenState>();
       _hoursScreenKey = GlobalKey<WorkHoursScreenState>();
       _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację';
@@ -717,10 +731,7 @@ class _MyAppState extends State<MyApp>
       enabled: settings.dailyPlanEnabled,
       hour: settings.dailyPlanHour,
       minute: settings.dailyPlanMinute,
-      pendingTaskCount: tasksForTaskDigest(
-        tasks,
-        now: DateTime.now(),
-      ).length,
+      pendingTaskCount: tasksForTaskDigest(tasks, now: DateTime.now()).length,
     );
     await _refreshOverdueTaskNotifications();
   }
@@ -761,10 +772,7 @@ class _MyAppState extends State<MyApp>
         enabled: _organizerSettings.dailyPlanEnabled,
         hour: _organizerSettings.dailyPlanHour,
         minute: _organizerSettings.dailyPlanMinute,
-        pendingTaskCount: tasksForTaskDigest(
-          tasks,
-          now: DateTime.now(),
-        ).length,
+        pendingTaskCount: tasksForTaskDigest(tasks, now: DateTime.now()).length,
       );
 
   bool _subtasksChanged(List<SubtaskItem> before, List<SubtaskItem> after) {
@@ -1332,7 +1340,11 @@ class _MyAppState extends State<MyApp>
           expectedRevision: updated.revision - 1,
           includeFolderId: true,
         );
-        if (mounted) setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+        if (mounted) {
+          setState(
+            () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+          );
+        }
       }
       return;
     }
@@ -1534,8 +1546,11 @@ class _MyAppState extends State<MyApp>
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw StateError('Brak aktywnej sesji.');
       final preferences = await SharedPreferences.getInstance();
-      final previousLocalOwner = preferences.getString('local_content_owner_v1');
-      final mayAdoptLegacyLocalData = previousLocalOwner == null ||
+      final previousLocalOwner = preferences.getString(
+        'local_content_owner_v1',
+      );
+      final mayAdoptLegacyLocalData =
+          previousLocalOwner == null ||
           previousLocalOwner == user.id ||
           previousLocalOwner == 'local-user';
       if (mayAdoptLegacyLocalData) {
@@ -1544,10 +1559,7 @@ class _MyAppState extends State<MyApp>
         await NoteSyncOutbox.scopeLegacyQueue(preferences, user.id);
         await NoteFolderSyncOutbox.scopeLegacyQueue(preferences, user.id);
       }
-      _taskSyncOutbox = TaskSyncOutbox(
-        preferences,
-        ownerId: user.id,
-      );
+      _taskSyncOutbox = TaskSyncOutbox(preferences, ownerId: user.id);
       _taskCategorySyncOutbox = TaskCategorySyncOutbox(
         preferences,
         ownerId: user.id,
@@ -1559,15 +1571,16 @@ class _MyAppState extends State<MyApp>
       );
       final localTasks = await _localStore?.load() ?? const <TaskItem>[];
       final cloudRows = await _sync.loadTasks();
-      final mayImportLocalData = previousLocalOwner == null ||
+      final mayImportLocalData =
+          previousLocalOwner == null ||
           previousLocalOwner == user.id ||
           previousLocalOwner == 'local-user';
       final store = _localStore;
       final decision = decideLocalTaskMigration(
         localTaskCount: localTasks.length,
         cloudTaskCount: cloudRows.length,
-        migrationCompleted: !mayImportLocalData ||
-            (store?.cloudMigrationCompleted ?? false),
+        migrationCompleted:
+            !mayImportLocalData || (store?.cloudMigrationCompleted ?? false),
       );
       if (decision.shouldImport) {
         await _sync.importLocalTasks(localTasks);
@@ -1595,7 +1608,8 @@ class _MyAppState extends State<MyApp>
         final cloudNotes = await _noteSync.loadNotes();
         final noteMigrationCompleted =
             await _localNoteStore?.cloudMigrationCompleted ?? false;
-        if (mayImportLocalData && localNotes.isNotEmpty &&
+        if (mayImportLocalData &&
+            localNotes.isNotEmpty &&
             cloudNotes.isEmpty &&
             !noteMigrationCompleted) {
           await _noteSync.importLocalNotes(localNotes);
@@ -1618,7 +1632,9 @@ class _MyAppState extends State<MyApp>
           final localFolders =
               await _localNoteStore?.loadFolders() ?? const <NoteFolder>[];
           final cloudFolders = await _noteSync.loadFolders();
-          if (mayImportLocalData && localFolders.isNotEmpty && cloudFolders.isEmpty) {
+          if (mayImportLocalData &&
+              localFolders.isNotEmpty &&
+              cloudFolders.isEmpty) {
             await _noteSync.importLocalFolders(localFolders);
           }
           _foldersCloudAvailable = true;
@@ -1740,8 +1756,7 @@ class _MyAppState extends State<MyApp>
           var synchronizedNote = operation.note;
           if (operation.note.attachments.any(
             (attachment) =>
-                attachment.storagePath == null &&
-                attachment.localPath != null,
+                attachment.storagePath == null && attachment.localPath != null,
           )) {
             synchronizedNote = await ensureNoteBeforeAttachments(
               ensureNote: () => _noteSync.ensureNoteExists(
@@ -1793,7 +1808,9 @@ class _MyAppState extends State<MyApp>
       if (_hasCloudIdentity) {
         await _enterCloudMode();
       } else {
-        _showSuccessNotice('Zaloguj się, aby synchronizować dane między urządzeniami.');
+        _showSuccessNotice(
+          'Zaloguj się, aby synchronizować dane między urządzeniami.',
+        );
       }
       return;
     }
@@ -1862,8 +1879,12 @@ class _MyAppState extends State<MyApp>
           Future.value(const <PendingNoteFolderSync>[]),
       CostSyncOutbox(preferences, ownerId: _costsOwnerId()).load(),
     ]);
-    final hasHoursPending = WorkHoursStore(preferences, _costsOwnerId()).pending.isNotEmpty;
-    final hasPending = hasHoursPending || pending.any((items) => (items as List).isNotEmpty);
+    final hasHoursPending = WorkHoursStore(
+      preferences,
+      _costsOwnerId(),
+    ).pending.isNotEmpty;
+    final hasPending =
+        hasHoursPending || pending.any((items) => (items as List).isNotEmpty);
     if (mounted) {
       setState(
         () => _syncStatus = hasPending
@@ -2060,12 +2081,14 @@ class _MyAppState extends State<MyApp>
         expectedRevision: isNew ? null : note.revision - 1,
         includeFolderId: _foldersCloudAvailable,
       );
-      if (mounted) setState(() => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację');
+      if (mounted) {
+        setState(
+          () => _syncStatus = 'Zapisano lokalnie · czeka na synchronizację',
+        );
+      }
       if (cloudMode && _notesCloudAvailable) await _retryPendingNoteSync();
     }
-    await runNoteSaveFollowUps([
-      () => _scheduleNoteReminder(note),
-    ]);
+    await runNoteSaveFollowUps([() => _scheduleNoteReminder(note)]);
     _refreshAndroidWidgets();
   }
 
@@ -2168,13 +2191,21 @@ class _MyAppState extends State<MyApp>
     }
   }
 
-  Future<void> _showTaskForm(BuildContext context, {TaskItem? task}) async {
+  Future<String?> _showTaskForm(
+    BuildContext context, {
+    TaskItem? task,
+    String? initialTitle,
+    String? initialNote,
+  }) async {
     final modalContext = _navigatorKey.currentContext;
-    if (modalContext == null) return;
+    if (modalContext == null) return null;
     var saved = false;
+    String? savedTaskId;
     await showTaskEditor(
       modalContext,
       task: task,
+      initialTitle: initialTitle,
+      initialNote: initialNote,
       categories: taskCategories,
       remastered: _remasterPreview,
       onSave: (draft) async {
@@ -2203,7 +2234,9 @@ class _MyAppState extends State<MyApp>
             syncSubtasks: _subtasksChanged(task.subtasks, draft.subtasks),
           );
         } else {
-          taskId = _hasCloudIdentity ? newNoteId() : 'local-${_nextLocalTaskId++}';
+          taskId = _hasCloudIdentity
+              ? newNoteId()
+              : 'local-${_nextLocalTaskId++}';
           final pendingTask = TaskItem(
             id: taskId,
             title: draft.title,
@@ -2256,10 +2289,19 @@ class _MyAppState extends State<MyApp>
         await _refreshDailyPlanNotification();
         _refreshAndroidWidgets();
         saved = true;
+        savedTaskId = taskId;
       },
     );
     if (saved) _showSuccessNotice();
+    return savedTaskId;
   }
+
+  Future<String?> _createTaskFromBusinessIdea(BusinessIdea idea) =>
+      _showTaskForm(
+        context,
+        initialTitle: idea.title,
+        initialNote: idea.description,
+      );
 
   void _showSuccessNotice([String message = 'Zapisano zadanie']) {
     _noticeTimer?.cancel();
@@ -2379,11 +2421,7 @@ class _MyAppState extends State<MyApp>
       completedAt: completedAt,
     );
     final next = status == 'done' && task.repeatRule != null
-        ? createNextOccurrence(
-            task,
-            completedAt!,
-            newNoteId(),
-          )
+        ? createNextOccurrence(task, completedAt!, newNoteId())
         : null;
     setState(() {
       final index = tasks.indexWhere((item) => item.id == task.id);
@@ -2435,7 +2473,9 @@ class _MyAppState extends State<MyApp>
       _showSuccessNotice('Wpisz nazwę zadania.');
       return;
     }
-    final taskId = _hasCloudIdentity ? newNoteId() : 'local-${_nextLocalTaskId++}';
+    final taskId = _hasCloudIdentity
+        ? newNoteId()
+        : 'local-${_nextLocalTaskId++}';
     final pendingTask = TaskItem(
       id: taskId,
       title: parsed.title,
@@ -2559,7 +2599,11 @@ class _MyAppState extends State<MyApp>
     if (_hasCloudIdentity) {
       await _taskSyncOutbox?.enqueueRestore(task);
       if (cloudMode) await _retryPendingTaskSync();
-      if (mounted) setState(() => _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację');
+      if (mounted) {
+        setState(
+          () => _syncStatus = 'Przywrócono lokalnie · czeka na synchronizację',
+        );
+      }
     }
     await _syncTaskNotifications(task);
     await _refreshDailyPlanNotification();
@@ -2907,6 +2951,7 @@ class _MyAppState extends State<MyApp>
             _costsOwnerForKey = costsOwnerId;
             _costsScreenKey = GlobalKey<CostsScreenState>();
             _hoursScreenKey = GlobalKey<WorkHoursScreenState>();
+            _businessScreenKey = GlobalKey<BusinessScreenState>();
             _costSnapshot = const CostSnapshot();
           }
           return RemasterShell(
@@ -2936,7 +2981,18 @@ class _MyAppState extends State<MyApp>
               cloudMode: cloudMode,
               onDataChanged: _markBackupDirty,
             ),
+            businessContent: BusinessScreen(
+              key: _businessScreenKey,
+              ownerId: costsOwnerId,
+              cloudMode: cloudMode,
+              onChanged: _markBackupDirty,
+              onConvertIdeaToTask: _createTaskFromBusinessIdea,
+              isTaskCompleted: (taskId) =>
+                  tasks.any((task) => task.id == taskId && task.isDone),
+            ),
             onAddHours: () => _hoursScreenKey.currentState?.showAdd(),
+            onAddBusiness: () =>
+                _businessScreenKey.currentState?.showQuickAdd(),
             onAddTask: () => _showTaskForm(context),
             onAddNote: () => _openNewRemasterNote(),
             onAddCost: () => _costsScreenKey.currentState?.showAddChooser(),

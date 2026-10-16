@@ -31,15 +31,17 @@ void main() {
       of: bar,
       matching: find.byType(AppNavigationIcon),
     );
-    expect(marks, findsNWidgets(5));
+    expect(marks, findsNWidgets(6));
     expect(
       find.descendant(of: marks, matching: find.byType(CustomPaint)),
-      findsNWidgets(5),
+      findsNWidgets(6),
     );
     await tester.tap(find.bySemanticsLabel('Koszty'));
     expect(chosen, AppSpace.costs);
     await tester.tap(find.bySemanticsLabel('Godziny'));
     expect(chosen, AppSpace.hours);
+    await tester.tap(find.bySemanticsLabel('Biznes'));
+    expect(chosen, AppSpace.business);
     expect(tester.takeException(), isNull);
   });
 }

@@ -37,12 +37,16 @@ class TaskDraft {
 Future<void> showTaskEditor(
   BuildContext context, {
   TaskItem? task,
+  String? initialTitle,
+  String? initialNote,
   List<TaskCategory> categories = const [],
   bool remastered = false,
   required Future<void> Function(TaskDraft draft) onSave,
 }) {
   final form = _TaskEditorForm(
     task: task,
+    initialTitle: initialTitle,
+    initialNote: initialNote,
     categories: categories,
     onSave: onSave,
     remastered: remastered,
@@ -76,11 +80,15 @@ Future<void> showTaskEditor(
 class _TaskEditorForm extends StatefulWidget {
   const _TaskEditorForm({
     required this.task,
+    this.initialTitle,
+    this.initialNote,
     required this.categories,
     required this.onSave,
     required this.remastered,
   });
   final TaskItem? task;
+  final String? initialTitle;
+  final String? initialNote;
   final List<TaskCategory> categories;
   final Future<void> Function(TaskDraft draft) onSave;
   final bool remastered;
@@ -110,8 +118,12 @@ class _TaskEditorFormState extends State<_TaskEditorForm> {
   @override
   void initState() {
     super.initState();
-    _title = TextEditingController(text: widget.task?.title ?? '');
-    _note = TextEditingController(text: widget.task?.note ?? '');
+    _title = TextEditingController(
+      text: widget.task?.title ?? widget.initialTitle ?? '',
+    );
+    _note = TextEditingController(
+      text: widget.task?.note ?? widget.initialNote ?? '',
+    );
     _emoji = widget.task?.emoji;
     _emojiController = TextEditingController(text: _emoji ?? '');
     _colorKey = widget.task?.colorKey ?? 'neutral';
