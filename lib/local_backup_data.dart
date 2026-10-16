@@ -23,23 +23,27 @@ class LocalBackupData {
       key == 'task_category_sync_outbox_v1_$ownerId' ||
       key == 'note_sync_outbox_v1_$ownerId' ||
       key == 'note_folder_sync_outbox_v1_$ownerId' ||
-      (ownerId == 'local-user' && {
-        'task_sync_outbox_v1',
-        'task_category_sync_outbox_v1',
-        'note_sync_outbox_v1',
-        'note_folder_sync_outbox_v1',
-      }.contains(key)) ||
+      (ownerId == 'local-user' &&
+          {
+            'task_sync_outbox_v1',
+            'task_category_sync_outbox_v1',
+            'note_sync_outbox_v1',
+            'note_folder_sync_outbox_v1',
+          }.contains(key)) ||
       {
         'cost_entries_v1_$ownerId',
         'cost_subscriptions_v1_$ownerId',
         'cost_categories_v1_$ownerId',
         'cost_sync_outbox_v1_$ownerId',
         'work_hours_v1_$ownerId',
+        'business_workspace_v1_$ownerId',
       }.contains(key);
 
   Future<Map<String, dynamic>> capture(String ownerId) async {
     final currentOwner = preferences.getString('local_content_owner_v1');
-    if (currentOwner != null && currentOwner != ownerId && ownerId != 'local-user') {
+    if (currentOwner != null &&
+        currentOwner != ownerId &&
+        ownerId != 'local-user') {
       throw StateError('Pamięć lokalna jest przypisana do innego konta.');
     }
     final values = <String, dynamic>{};
@@ -57,49 +61,77 @@ class LocalBackupData {
       'note_folders.json',
       'notes-cloud-migration-v1',
     ]) {
-      final file = File('${supportDirectory.path}${Platform.pathSeparator}$fileName');
+      final file = File(
+        '${supportDirectory.path}${Platform.pathSeparator}$fileName',
+      );
       if (await file.exists()) {
         files[fileName] = base64Encode(await file.readAsBytes());
         if (fileName == 'notes.json') {
-          _collectLocalPaths(jsonDecode(await file.readAsString()), referencedPaths);
+          _collectLocalPaths(
+            jsonDecode(await file.readAsString()),
+            referencedPaths,
+          );
         }
       }
     }
-    final noteOutbox = values['note_sync_outbox_v1_$ownerId'] ??
+    final businessKey = 'business_workspace_v1_$ownerId';
+    if (values[businessKey] is String) {
+      _collectLocalPaths(
+        jsonDecode(values[businessKey] as String),
+        referencedPaths,
+      );
+    }
+    final noteOutbox =
+        values['note_sync_outbox_v1_$ownerId'] ??
         (ownerId == 'local-user' ? values['note_sync_outbox_v1'] : null);
     if (noteOutbox is String) {
       _collectLocalPaths(jsonDecode(noteOutbox), referencedPaths);
     }
-    final attachments = Directory(
-      '${supportDirectory.path}${Platform.pathSeparator}attachments',
-    );
-    if (await attachments.exists()) {
-      await for (final entity in attachments.list(recursive: true)) {
-        if (entity is! File) continue;
-        if (!referencedPaths.contains(entity.path)) continue;
-        final relative = entity.path.substring(supportDirectory.path.length + 1)
-            .replaceAll(Platform.pathSeparator, '/');
-        files[relative] = base64Encode(await entity.readAsBytes());
-        originalPaths[entity.path] = relative;
+    for (final directoryName in ['attachments', 'business_assets']) {
+      final directory = Directory(
+        '${supportDirectory.path}${Platform.pathSeparator}$directoryName',
+      );
+      if (await directory.exists()) {
+        await for (final entity in directory.list(recursive: true)) {
+          if (entity is! File) continue;
+          final normalizedPath = _normalizedLocalPath(entity.path);
+          if (!referencedPaths.contains(normalizedPath)) continue;
+          final relative = entity.path
+              .substring(supportDirectory.path.length + 1)
+              .replaceAll(Platform.pathSeparator, '/');
+          files[relative] = base64Encode(await entity.readAsBytes());
+          originalPaths[normalizedPath] = relative;
+        }
       }
     }
-    final replacements = {
-      for (final entry in originalPaths.entries)
-        entry.key: 'backup://${entry.value}',
-    };
+    final replacements = <String, String>{};
+    for (final reference in referencedPaths) {
+      final relative = originalPaths[_normalizedLocalPath(reference)];
+      if (relative != null) replacements[reference] = 'backup://$relative';
+    }
     if (files.containsKey('notes.json')) {
-      final decoded = jsonDecode(utf8.decode(base64Decode(files['notes.json']!)));
-      files['notes.json'] = base64Encode(utf8.encode(jsonEncode(
-        _rewritePaths(decoded, replacements),
-      )));
+      final decoded = jsonDecode(
+        utf8.decode(base64Decode(files['notes.json']!)),
+      );
+      files['notes.json'] = base64Encode(
+        utf8.encode(jsonEncode(_rewritePaths(decoded, replacements))),
+      );
     }
     final noteOutboxKey = ownerId == 'local-user'
         ? 'note_sync_outbox_v1'
         : 'note_sync_outbox_v1_$ownerId';
     if (values[noteOutboxKey] is String) {
-      values[noteOutboxKey] = jsonEncode(_rewritePaths(
-        jsonDecode(values[noteOutboxKey] as String), replacements,
-      ));
+      values[noteOutboxKey] = jsonEncode(
+        _rewritePaths(
+          jsonDecode(values[noteOutboxKey] as String),
+          replacements,
+        ),
+      );
+    }
+    if (values[businessKey] is String) {
+      values[businessKey] = jsonEncode(
+        _rewritePaths(jsonDecode(values[businessKey] as String), replacements),
+      );
     }
     return {
       'ownerId': ownerId,
@@ -147,11 +179,34 @@ class LocalBackupData {
         : 'note_sync_outbox_v1_$ownerId';
     final currentNoteOutbox = preferences.getString(currentNoteOutboxKey);
     if (currentNoteOutbox != null) {
-      _collectLocalPaths(jsonDecode(currentNoteOutbox), previouslyReferencedPaths);
+      _collectLocalPaths(
+        jsonDecode(currentNoteOutbox),
+        previouslyReferencedPaths,
+      );
+    }
+    final businessKey = 'business_workspace_v1_$ownerId';
+    final currentBusiness = preferences.getString(businessKey);
+    if (currentBusiness != null) {
+      _collectLocalPaths(
+        jsonDecode(currentBusiness),
+        previouslyReferencedPaths,
+      );
     }
     final pathReplacements = <String, String>{};
-    for (final relative in files.keys.where((path) => path.startsWith('attachments/'))) {
+    for (final relative in files.keys.where(
+      (path) =>
+          path.startsWith('attachments/') ||
+          path.startsWith('business_assets/'),
+    )) {
       pathReplacements['backup://$relative'] = _targetPath(relative);
+    }
+    if (values[businessKey] is String) {
+      values[businessKey] = jsonEncode(
+        _rewritePaths(
+          jsonDecode(values[businessKey] as String),
+          pathReplacements,
+        ),
+      );
     }
     if (files.containsKey('notes.json')) {
       files['notes.json'] = utf8.encode(
@@ -210,7 +265,9 @@ class LocalBackupData {
   bool _isInsideSupportDirectory(String path) {
     final normalizedRoot = supportDirectory.absolute.path;
     final normalizedFile = File(path).absolute.path;
-    return normalizedFile.startsWith('$normalizedRoot${Platform.pathSeparator}') ||
+    return normalizedFile.startsWith(
+          '$normalizedRoot${Platform.pathSeparator}',
+        ) ||
         normalizedFile.startsWith('$normalizedRoot/');
   }
 
@@ -223,17 +280,22 @@ class LocalBackupData {
         (path == 'notes.json' ||
             path == 'note_folders.json' ||
             path == 'notes-cloud-migration-v1' ||
-            path.startsWith('attachments/'));
+            path.startsWith('attachments/') ||
+            path.startsWith('business_assets/'));
   }
 
-  static Object? _rewritePaths(Object? value, Map<String, String> replacements) {
+  static Object? _rewritePaths(
+    Object? value,
+    Map<String, String> replacements,
+  ) {
     if (value is String) return replacements[value] ?? value;
     if (value is List) {
       return value.map((item) => _rewritePaths(item, replacements)).toList();
     }
     if (value is Map) {
       return value.map(
-        (key, item) => MapEntry(key.toString(), _rewritePaths(item, replacements)),
+        (key, item) =>
+            MapEntry(key.toString(), _rewritePaths(item, replacements)),
       );
     }
     return value;
@@ -242,7 +304,9 @@ class LocalBackupData {
   static void _collectLocalPaths(Object? value, Set<String> paths) {
     if (value is String) {
       if (value.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(value)) {
-        paths.add(value);
+        paths
+          ..add(value)
+          ..add(_normalizedLocalPath(value));
       }
     } else if (value is List) {
       for (final item in value) {
@@ -253,5 +317,10 @@ class LocalBackupData {
         _collectLocalPaths(item, paths);
       }
     }
+  }
+
+  static String _normalizedLocalPath(String path) {
+    final normalized = File(path).absolute.path.replaceAll('\\', '/');
+    return Platform.isWindows ? normalized.toLowerCase() : normalized;
   }
 }

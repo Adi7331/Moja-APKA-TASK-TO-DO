@@ -15,7 +15,7 @@ import 'start_cost_card.dart';
 import 'app_navigation_icon.dart';
 import 'local_backup_manager.dart';
 
-enum AppSpace { start, tasks, notes, costs, hours }
+enum AppSpace { start, tasks, notes, costs, hours, business }
 
 /// Shared shell. Data and mutations remain owned by the existing application.
 class RemasterShell extends StatefulWidget {
@@ -30,6 +30,8 @@ class RemasterShell extends StatefulWidget {
     required this.notesContent,
     this.costsContent = const SizedBox.shrink(),
     this.hoursContent = const SizedBox.shrink(),
+    this.businessContent = const SizedBox.shrink(),
+    this.onAddBusiness,
     this.onAddHours,
     this.costSnapshot = const CostSnapshot(),
     required this.onAddTask,
@@ -78,7 +80,9 @@ class RemasterShell extends StatefulWidget {
   final Widget notesContent;
   final Widget costsContent;
   final Widget hoursContent;
+  final Widget businessContent;
   final VoidCallback? onAddHours;
+  final VoidCallback? onAddBusiness;
   final CostSnapshot costSnapshot;
   final VoidCallback onAddTask, onAddNote, onLegacy;
   final VoidCallback? onAddCost;
@@ -150,6 +154,10 @@ class _RemasterShellState extends State<RemasterShell> {
     }
     if (_space == AppSpace.costs) {
       widget.onAddCost?.call();
+      return;
+    }
+    if (_space == AppSpace.business) {
+      widget.onAddBusiness?.call();
       return;
     }
     showModalBottomSheet<void>(
@@ -475,6 +483,7 @@ class _RemasterShellState extends State<RemasterShell> {
                                 widget.notesContent,
                                 widget.costsContent,
                                 widget.hoursContent,
+                                widget.businessContent,
                               ],
                             ),
                           ),
@@ -1157,6 +1166,7 @@ String _label(AppSpace space) => switch (space) {
   AppSpace.notes => 'Notatki',
   AppSpace.costs => 'Koszty',
   AppSpace.hours => 'Godziny',
+  AppSpace.business => 'Biznes',
 };
 
 /// Four compact destinations inspired by the supplied pill navigation.

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Navigation marks are painted as paths so release font subsetting cannot
 /// silently remove a destination icon on Windows or Android.
-enum AppNavigationSymbol { start, tasks, notes, costs, hours }
+enum AppNavigationSymbol { start, tasks, notes, costs, hours, business }
 
 class AppNavigationIcon extends StatelessWidget {
   const AppNavigationIcon({
@@ -113,6 +113,29 @@ class _NavigationPainter extends CustomPainter {
           stroke,
         );
         canvas.drawCircle(const Offset(16.4, 13.7), 1.5, stroke);
+      case AppNavigationSymbol.business:
+        final casePath = RRect.fromRectAndRadius(
+          const Rect.fromLTWH(3.5, 7.5, 17, 13),
+          const Radius.circular(2.5),
+        );
+        canvas.drawRRect(casePath, tint);
+        canvas.drawRRect(casePath, stroke);
+        canvas.drawPath(
+          Path()
+            ..moveTo(9, 7.5)
+            ..lineTo(9, 5)
+            ..lineTo(15, 5)
+            ..lineTo(15, 7.5),
+          stroke,
+        );
+        canvas.drawLine(const Offset(3.5, 12), const Offset(20.5, 12), stroke);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(10.5, 10.5, 3, 3),
+            const Radius.circular(1),
+          ),
+          selected ? stroke : tint,
+        );
     }
     canvas.restore();
   }

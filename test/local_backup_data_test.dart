@@ -9,8 +9,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('captures and restores user data and local attachment paths', () async {
-    final source = await Directory.systemTemp.createTemp('dniowka-backup-source-');
-    final target = await Directory.systemTemp.createTemp('dniowka-backup-target-');
+    final source = await Directory.systemTemp.createTemp(
+      'dniowka-backup-source-',
+    );
+    final target = await Directory.systemTemp.createTemp(
+      'dniowka-backup-target-',
+    );
     addTearDown(() async {
       await source.delete(recursive: true);
       await target.delete(recursive: true);
@@ -20,16 +24,27 @@ void main() {
     );
     await attachment.parent.create(recursive: true);
     await attachment.writeAsBytes([1, 2, 3]);
-    await File('${source.path}/notes.json').writeAsString(jsonEncode([
-      {'id': 'note-1', 'attachments': [{'localPath': attachment.path}]},
-    ]));
+    await File('${source.path}/notes.json').writeAsString(
+      jsonEncode([
+        {
+          'id': 'note-1',
+          'attachments': [
+            {'localPath': attachment.path},
+          ],
+        },
+      ]),
+    );
     SharedPreferences.setMockInitialValues({
       'local_tasks_v1': '[{"id":"task-1"}]',
       'task_sync_outbox_v1_owner-1': '[{"id":"task-1"}]',
       'note_sync_outbox_v1_owner-1': jsonEncode([
         {
           'id': 'note-1',
-          'note': {'attachments': [{'localPath': attachment.path}]},
+          'note': {
+            'attachments': [
+              {'localPath': attachment.path},
+            ],
+          },
         },
       ]),
       'work_hours_v1_owner-1': '{"entries":[],"pending":[]}',
@@ -37,14 +52,16 @@ void main() {
       'supabase.auth.token': 'never include',
     });
     final sourcePrefs = await SharedPreferences.getInstance();
-    final captured = await LocalBackupData(sourcePrefs, source).capture('owner-1');
+    final captured = await LocalBackupData(
+      sourcePrefs,
+      source,
+    ).capture('owner-1');
 
     expect(captured['ownerId'], 'owner-1');
     final values = captured['preferences'] as Map;
     expect(values['task_sync_outbox_v1_owner-1'], isNotNull);
-    final capturedOutbox = jsonDecode(
-      values['note_sync_outbox_v1_owner-1'] as String,
-    ) as List;
+    final capturedOutbox =
+        jsonDecode(values['note_sync_outbox_v1_owner-1'] as String) as List;
     expect(
       capturedOutbox.single['note']['attachments'][0]['localPath'],
       'backup://attachments/note-1/photo.jpg',
@@ -64,8 +81,10 @@ void main() {
     final restoredNotes = jsonDecode(
       await File('${target.path}/notes.json').readAsString(),
     ) as List;
-    expect(restoredNotes.first['attachments'][0]['localPath'],
-        '${target.path}${Platform.pathSeparator}attachments${Platform.pathSeparator}note-1${Platform.pathSeparator}photo.jpg');
+    expect(
+      restoredNotes.first['attachments'][0]['localPath'],
+      '${target.path}${Platform.pathSeparator}attachments${Platform.pathSeparator}note-1${Platform.pathSeparator}photo.jpg',
+    );
     final restoredOutbox = jsonDecode(
       targetPrefs.getString('note_sync_outbox_v1_owner-1')!,
     ) as List;
@@ -76,12 +95,18 @@ void main() {
   });
 
   test('refuses to restore another account or escaping file paths', () async {
-    final target = await Directory.systemTemp.createTemp('dniowka-backup-guard-');
+    final target = await Directory.systemTemp.createTemp(
+      'dniowka-backup-guard-',
+    );
     addTearDown(() => target.delete(recursive: true));
     SharedPreferences.setMockInitialValues({});
     final data = LocalBackupData(await SharedPreferences.getInstance(), target);
     expect(
-      () => data.restore({'ownerId': 'other', 'preferences': {}, 'files': {}}, 'mine'),
+      () => data.restore({
+        'ownerId': 'other',
+        'preferences': {},
+        'files': {},
+      }, 'mine'),
       throwsA(isA<StateError>()),
     );
     expect(
@@ -91,6 +116,69 @@ void main() {
         'files': {'../escape.txt': 'YQ=='},
       }, 'mine'),
       throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('backup includes Business outbox and private product images', () async {
+    final source = await Directory.systemTemp.createTemp(
+      'dniowka-business-source-',
+    );
+    final target = await Directory.systemTemp.createTemp(
+      'dniowka-business-target-',
+    );
+    addTearDown(() async {
+      await source.delete(recursive: true);
+      await target.delete(recursive: true);
+    });
+    final image = File('${source.path}/business_assets/product.jpg');
+    await image.parent.create(recursive: true);
+    await image.writeAsBytes([7, 8, 9]);
+    SharedPreferences.setMockInitialValues({
+      'business_workspace_v1_owner-1': jsonEncode({
+        'products': [
+          {'id': 'p1', 'imageLocalPath': image.path},
+        ],
+        'pending': [
+          {
+            'kind': 'product',
+            'id': 'p1',
+            'data': {'imageLocalPath': image.path},
+          },
+        ],
+      }),
+      'business_workspace_v1_other-owner': '{"private":true}',
+    });
+    final sourcePrefs = await SharedPreferences.getInstance();
+    final captured = await LocalBackupData(
+      sourcePrefs,
+      source,
+    ).capture('owner-1');
+    final values = captured['preferences'] as Map;
+    expect(values.containsKey('business_workspace_v1_other-owner'), isFalse);
+    final capturedBusiness =
+        jsonDecode(values['business_workspace_v1_owner-1'] as String) as Map;
+    expect(
+      capturedBusiness['products'][0]['imageLocalPath'],
+      'backup://business_assets/product.jpg',
+    );
+    expect(
+      (captured['files'] as Map).keys,
+      contains('business_assets/product.jpg'),
+    );
+
+    SharedPreferences.setMockInitialValues({});
+    final targetPrefs = await SharedPreferences.getInstance();
+    await LocalBackupData(targetPrefs, target).restore(captured, 'owner-1');
+    final restored = jsonDecode(
+      targetPrefs.getString('business_workspace_v1_owner-1')!,
+    ) as Map;
+    expect(
+      restored['products'][0]['imageLocalPath'],
+      '${target.path}${Platform.pathSeparator}business_assets${Platform.pathSeparator}product.jpg',
+    );
+    expect(
+      await File('${target.path}/business_assets/product.jpg').readAsBytes(),
+      [7, 8, 9],
     );
   });
 }
